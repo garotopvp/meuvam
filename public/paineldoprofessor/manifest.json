@@ -1,0 +1,10 @@
+{
+    "name": "MeuVAM",
+    "short_name": "MeuVAM",
+    "description": "Plataforma de treinos baseados no VAM — by Superação Assessoria Esportiva",
+    "start_url": "index.html",
+    "display": "standalone",
+    "background_color": "#F5F7FA",
+    "theme_color": "#2563eb",
+    "icons": []
+}

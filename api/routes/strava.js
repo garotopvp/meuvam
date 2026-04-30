@@ -100,58 +100,86 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-// 3. REFRESH TOKEN
-const getValidToken = async () => {
-  if (!tokens.access_token) return null;
+// 3. REFRESH TOKEN (Do Banco de Dados)
+const getValidToken = async (userId) => {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data: integration } = await supabase
+    .from('integrations')
+    .select('*')
+    .eq('athlete_id', userId)
+    .eq('platform', 'strava')
+    .single();
+
+  if (!integration || !integration.access_token) return null;
+
   const now = Math.floor(Date.now() / 1000);
-  if (tokens.expires_at && tokens.expires_at < now) {
+  if (integration.expires_at && integration.expires_at < now) {
+    console.log('Token expirado, renovando...');
     const response = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: process.env.STRAVA_CLIENT_ID,
         client_secret: process.env.STRAVA_CLIENT_SECRET,
-        refresh_token: tokens.refresh_token,
+        refresh_token: integration.refresh_token,
         grant_type: 'refresh_token'
       })
     });
     const data = await response.json();
-    tokens.access_token = data.access_token;
-    tokens.refresh_token = data.refresh_token;
-    tokens.expires_at = data.expires_at;
+    if (data.access_token) {
+      await supabase.from('integrations').update({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: data.expires_at
+      }).eq('athlete_id', userId).eq('platform', 'strava');
+      return data.access_token;
+    }
   }
-  return tokens.access_token;
+  return integration.access_token;
 };
 
-// 4. STATUS
-router.get('/status', (req, res) => {
-  res.json({ connected: !!tokens.access_token, athlete: tokens.athlete || null });
-});
+// 4. STATUS (Não usado mais, pois o app lê direto do banco)
+router.get('/status', (req, res) => res.json({ connected: false }));
 
-// 5. ACTIVITIES
+// 5. ACTIVITIES (Busca e formata para a tabela workouts)
 router.get('/activities', async (req, res) => {
-  const token = await getValidToken();
-  if (!token) return res.status(401).json({ error: 'Não conectado' });
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId obrigatório' });
+
+  const token = await getValidToken(userId);
+  if (!token) return res.status(401).json({ error: 'Strava não conectado' });
 
   try {
     const response = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?page=${req.query.page || 1}&per_page=${req.query.per_page || 20}`,
+      `https://www.strava.com/api/v3/athlete/activities?page=1&per_page=10`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     const activities = await response.json();
 
-    const formatted = activities.map(a => ({
-      id: a.id, name: a.name, type: a.type,
-      date: a.start_date_local,
-      distance: (a.distance / 1000).toFixed(2),
-      duration: Math.round(a.moving_time / 60),
-      pace: a.distance > 0 ? formatPace(a.moving_time / (a.distance / 1000)) : null,
-      elevation: a.total_elevation_gain,
-      avgHR: a.average_heartrate || null,
-      maxHR: a.max_heartrate || null,
+    if (!Array.isArray(activities)) throw new Error('Falha na API do Strava');
+
+    const formattedWorkouts = activities.map(a => ({
+      athlete_id: userId,
+      date: a.start_date_local.split('T')[0],
+      type: a.type === 'Run' ? 'Rodagem' : a.type,
+      title: a.name,
+      description: `Importado do Strava. Esforço percebido: ${a.suffer_score || '--'}`,
+      status: 'completed',
+      effort: Math.round(a.suffer_score / 10) || 5, // Aprox.
+      metrics: {
+        distance: `${(a.distance / 1000).toFixed(2)} km`,
+        duration: `${Math.round(a.moving_time / 60)} min`,
+        pace: a.distance > 0 ? formatPace(a.moving_time / (a.distance / 1000)) : null,
+      }
     }));
-    res.json(formatted);
+
+    // Salvar no banco (ignora se já existir pelo ID - vamos precisar do ID do strava para não duplicar, mas para teste simples vamos fazer upsert simples ou ignorar conflito)
+    // Para simplificar, o frontend fará a chamada e o frontend salvará. Então vamos só devolver os dados!
+    res.json(formattedWorkouts);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Erro ao buscar atividades' });
   }
 });

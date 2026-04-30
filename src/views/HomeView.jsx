@@ -120,7 +120,13 @@ const HomeView = ({ athlete, workouts }) => {
         </div>
         
         <h4 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{todayWorkout.title}</h4>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+        <p style={{ 
+          color: 'var(--text-secondary)', 
+          fontSize: '0.9rem', 
+          marginBottom: '1.5rem', 
+          lineHeight: '1.6',
+          whiteSpace: 'pre-line' 
+        }}>
           {todayWorkout.description}
         </p>
         

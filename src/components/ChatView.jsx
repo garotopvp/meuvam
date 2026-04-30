@@ -16,11 +16,12 @@ const ChatView = ({ session }) => {
 
     // Subscribe to real-time changes
     const channel = supabase
-      .channel('public:messages')
+      .channel(`chat:${session.user.id}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
-        table: 'messages' 
+        table: 'messages',
+        filter: `athlete_id=eq.${session.user.id}`
       }, (payload) => {
         setMessages(current => [...current, payload.new]);
       })
@@ -43,6 +44,7 @@ const ChatView = ({ session }) => {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
+      .eq('athlete_id', session.user.id)
       .order('created_at', { ascending: true });
 
     if (!error && data) {
@@ -55,6 +57,7 @@ const ChatView = ({ session }) => {
     if (!input.trim() || !session?.user) return;
 
     const newMessage = {
+      athlete_id: session.user.id,
       sender_id: session.user.id,
       content: input,
     };
@@ -93,7 +96,7 @@ const ChatView = ({ session }) => {
             const time = new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
             return (
-              <div key={msg.id} style={{
+              <div key={msg.id || msg.uuid} style={{
                 alignSelf: isMe ? 'flex-end' : 'flex-start',
                 maxWidth: '85%',
               }}>

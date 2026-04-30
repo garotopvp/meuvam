@@ -146,31 +146,8 @@ const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete }) =
         </div>
       </section>
 
-      {/* Gear / Shoes */}
-      <section style={{ marginBottom: '2rem' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>Meus Tênis</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {athlete.shoes?.map((shoe, i) => (
-            <div key={i} className="card" style={{ padding: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <div>
-                  <h4 style={{ fontSize: '0.95rem', fontWeight: 700 }}>{shoe.name}</h4>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{shoe.type}</p>
-                </div>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{shoe.distance} / {shoe.limit} km</span>
-              </div>
-              <div style={{ width: '100%', height: '6px', background: 'var(--surface-accent)', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ 
-                  height: '100%', 
-                  width: `${(shoe.distance / shoe.limit) * 100}%`,
-                  background: shoe.distance / shoe.limit > 0.8 ? 'var(--error)' : 'var(--primary-color)',
-                  borderRadius: '3px'
-                }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Gear / Shoes (Temporarily Removed) */}
+
 
       <ConnectivitySection athlete={athlete} setAthlete={setAthlete} />
 

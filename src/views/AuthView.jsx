@@ -4,17 +4,28 @@ import {
   Mail, 
   Lock, 
   User as UserIcon, 
-  Loader2 
+  Loader2,
+  ChevronRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-const AuthView = () => {
+const AuthView = ({ onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  React.useEffect(() => {
+    supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsResettingPassword(true);
+        setError('Digite sua nova senha abaixo e salve.');
+      }
+    });
+  }, []);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -22,16 +33,47 @@ const AuthView = () => {
     setError(null);
 
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (isResettingPassword) {
+        const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
+        setError('Senha atualizada com sucesso! Você já está logado.');
+        setIsResettingPassword(false);
+        setTimeout(() => window.location.href = '/', 1500);
+      } else if (isLogin) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        
+        const user = data.user;
+        if (user && (user.user_metadata?.role === 'professor' || user.email.includes('superacao'))) {
+          await supabase.auth.signOut();
+          throw new Error('Esta é uma conta de Professor e não pode ser usada no App do Aluno.');
+        }
       } else {
-        const { error } = await supabase.auth.signUp({ 
+        const { data, error } = await supabase.auth.signUp({ 
           email, 
           password,
-          options: { data: { full_name: name } }
+          options: { data: { full_name: name, role: 'athlete' } }
         });
         if (error) throw error;
+        
+        if (data.user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+              { 
+                id: data.user.id, 
+                name: name, 
+                email: email, 
+                role: 'athlete' 
+              }
+            ]);
+          if (profileError) console.error('Erro ao criar perfil:', profileError);
+        }
+
+        if (data.user && !data.session) {
+          setError('Conta criada com sucesso! Por favor, verifique sua caixa de entrada (ou spam) para confirmar seu e-mail antes de entrar.');
+          setIsLogin(true);
+        }
       }
     } catch (err) {
       let errorMsg = err.message;
@@ -56,6 +98,13 @@ const AuthView = () => {
       background: 'var(--bg-color)',
       textAlign: 'center'
     }}>
+      <button 
+        onClick={onBack}
+        style={{ position: 'absolute', top: '2rem', left: '2rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}
+      >
+        <ChevronRight size={18} style={{ transform: 'rotate(180deg)' }} /> Voltar
+      </button>
+
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ 
           width: '64px', height: '64px', background: 'var(--primary-color)', 
@@ -69,12 +118,15 @@ const AuthView = () => {
       </div>
 
       <div className="card" style={{ width: '100%', maxWidth: '380px', padding: '2rem' }}>
+        <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(0, 122, 255, 0.1)', color: 'var(--primary-color)', borderRadius: '100px', fontSize: '11px', fontWeight: 700, marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Portal do Aluno
+        </div>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>
           {isLogin ? 'Bem-vindo de volta' : 'Criar sua conta'}
         </h2>
 
         <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {!isLogin && (
+          {!isLogin && !isResettingPassword && (
             <div style={{ position: 'relative' }}>
               <UserIcon size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
               <input 
@@ -84,24 +136,26 @@ const AuthView = () => {
               />
             </div>
           )}
-          <div style={{ position: 'relative' }}>
-            <Mail size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-            <input 
-              className="auth-input"
-              type="email" placeholder="E-mail" required 
-              value={email} onChange={e => setEmail(e.target.value)}
-            />
-          </div>
+          {!isResettingPassword && (
+            <div style={{ position: 'relative' }}>
+              <Mail size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input 
+                className="auth-input"
+                type="email" placeholder="E-mail" required 
+                value={email} onChange={e => setEmail(e.target.value)}
+              />
+            </div>
+          )}
           <div style={{ position: 'relative' }}>
             <Lock size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
             <input 
               className="auth-input"
-              type="password" placeholder="Senha" required 
+              type="password" placeholder={isResettingPassword ? "Digite a NOVA senha" : "Senha"} required 
               value={password} onChange={e => setPassword(e.target.value)}
             />
           </div>
 
-          {error && <p style={{ color: 'var(--error)', fontSize: '0.85rem', marginTop: '4px' }}>{error}</p>}
+          {error && <p style={{ color: error.includes('sucesso') ? 'var(--primary-color)' : 'var(--error)', fontSize: '0.85rem', marginTop: '4px', fontWeight: error.includes('sucesso') ? 600 : 400 }}>{error}</p>}
           {error === 'E-mail ou senha incorretos.' && isLogin && (
             <button 
               type="button"
@@ -109,7 +163,7 @@ const AuthView = () => {
                 if (!email) return setError('Por favor, digite seu e-mail para recuperar a senha.');
                 setLoading(true);
                 const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                  redirectTo: 'https://meuvam.com.br/',
+                  redirectTo: window.location.origin,
                 });
                 setLoading(false);
                 if (error) setError('Erro ao enviar e-mail de recuperação.');
@@ -127,19 +181,32 @@ const AuthView = () => {
             className="btn-primary" 
             style={{ marginTop: '0.5rem', background: 'var(--primary-color)', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : (isLogin ? 'Entrar' : 'Cadastrar')}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (isResettingPassword ? 'Salvar Nova Senha' : isLogin ? 'Entrar' : 'Cadastrar')}
           </button>
         </form>
 
-        <p style={{ marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'} {' '}
-          <button 
-            onClick={() => setIsLogin(!isLogin)}
-            style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontWeight: 600, cursor: 'pointer' }}
-          >
-            {isLogin ? 'Cadastre-se' : 'Faça login'}
-          </button>
-        </p>
+        {!isResettingPassword && (
+          <>
+            <p style={{ marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'} {' '}
+              <button 
+                onClick={() => setIsLogin(!isLogin)}
+                style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {isLogin ? 'Cadastre-se' : 'Faça login'}
+              </button>
+            </p>
+            
+            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+              <button 
+                onClick={() => window.location.href = '/paineldoprofessor/login.html'}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}
+              >
+                Sou Professor? <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Acessar Portal do Coach</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
