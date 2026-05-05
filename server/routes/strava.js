@@ -43,7 +43,8 @@ router.get('/callback', async (req, res) => {
         username: data.athlete.username,
       }
     };
-    res.redirect('http://localhost:5173/?strava=connected');
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/?strava=connected`);
   } catch (err) {
     console.error('Erro Strava OAuth:', err);
     res.status(500).json({ error: 'Erro interno' });

@@ -19,12 +19,13 @@ const AuthView = ({ onBack }) => {
   const [error, setError] = useState(null);
 
   React.useEffect(() => {
-    supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResettingPassword(true);
         setError('Digite sua nova senha abaixo e salve.');
       }
     });
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleAuth = async (e) => {

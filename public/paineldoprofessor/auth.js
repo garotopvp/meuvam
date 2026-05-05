@@ -16,15 +16,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         if (data.session) {
             // Segurança: Verificar se é professor
-            const { data: profile } = await supabaseClient
+            const { data: profile, error: profileError } = await supabaseClient
                 .from('profiles')
-                .select('role')
+                .select('role, email')
                 .eq('id', data.session.user.id)
                 .single();
 
-            if (!profile) {
-                console.error("Perfil não encontrado no Supabase para o ID:", data.session.user.id);
-                alert("Erro: Perfil de professor não encontrado. Certifique-se de ter rodado o comando SQL para o e-mail " + data.session.user.email);
+            if (profileError || !profile) {
+                console.error("Erro ou Perfil não encontrado no Supabase:", profileError);
+                console.log("ID do Usuário Logado:", data.session.user.id);
+                
+                // Tentar auto-criar perfil se o usuário for marcado como professor no metadata
+                const userRole = data.session.user.user_metadata?.role;
+
+                if (userRole === 'professor') {
+                    const { error: insertError } = await supabaseClient.from('profiles').upsert([{
+                        id: data.session.user.id,
+                        email: data.session.user.email,
+                        name: data.session.user.user_metadata?.full_name || data.session.user.email.split('@')[0],
+                        role: 'professor'
+                    }], { onConflict: 'id' });
+                    
+                    if (!insertError) {
+                        console.log("Perfil de professor sincronizado/criado.");
+                        window.location.reload();
+                        return;
+                    } else {
+                        console.error("Erro ao sincronizar perfil:", insertError);
+                    }
+                }
+
+                alert("Erro: Perfil de professor não encontrado ou sem permissão no banco de dados.\n\nID: " + data.session.user.id + "\nEmail: " + data.session.user.email + "\n\nPor favor, peça ao administrador para verificar as políticas de RLS ou insira o registro manualmente.");
                 await supabaseClient.auth.signOut();
                 window.location.href = "/professor";
                 return;
@@ -68,7 +90,7 @@ function showMessage(text, type = 'error') {
 
 async function login() {
     const email = document.getElementById('auth-email').value.trim();
-    const pass = document.getElementById('auth-pass').value.trim();
+    const pass = document.getElementById('auth-pass').value;
     const btn = document.getElementById('login-btn');
 
     if (!supabaseConfigured) {
@@ -86,21 +108,51 @@ async function login() {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
         if (error) {
             let msg = error.message;
-            if (msg.includes("Invalid login credentials")) msg = "E-mail ou senha incorretos.";
+            if (msg === "Invalid login credentials") {
+                msg = "E-mail ou senha incorretos.";
+            } else if (msg.includes("Email not confirmed")) {
+                msg = "Por favor, confirme seu e-mail antes de entrar. Verifique sua caixa de entrada ou spam.";
+            }
+            
             showMessage("Erro: " + msg, 'error');
+            
+            // Adicionar link de recuperar senha se for erro de credenciais
+            if (msg === "E-mail ou senha incorretos.") {
+                const msgDiv = document.getElementById('auth-message');
+                const resetLink = document.createElement('div');
+                resetLink.style.marginTop = '8px';
+                resetLink.style.textAlign = 'center';
+                resetLink.innerHTML = `<a href="javascript:void(0)" onclick="recoverPassword()" style="color:#007AFF; font-weight:600; text-decoration:none; font-size:12px;">Esqueceu a senha?</a>`;
+                msgDiv.appendChild(resetLink);
+            }
+            
             btn.innerHTML = originalText;
             btn.disabled = false;
         } else {
-            // Verificar se é professor na tabela de perfis antes de deixar entrar
-            const { data: profile } = await supabaseClient
+            let { data: profile } = await supabaseClient
                 .from('profiles')
                 .select('role')
                 .eq('id', data.user.id)
                 .single();
 
+            // Se o perfil não existe mas o usuário é professor no metadata, tenta criar
+            if (!profile && data.user.user_metadata?.role === 'professor') {
+                await supabaseClient.from('profiles').insert([{
+                    id: data.user.id,
+                    email: data.user.email,
+                    name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
+                    role: 'professor'
+                }]);
+                // Busca novamente para confirmar
+                const { data: newProfile } = await supabaseClient.from('profiles').select('role').eq('id', data.user.id).single();
+                profile = newProfile;
+            }
+
             if (!profile || profile.role !== 'professor') {
                 await supabaseClient.auth.signOut();
-                showMessage("Acesso negado. Esta é uma conta de Aluno.", 'error');
+                let errMsg = "Acesso negado. Esta é uma conta de Aluno.";
+                if (!profile) errMsg = "Perfil não encontrado. Se você é professor, solicite ao administrador para rodar o comando SQL de ativação.";
+                showMessage(errMsg, 'error');
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 return;
@@ -119,7 +171,8 @@ async function login() {
 async function register() {
     const fullName = document.getElementById('auth-name').value.trim();
     const email = document.getElementById('auth-email').value.trim();
-    const pass = document.getElementById('auth-pass').value.trim();
+    const pass = document.getElementById('auth-pass').value;
+    const passConfirm = document.getElementById('auth-pass-confirm').value;
     const btn = document.getElementById('register-btn');
 
     if (!supabaseConfigured) {
@@ -127,8 +180,9 @@ async function register() {
         return;
     }
 
-    if (!fullName || !email || !pass) return alert("Preencha todos os campos");
+    if (!fullName || !email || !pass || !passConfirm) return alert("Preencha todos os campos");
     if (pass.length < 6) return alert("A senha deve ter pelo menos 6 caracteres.");
+    if (pass !== passConfirm) return alert("As senhas não coincidem.");
 
     const originalText = btn.innerHTML;
     btn.disabled = true;
@@ -180,6 +234,22 @@ async function register() {
 function skipLogin() {
     localStorage.setItem('vdot_offline', 'true');
     window.location.href = "index";
+}
+
+async function recoverPassword() {
+    const email = document.getElementById('auth-email').value.trim();
+    if (!email) return alert("Digite seu e-mail no campo acima para recuperar a senha.");
+    
+    if (confirm(`Deseja enviar um e-mail de recuperação para ${email}?`)) {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/paineldoprofessor/login.html',
+        });
+        if (error) {
+            alert("Erro ao enviar: " + error.message);
+        } else {
+            showMessage("E-mail de recuperação enviado! Verifique sua caixa de entrada.", 'success');
+        }
+    }
 }
 
 async function logout() {

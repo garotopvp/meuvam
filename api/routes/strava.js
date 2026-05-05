@@ -2,7 +2,6 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 const router = express.Router();
 
-let tokens = {};
 
 // Função auxiliar para inicializar o Supabase com segurança
 const getSupabase = () => {
@@ -85,14 +84,7 @@ router.get('/callback', async (req, res) => {
       return res.status(500).json({ error: 'Erro ao salvar integração' });
     }
 
-    // Atualiza tokens em memória (efêmero)
-    tokens = {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: data.expires_at,
-      athlete: data.athlete
-    };
-
+    // Token salvo no banco Supabase - não usar variável global
     res.redirect('https://meuvam.com.br/?strava=connected');
   } catch (err) {
     console.error('Erro Strava OAuth:', err);
@@ -186,12 +178,23 @@ router.get('/activities', async (req, res) => {
 
 // 6. STATS
 router.get('/stats', async (req, res) => {
-  const token = await getValidToken();
-  if (!token || !tokens.athlete?.id) return res.status(401).json({ error: 'Não conectado' });
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId obrigatório' });
+
+  const token = await getValidToken(userId);
+  if (!token) return res.status(401).json({ error: 'Strava não conectado' });
+
+  const supabase = getSupabase();
+  const { data: integration } = await supabase
+    .from('integrations')
+    .select('username')
+    .eq('athlete_id', userId)
+    .eq('platform', 'strava')
+    .single();
 
   try {
     const response = await fetch(
-      `https://www.strava.com/api/v3/athletes/${tokens.athlete.id}/stats`,
+      `https://www.strava.com/api/v3/athlete/stats`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     res.json(await response.json());
@@ -201,8 +204,17 @@ router.get('/stats', async (req, res) => {
 });
 
 // 7. DISCONNECT
-router.post('/disconnect', (req, res) => {
-  tokens = {};
+router.post('/disconnect', async (req, res) => {
+  const { userId } = req.body;
+  if (userId) {
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase
+        .from('integrations')
+        .update({ connected: false, access_token: null, refresh_token: null })
+        .match({ athlete_id: userId, platform: 'strava' });
+    }
+  }
   res.json({ success: true });
 });
 

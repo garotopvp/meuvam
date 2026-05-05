@@ -13,7 +13,7 @@ import PhotoEditorModal from './modals/PhotoEditorModal';
 // Views
 import HomeView from './views/HomeView';
 import TrainingView from './views/TrainingView';
-import StatsView from './views/StatsView';
+
 import ProfileView from './views/ProfileView';
 import EditProfileView from './views/EditProfileView';
 import AuthView from './views/AuthView';
@@ -24,25 +24,23 @@ import NotificationsView from './components/NotificationsView';
 // Data
 import { athleteData } from './data/mockData';
 
-const UrlCleanup = () => {
+const UrlCleanup = ({ onConnected }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('strava') === 'connected') {
-      setTimeout(() => {
-        navigate(location.pathname, { replace: true });
-      }, 1500);
+      if (onConnected) onConnected();
+      navigate(location.pathname, { replace: true });
     }
-  }, [location, navigate]);
+  }, [location, navigate, onConnected]);
 
   return null;
 };
 
-const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthleteRaw, handlePhotoUpload, session, updateProfile, setIsEditing, isEditing, setPhotoToEdit }) => {
+const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthleteRaw, handlePhotoUpload, session, updateProfile, navigate, deferredPrompt, handleInstallApp }) => {
   const location = useLocation();
-  
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)' }}>
       <AnimatePresence mode="wait">
@@ -56,46 +54,63 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
           style={{ flex: 1, paddingBottom: '90px' }}
         >
           <Routes>
-            <Route path="/" element={<HomeView athlete={athlete} workouts={workouts} />} />
-            <Route path="/treinos" element={<TrainingView workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
-            <Route path="/estatisticas" element={<StatsView workouts={workouts} />} />
+            <Route path="/" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
+            <Route path="/treinos" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
             <Route path="/coach" element={<ChatView session={session} />} />
             <Route path="/avisos" element={<NotificationsView />} />
             <Route path="/perfil" element={
-              isEditing ? (
-                <EditProfileView 
-                  athlete={athlete} 
-                  onSave={updateProfile} 
-                  onCancel={() => setIsEditing(false)} 
-                />
-              ) : (
-                <ProfileView 
-                  athlete={athlete} 
-                  setAthlete={setAthleteRaw} 
-                  onEdit={() => setIsEditing(true)} 
-                  onPhotoUpload={handlePhotoUpload}
-                  onLogout={() => supabase.auth.signOut()}
-                />
-              )
+              <ProfileView 
+                athlete={athlete} 
+                setAthlete={setAthleteRaw} 
+                onEdit={() => navigate('/aluno/perfil/edit')} 
+                onPhotoUpload={handlePhotoUpload}
+                onLogout={() => supabase.auth.signOut()}
+              />
+            } />
+            <Route path="/perfil/edit" element={
+              <EditProfileView 
+                athlete={athlete} 
+                onSave={(updates) => {
+                  updateProfile(updates);
+                  navigate('/aluno/perfil');
+                }} 
+                onCancel={() => navigate('/aluno/perfil')} 
+              />
             } />
             <Route path="*" element={<Navigate to="/aluno" replace />} />
           </Routes>
         </motion.div>
       </AnimatePresence>
-      {!isEditing && <BottomNav />}
+      {!location.pathname.includes('/edit') && <BottomNav />}
     </div>
   );
 };
 
 const AppContent = () => {
-  const [athlete, setAthleteRaw] = useState(athleteData);
+  const [athlete, setAthleteRaw] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [photoToEdit, setPhotoToEdit] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setDeferredPrompt(null);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -116,7 +131,7 @@ const AppContent = () => {
         fetchWorkouts();
 
         // Inscreve no canal Realtime para atualizações automáticas de treinos
-        const workoutSubscription = supabase.channel('workouts-channel')
+        const workoutSubscription = supabase.channel(`workouts-${session.user.id}`)
           .on(
             'postgres_changes',
             { 
@@ -138,31 +153,82 @@ const AppContent = () => {
     }
   }, [session]);
 
-  const mapSupabaseToAthlete = (data) => {
-    return {
+  const calculateZones = (vamInput, maxHr) => {
+    let vamKmh = 0;
+    if (typeof vamInput === 'string' && vamInput.includes(':')) {
+      const [m, s] = vamInput.split(':').map(Number);
+      vamKmh = 60 / (m + (s / 60));
+    } else {
+      vamKmh = parseFloat(vamInput) || 0;
+    }
+
+    const maxHeartRate = parseInt(maxHr) || 0;
+    const zoneNames = ['Recuperação', 'Aeróbico Leve', 'Aeróbico', 'Limiar', 'VAM (Máximo)'];
+    const vamPcts = [0.65, 0.75, 0.85, 0.92, 1.0];
+    
+    // Percentuais de FC: 
+    // Z1: <65%, Z2: 65-75%, Z3: 75-85%, Z4: 85-92%, Z5: 92-100%
+    const hrPcts = [
+      { min: 0, max: 0.65 },
+      { min: 0.65, max: 0.75 },
+      { min: 0.75, max: 0.85 },
+      { min: 0.85, max: 0.92 },
+      { min: 0.92, max: 1.0 }
+    ];
+
+    return zoneNames.map((name, i) => {
+      const speed = vamKmh * vamPcts[i];
+      const paceDecimal = speed > 0 ? 60 / speed : 0;
+      const m = Math.floor(paceDecimal);
+      const s = Math.round((paceDecimal - m) * 60);
+      const pace = paceDecimal > 0 ? `${m}:${s.toString().padStart(2, '0')}` : '--';
+      
+      let hrRange = '--';
+      if (maxHeartRate > 0) {
+        const minHr = Math.round(maxHeartRate * hrPcts[i].min);
+        const maxHrZone = Math.round(maxHeartRate * hrPcts[i].max);
+        hrRange = i === 0 ? `< ${maxHrZone}` : `${minHr} - ${maxHrZone}`;
+      }
+
+      return { name, pace, hrRange };
+    });
+  };
+
+  const mapSupabaseToAthlete = (data, integrations = []) => {
+    const strava = integrations.find(i => i.platform === 'strava');
+    const garmin = integrations.find(i => i.platform === 'garmin');
+
+    const athleteBase = {
       ...athleteData,
       id: data.id,
       name: data.name || 'Novo Atleta',
       vam: data.vam || '--',
-      maxHR: data.max_hr || '--',
-      maxHr: data.max_hr || '--', // Suporte para ambas as grafias
+      maxHr: data.max_hr || '--',
       objective: data.objective || 'Definir Objetivo',
       profileImage: data.avatar_url || null,
       gender: data.gender || '--',
       email: data.email || '',
       birthDate: data.birth_date || '',
       lastVamTest: data.last_vam_test || '--',
-      weight: data.weight || '-- kg',
+      weight: data.weight || '--',
+      nextRaceName: data.next_race_name || '',
+      nextRaceDate: data.next_race_date || '',
       integrations: {
-        strava: { connected: false, username: '' },
-        garmin: { connected: false, username: '' },
+        strava: { connected: !!strava?.connected, username: strava?.username || '' },
+        garmin: { connected: !!garmin?.connected, username: garmin?.username || '' },
         polar: { connected: false, username: '' },
         coros: { connected: false, username: '' }
       }
     };
+
+    return {
+      ...athleteBase,
+      zones: calculateZones(athleteBase.vam, athleteBase.maxHr)
+    };
   };
 
   const fetchWorkouts = async () => {
+    if (!session?.user?.id) return;
     setIsRefreshing(true);
     const { data, error } = await supabase
       .from('workouts')
@@ -177,18 +243,36 @@ const AppContent = () => {
   };
 
   const fetchProfile = async () => {
-    const { data: profileData } = await supabase
+    if (!session?.user?.id) return;
+    const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', session.user.id)
       .single();
+
+    if (profileError) {
+      console.error('Erro ao carregar perfil:', profileError);
+      return;
+    }
 
     if (profileData) {
       if (profileData.role === 'professor') {
         window.location.href = '/paineldoprofessor/';
         return;
       }
-      setAthleteRaw(mapSupabaseToAthlete(profileData));
+      
+      const { data: integrations } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('athlete_id', session.user.id);
+        
+      const athleteObj = mapSupabaseToAthlete(profileData, integrations || []);
+      setAthleteRaw(athleteObj);
+
+      // Check for first login / incomplete profile
+      if ((!profileData.vam || profileData.vam === '--' || !profileData.birth_date) && window.location.pathname === '/aluno') {
+        navigate('/aluno/perfil/edit');
+      }
     }
   };
 
@@ -201,19 +285,23 @@ const AppContent = () => {
           objective: updates.objective,
           gender: updates.gender,
           avatar_url: updates.profileImage,
-          birth_date: updates.birthDate
+          birth_date: updates.birthDate,
+          vam: updates.vam,
+          max_hr: updates.maxHr,
+          weight: updates.weight,
+          next_race_name: updates.nextRaceName,
+          next_race_date: updates.nextRaceDate
         })
         .eq('id', session.user.id);
 
       if (error) throw error;
       await fetchProfile();
-      setIsEditing(false);
     } catch (err) {
       alert('Erro: ' + err.message);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (session && !athlete)) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)' }}>
         <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
@@ -235,7 +323,7 @@ const AppContent = () => {
             <AuthView onBack={() => navigate('/')} />
         ) : (
             <>
-                <UrlCleanup />
+                <UrlCleanup onConnected={fetchProfile} />
                 <MainLayout 
                     athlete={athlete}
                     workouts={workouts}
@@ -252,9 +340,9 @@ const AppContent = () => {
                     }}
                     session={session}
                     updateProfile={updateProfile}
-                    setIsEditing={setIsEditing}
-                    isEditing={isEditing}
-                    setPhotoToEdit={setPhotoToEdit}
+                    navigate={navigate}
+                    deferredPrompt={deferredPrompt}
+                    handleInstallApp={handleInstallApp}
                 />
                 {photoToEdit && (
                     <PhotoEditorModal 

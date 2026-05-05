@@ -267,24 +267,369 @@ function renderGroups(){
 }
 
 // ─── GROUP MODAL ───
-function openGroupModal(catOrId,isEdit=false){
-    const id=isEdit?catOrId:null,cat=isEdit?null:catOrId;
-    const modal=$('modal-group');modal.dataset.editing=id||'';modal.dataset.category=isEdit?(groups.find(x=>x.id===id)||{}).category:cat;
-    $('modal-group-title').textContent=id?'Editar Treino':'Novo Treino';
-    const g=id?groups.find(x=>x.id===id):null;$('group-name').value=g?g.name:'';$('group-volume').value=g?g.volume:'';
-    const pc=$('planner-container');
-    pc.innerHTML=daysNames.map((dn,i)=>{let act=true;const p={warmup:{volPct:0,vamPct:0,desc:''},main:{volPct:0,vamPct:0,desc:''},cooldown:{volPct:0,vamPct:0,desc:''}};if(g&&g.plan[i]){act=g.plan[i].active;g.plan[i].phases.forEach(ph=>{p[ph.type]=ph;});}const dis=act?'':'disabled';
-        return`<div class="day-cfg ${act?'':'inactive'}" id="dcfg-${i}"><div class="day-header"><input type="checkbox" id="d-act-${i}" ${act?'checked':''} onchange="toggleDay(${i})" style="width:18px;height:18px;accent-color:var(--primary);"> ${dn}</div><div class="day-phases">${['warmup','main','cooldown'].map(t=>`<div class="phase-row"><span class="phase-label ${t}">${phaseLabels[t]}</span><input type="number" id="ph-${t}-vol-${i}" value="${p[t].volPct}" min="0" ${dis}><input type="number" id="ph-${t}-vam-${i}" value="${p[t].vamPct}" min="0" ${dis}><input type="text" id="ph-${t}-desc-${i}" value="${p[t].desc}" placeholder="Instrução..." ${dis}></div>`).join('')}</div></div>`;}).join('');
+// ─── PROFESSIONAL WORKOUT BUILDER (Garmin Clone) ───
+let _editingPlan = null;
+let _selectedDayIdx = 0;
+let _expandedStepIdx = null; // Track which step is currently being edited/expanded
+let _expandedParentIdx = null;
+
+function openGroupModal(catOrId, isEdit = false) {
+    const id = isEdit ? catOrId : null;
+    const cat = isEdit ? null : catOrId;
+    const modal = $('modal-group');
+    modal.dataset.editing = id || '';
+    modal.dataset.category = isEdit ? (groups.find(x => x.id === id) || {}).category : cat;
+    
+    const g = id ? groups.find(x => x.id === id) : null;
+    const title = g ? g.name : 'Treino de corrida';
+    $('group-name').value = title;
+    $('display-group-name').textContent = title;
+    
+    // Initialize or Clone Plan
+    if (g && g.plan) {
+        _editingPlan = JSON.parse(JSON.stringify(g.plan));
+    } else {
+        _editingPlan = Array.from({ length: 7 }, () => ({
+            active: true,
+            steps: [
+                { id: generateId() + 1, type: 'warmup', label: 'Aquecimento', duration: { type: 'time', value: '15' }, intensity: { type: 'vam', value: 0 }, notes: '' },
+                { id: generateId() + 2, type: 'run', label: 'Corrida', duration: { type: 'distance', value: '1.00' }, intensity: { type: 'vam', value: 90 }, notes: '' },
+                { id: generateId() + 3, type: 'cooldown', label: 'Desaquecimento', duration: { type: 'time', value: '10' }, intensity: { type: 'vam', value: 0 }, notes: '' }
+            ]
+        }));
+    }
+
+    _selectedDayIdx = 0;
+    _expandedStepIdx = null;
+    _expandedParentIdx = null;
+    renderEditorSidebar();
+    renderEditorSteps();
     modal.classList.add('show');
 }
-function toggleDay(i){const act=$(`d-act-${i}`).checked;$(`dcfg-${i}`).classList.toggle('inactive',!act);['warmup','main','cooldown'].forEach(t=>{$(`ph-${t}-vol-${i}`).disabled=!act;$(`ph-${t}-vam-${i}`).disabled=!act;$(`ph-${t}-desc-${i}`).disabled=!act;});}
-function saveGroup(){
-    const modal=$('modal-group'),id=modal.dataset.editing,name=$('group-name').value.trim(),cat=modal.dataset.category,vol=parseFloat($('group-volume').value)||0;
-    if(!name)return showToast('Nome obrigatório','error');
-    const plan=Array.from({length:7},(_,i)=>({active:$(`d-act-${i}`).checked,phases:['warmup','main','cooldown'].map(t=>({type:t,volPct:parseFloat($(`ph-${t}-vol-${i}`).value)||0,vamPct:parseFloat($(`ph-${t}-vam-${i}`).value)||0,desc:$(`ph-${t}-desc-${i}`).value}))}));
-    if(id){Object.assign(groups.find(x=>x.id==id),{name,volume:vol,plan});showToast('Treino editado!');}
-    else{groups.push({id:generateId(),name,category:cat,volume:vol,plan});showToast('Treino adicionado!');}
-    saveState(['groups']);closeModals();renderGroups();
+
+function renderEditorSidebar() {
+    const container = $('editor-days-sidebar');
+    container.innerHTML = daysNames.map((dn, i) => {
+        const active = _editingPlan[i].active;
+        const isSelected = _selectedDayIdx === i;
+        const stepCount = _editingPlan[i].steps.length;
+        return `
+            <div class="editor-day-item ${isSelected ? 'selected' : ''} ${!active ? 'inactive' : ''}" onclick="selectEditorDay(${i})">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:700; font-size:13px;">${dn}</span>
+                    <input type="checkbox" ${active ? 'checked' : ''} onclick="event.stopPropagation(); toggleEditorDay(${i})" style="width:14px; height:14px;">
+                </div>
+                <span style="font-size:10px; color:var(--text-muted);">${active ? stepCount + ' etapas' : 'Descanso'}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function selectEditorDay(idx) {
+    _selectedDayIdx = idx;
+    renderEditorSidebar();
+    renderEditorSteps();
+}
+
+function toggleEditorDay(idx) {
+    _editingPlan[idx].active = !_editingPlan[idx].active;
+    renderEditorSidebar();
+    if (_selectedDayIdx === idx) renderEditorSteps();
+}
+
+function renderEditorSteps() {
+    const container = $('editor-steps-container');
+    const day = _editingPlan[_selectedDayIdx];
+
+    if (!day.active) {
+        container.innerHTML = `
+            <div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-muted); opacity:0.6;">
+                <i class="ri-moon-clear-line" style="font-size:48px; margin-bottom:16px;"></i>
+                <p>Este dia está marcado como <strong>Descanso</strong>.</p>
+                <button class="btn btn-secondary" onclick="toggleEditorDay(${_selectedDayIdx})" style="margin-top:12px;">Ativar este dia</button>
+            </div>
+        `;
+        return;
+    }
+
+    const stepsHtml = day.steps.map((step, idx) => {
+        if (step.type === 'repetition') {
+            return renderRepetitionStep(step, idx);
+        }
+        return renderNormalStep(step, idx);
+    }).join('');
+
+    container.innerHTML = `
+        <div class="steps-list" id="main-steps-list">
+            ${stepsHtml || '<div style="padding:40px; text-align:center; color:var(--text-muted); border:2px dashed #eee; border-radius:8px;">Arraste as etapas para cá ou use os botões ao lado.</div>'}
+        </div>
+    `;
+
+    initSortable();
+}
+
+function initSortable() {
+    const mainList = document.getElementById('main-steps-list');
+    if (mainList) {
+        new Sortable(mainList, {
+            animation: 150,
+            handle: '.step-drag-handle',
+            onEnd: (evt) => {
+                const day = _editingPlan[_selectedDayIdx];
+                const item = day.steps.splice(evt.oldIndex, 1)[0];
+                day.steps.splice(evt.newIndex, 0, item);
+                // No need to re-render everything as DOM is already updated by Sortable
+                // but we might want to ensure internal state is clean
+            }
+        });
+    }
+
+    // Nested sortables for repetitions
+    document.querySelectorAll('.repetition-inner').forEach((el, pIdx) => {
+        new Sortable(el, {
+            animation: 150,
+            handle: '.step-drag-handle',
+            onEnd: (evt) => {
+                // We need to find the parent repetition step index
+                // For simplicity, I'll add data-index to the cards
+                const parentIdx = parseInt(el.closest('.repetition-card').dataset.index);
+                const day = _editingPlan[_selectedDayIdx];
+                const repStep = day.steps[parentIdx];
+                const item = repStep.steps.splice(evt.oldIndex, 1)[0];
+                repStep.steps.splice(evt.newIndex, 0, item);
+            }
+        });
+    });
+}
+
+function renderNormalStep(step, idx, parentIdx = null) {
+    const isExpanded = _expandedStepIdx === idx && _expandedParentIdx === parentIdx;
+    const typeLabels = { 
+        warmup: 'Aquecimento', 
+        run: 'Corrida', 
+        walk: 'Caminhada', 
+        recovery: 'Recuperação', 
+        rest: 'Descanso', 
+        cooldown: 'Desaquecimento', 
+        other: 'Outros' 
+    };
+    
+    // Duration display string
+    let durStr = "";
+    if (step.duration.type === 'distance') durStr = `${step.duration.value} km`;
+    else durStr = `${step.duration.value} min`;
+
+    // Intensity display string
+    let intStr = step.intensity.value > 0 ? `${step.intensity.value}% VAM` : "Sem meta";
+
+    if (isExpanded) {
+        return `
+            <div class="step-card expanded" style="flex-direction: column; min-height: auto; border-bottom: 2px solid var(--primary);">
+                <div style="display: flex; align-items: stretch;">
+                    <div class="step-indicator ${step.type}"></div>
+                    <div class="step-drag-handle"><i class="ri-more-2-fill" style="transform: rotate(90deg);"></i></div>
+                    <div class="step-content">
+                        <select onchange="updateStepField(${idx}, 'type', this.value, ${parentIdx}); renderEditorSteps();" style="border:none; font-size:16px; padding:0; font-weight:400;">
+                            <option value="warmup" ${step.type === 'warmup' ? 'selected' : ''}>Aquecimento</option>
+                            <option value="run" ${step.type === 'run' ? 'selected' : ''}>Corrida</option>
+                            <option value="walk" ${step.type === 'walk' ? 'selected' : ''}>Caminhada</option>
+                            <option value="recovery" ${step.type === 'recovery' ? 'selected' : ''}>Recuperação</option>
+                            <option value="rest" ${step.type === 'rest' ? 'selected' : ''}>Descanso</option>
+                            <option value="cooldown" ${step.type === 'cooldown' ? 'selected' : ''}>Desaquecimento</option>
+                            <option value="other" ${step.type === 'other' ? 'selected' : ''}>Outros</option>
+                        </select>
+                    </div>
+                    <div class="step-action-links" style="padding-right: 16px;">
+                        <button class="btn-text-link" onclick="toggleExpandStep(${idx}, ${parentIdx})">Concluir</button>
+                        <i class="ri-delete-bin-line" style="color:#999; cursor:pointer;" onclick="removeEditorStep(${idx}, ${parentIdx})"></i>
+                    </div>
+                </div>
+                
+                <div style="padding: 20px 40px; background: #fafafa; border-top: 1px solid #eee;">
+                    <div style="display: flex; gap: 40px; margin-bottom: 20px;">
+                        <div style="flex: 1;">
+                            <label class="small-label" style="font-size: 11px; margin-bottom: 10px;">Tipo de duração</label>
+                            <select onchange="updateStepNestedField(${idx}, 'duration', 'type', this.value, ${parentIdx}); renderEditorSteps();" style="width: 100%;">
+                                <option value="time" ${step.duration.type === 'time' ? 'selected' : ''}>Tempo</option>
+                                <option value="distance" ${step.duration.type === 'distance' ? 'selected' : ''}>Distância</option>
+                            </select>
+                            ${step.duration.type !== 'lap_button' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px;">${step.duration.type === 'time' ? 'Tempo' : 'Distância'}</label>
+                                    <input type="text" value="${step.duration.value}" onchange="updateStepNestedField(${idx}, 'duration', 'value', this.value, ${parentIdx})" style="width: 100%;">
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div style="flex: 1;">
+                            <label class="small-label" style="font-size: 11px; margin-bottom: 10px;">Meta de intensidade</label>
+                            <select onchange="updateStepNestedField(${idx}, 'intensity', 'type', this.value, ${parentIdx}); renderEditorSteps();" style="width: 100%;">
+                                <option value="none" ${step.intensity.type === 'none' ? 'selected' : ''}>Sem objetivo</option>
+                                <option value="vam" ${step.intensity.type === 'vam' ? 'selected' : ''}>% VAM (Recomendado)</option>
+                                <option value="pace" ${step.intensity.type === 'pace' ? 'selected' : ''}>Ritmo</option>
+                                <option value="hr_zone" ${step.intensity.type === 'hr_zone' ? 'selected' : ''}>Zona de frequência cardíaca</option>
+                                <option value="cadence" ${step.intensity.type === 'cadence' ? 'selected' : ''}>Cadência</option>
+                            </select>
+                            ${step.intensity.type === 'vam' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px;">Objetivo de % VAM</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" value="${step.intensity.value}" onchange="updateStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 80px;">
+                                        <span style="font-weight: 700; color: #666;">%</span>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${step.intensity.type === 'pace' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px;">Ritmo alvo</label>
+                                    <input type="text" placeholder="5:30" value="${step.intensity.value || ''}" onchange="updateStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%;">
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="step-card">
+            <div class="step-indicator ${step.type}"></div>
+            <div class="step-drag-handle"><i class="ri-more-2-fill" style="transform: rotate(90deg);"></i></div>
+            <div class="step-content">
+                <div class="step-header">
+                    <span class="step-type-label">${step.label || typeLabels[step.type]}</span>
+                    <div class="step-action-links">
+                        <button class="btn-text-link" onclick="toggleExpandStep(${idx}, ${parentIdx})">Editar etapa</button>
+                        <i class="ri-delete-bin-line" style="color:#999; cursor:pointer;" onclick="removeEditorStep(${idx}, ${parentIdx})"></i>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 40px; margin-top: 10px;">
+                    <div>
+                        <div style="font-size: 15px; font-weight: 500;">${durStr}</div>
+                        <div style="font-size: 11px; color: #888;">Duração</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 15px; font-weight: 500;">${intStr}</div>
+                        <div style="font-size: 11px; color: #888;">Meta de intensidade</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function toggleExpandStep(idx, parentIdx = null) {
+    if (_expandedStepIdx === idx && _expandedParentIdx === parentIdx) {
+        _expandedStepIdx = null;
+        _expandedParentIdx = null;
+    } else {
+        _expandedStepIdx = idx;
+        _expandedParentIdx = parentIdx;
+    }
+    renderEditorSteps();
+}
+
+function renderRepetitionStep(step, idx) {
+    const innerStepsHtml = step.steps.map((s, sIdx) => renderNormalStep(s, sIdx, idx)).join('');
+    return `
+        <div class="step-card repetition-card" data-index="${idx}" style="flex-direction: column; min-height: auto;">
+            <div class="repetition-header">
+                <div class="step-drag-handle" style="padding-left: 0;"><i class="ri-more-2-fill" style="transform: rotate(90deg);"></i></div>
+                <i class="ri-repeat-line" style="color:var(--primary); font-size:18px;"></i>
+                <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+                    <input type="number" value="${step.count}" style="width:50px; text-align:center; border: 1px solid #ccc;" onchange="updateStepField(${idx}, 'count', this.value)">
+                    <span style="font-size: 16px;">Vezes</span>
+                </div>
+                <i class="ri-delete-bin-line" style="color:#999; cursor:pointer;" onclick="removeEditorStep(${idx})"></i>
+            </div>
+            <div class="repetition-inner">
+                ${innerStepsHtml}
+                <button class="btn-text-link" style="margin-top: 10px; font-weight: 700;" onclick="addEditorStep('run', ${idx})">+ Adicionar uma etapa à repetição</button>
+            </div>
+        </div>
+    `;
+}
+
+function addEditorStep(type, parentIdx = null) {
+    const newStep = {
+        id: generateId(),
+        type: type === 'repetition' ? 'repetition' : type,
+        label: '',
+        duration: { type: 'time', value: '10' },
+        intensity: { type: 'vam', value: 75 },
+        notes: ''
+    };
+
+    if (type === 'repetition') {
+        newStep.count = 2;
+        newStep.steps = [
+            { id: generateId() + 1, type: 'run', label: 'Trabalho', duration: { type: 'distance', value: '0.4' }, intensity: { type: 'vam', value: 95 }, notes: '' },
+            { id: generateId() + 2, type: 'recovery', label: 'Descanso', duration: { type: 'time', value: '1' }, intensity: { type: 'vam', value: 0 }, notes: '' }
+        ];
+    }
+
+    if (parentIdx !== null) {
+        _editingPlan[_selectedDayIdx].steps[parentIdx].steps.push(newStep);
+    } else {
+        _editingPlan[_selectedDayIdx].steps.push(newStep);
+    }
+    renderEditorSteps();
+}
+
+function removeEditorStep(idx, parentIdx = null) {
+    if (parentIdx !== null) {
+        _editingPlan[_selectedDayIdx].steps[parentIdx].steps.splice(idx, 1);
+    } else {
+        _editingPlan[_selectedDayIdx].steps.splice(idx, 1);
+    }
+    renderEditorSteps();
+}
+
+function updateStepField(idx, field, value, parentIdx = null) {
+    if (parentIdx !== null) {
+        _editingPlan[_selectedDayIdx].steps[parentIdx].steps[idx][field] = value;
+    } else {
+        _editingPlan[_selectedDayIdx].steps[idx][field] = value;
+    }
+}
+
+function updateStepNestedField(idx, group, field, value, parentIdx = null) {
+    if (parentIdx !== null) {
+        _editingPlan[_selectedDayIdx].steps[parentIdx].steps[idx][group][field] = value;
+    } else {
+        _editingPlan[_selectedDayIdx].steps[idx][group][field] = value;
+    }
+}
+
+function saveGroup() {
+    const modal = $('modal-group'), 
+          id = modal.dataset.editing, 
+          name = $('group-name').value.trim(), 
+          cat = modal.dataset.category, 
+          vol = parseFloat($('group-volume').value) || 0;
+
+    if (!name) return showToast('Nome do treino é obrigatório', 'error');
+
+    const groupData = {
+        id: id ? parseInt(id) : generateId(),
+        name,
+        category: cat,
+        volume: vol,
+        plan: _editingPlan
+    };
+
+    if (id) {
+        const idx = groups.findIndex(x => x.id == id);
+        if (idx !== -1) groups[idx] = groupData;
+        showToast('Treino atualizado com sucesso!');
+    } else {
+        groups.push(groupData);
+        showToast('Novo treino profissional criado!');
+    }
+
+    saveState(['groups']);
+    closeModals();
+    renderGroups();
 }
 function editGroup(id){openGroupModal(id,true);}
 function cloneGroup(id){const c=JSON.parse(JSON.stringify(groups.find(g=>g.id===id)));c.id=generateId();c.name+=' (Cópia)';groups.push(c);saveState(['groups']);renderGroups();showToast('Clonado!');}
@@ -360,6 +705,9 @@ function openAthleteModal(id=null){
     const sel=$('athlete-group');const opts=['<option value="">-- Selecione --</option>'];
     categories.forEach(cat=>{const cg=groups.filter(g=>g.category===cat);if(!cg.length)return;opts.push(`<optgroup label="${cat}">${cg.map(g=>`<option value="${g.id}">${g.name}</option>`).join('')}</optgroup>`);});sel.innerHTML=opts.join('');
     const a=id?athletes.find(x=>x.id==id):null;
+    const clearBtn = $('btn-clear-workouts');
+    if (clearBtn) clearBtn.style.display = id ? 'flex' : 'none';
+    
     $('athlete-name').value=a?a.name:'';$('athlete-phone').value=a?(a.phone||''):'';$('athlete-dob').value=a?(a.dob||''):'';$('athlete-test-hr').value=a?(a.testHr||''):'';$('athlete-test').value=a?(a.testTime||''):'';$('athlete-notes').value=a?(a.notes||''):'';sel.value=a?(a.groupId||''):'';
     calculateTheoreticalHR();previewAthleteVAM();modal.classList.add('show');
 }
@@ -423,6 +771,25 @@ function calculatePlan(athlete){
 
 let currentExportCanvas=null,currentExportPhone='',currentExportHistId=null;
 
+async function clearAthleteWorkouts() {
+    const id = $('modal-athlete').dataset.editing;
+    if (!id) return;
+    const a = athletes.find(x => x.id == id);
+    if (!a || !a.supabaseId) return showToast('Aluno sem conta vinculada no App.', 'default');
+
+    if (!confirm(`Tem certeza que deseja apagar TODOS os treinos de "${a.name}" no aplicativo? Esta ação não pode ser desfeita.`)) return;
+
+    try {
+        const { error } = await dbClient.from('workouts').delete().eq('athlete_id', a.supabaseId);
+        if (error) throw error;
+        showToast('✅ Todos os treinos foram removidos do App!');
+        closeModals();
+    } catch (err) {
+        console.error('Clear Workouts Error:', err);
+        showToast('❌ Erro ao limpar treinos.', 'error');
+    }
+}
+
 async function generateAndExport(aId){
     const a=athletes.find(x=>x.id==aId);if(!a.groupId||!a.testTime)return showToast('Preencha grupo e Teste VAM!','error');
     const calc=calculatePlan(a);if(!calc||!calc.rows.length)return showToast('Planilha sem dias ativos!','error');
@@ -479,19 +846,43 @@ async function generateAndExport(aId){
                 const workoutDate = new Date(monday);
                 workoutDate.setDate(monday.getDate() + dayMap[row.dayName]);
                 
+                // Get structured steps for this day if they exist
+                const dayPlan = _editingPlan[dayMap[row.dayName]];
+                
+                let textDescription = "";
+                if (dayPlan && dayPlan.steps) {
+                    textDescription = dayPlan.steps.map(s => {
+                        if (s.type === 'repetition') {
+                            const inner = s.steps.map(is => {
+                                const dur = is.duration.type === 'lap_button' ? 'Até Lap' : `${is.duration.value}${is.duration.type === 'time' ? 'min' : 'km'}`;
+                                const intensity = is.intensity.value > 0 ? ` @ ${is.intensity.value}% VAM` : '';
+                                return `   - ${is.label || phaseLabels[is.type] || is.type}: ${dur}${intensity}`;
+                            }).join('\n');
+                            return `${s.count}x Repetições de:\n${inner}`;
+                        } else {
+                            const dur = s.duration.type === 'lap_button' ? 'Até Lap' : `${s.duration.value}${s.duration.type === 'time' ? 'min' : 'km'}`;
+                            const intensity = s.intensity.value > 0 ? ` @ ${s.intensity.value}% VAM` : '';
+                            return `${s.label || phaseLabels[s.type] || s.type}: ${dur}${intensity}`;
+                        }
+                    }).join('\n\n');
+                } else {
+                    textDescription = row.phases.map(p => {
+                        const paceStr = p.pace ? ` @ ${p.pace}` : '';
+                        const descStr = p.desc ? ` - ${p.desc}` : '';
+                        return `${phaseLabels[p.type]}: ${p.km}km${paceStr}${descStr}`;
+                    }).join('\n');
+                }
+                
                 return {
                     athlete_id: athleteId,
                     date: workoutDate.toISOString().split('T')[0],
                     type: calc.categoryName,
                     title: calc.groupName,
-                    description: row.phases.map(p => {
-                        const paceStr = p.pace ? ` @ ${p.pace}` : '';
-                        const descStr = p.desc ? ` - ${p.desc}` : '';
-                        return `${phaseLabels[p.type]}: ${p.km}km${paceStr}${descStr}`;
-                    }).join('\n'),
+                    description: textDescription,
+                    structured_steps: dayPlan ? dayPlan.steps : null, // Enviar steps estruturados se houver
                     metrics: { 
                         distance: row.phases.reduce((sum, p) => sum + parseFloat(p.km), 0).toFixed(1) + ' km',
-                        duration: row.phases[0].pace 
+                        duration: row.phases[0] ? row.phases[0].pace : '--'
                     },
                     status: 'pending'
                 };
@@ -499,6 +890,16 @@ async function generateAndExport(aId){
 
             const { error } = await dbClient.from('workouts').insert(workoutsToInsert);
             if (error) throw error;
+
+            // --- NOTIFICAÇÃO DE PLANILHA LIBERADA ---
+            await dbClient.from('notifications').insert([{
+                athlete_id: athleteId,
+                title: 'Planilha Liberada! 🏃‍♂️',
+                text: `Sua planilha de ${calc.categoryName} (${calc.groupName}) já está disponível no app. Bons treinos!`,
+                type: 'training_update',
+                created_at: new Date().toISOString()
+            }]);
+
             showToast('✅ Planilha enviada para o App!');
             if (btn) {
                 btn.innerHTML = '✅ Enviado';
@@ -929,3 +1330,114 @@ async function renderStaff() {
 //  PWA
 // ═══════════════════════════════════════
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+
+// ─── AUDIO RECORDING & TRANSCRIPTION LOGIC ───
+let mediaRecorder;
+let audioChunks = [];
+let audioBlob;
+let audioUrl;
+let isRecording = false;
+let recordTimer;
+let recordSeconds = 0;
+let recognition; // Speech recognition instance
+
+async function toggleAudioRecording() {
+    if (isRecording) {
+        stopAudioRecording();
+    } else {
+        await startAudioRecording();
+    }
+}
+
+async function startAudioRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        // Setup Speech Recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'pt-BR';
+            recognition.interimResults = true;
+            recognition.continuous = true;
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                const notesArea = $('group-notes');
+                if (notesArea) {
+                    const existing = notesArea.value.trim();
+                    notesArea.value = existing ? existing + ' ' + transcript : transcript;
+                    // Trigger character count if needed
+                }
+            };
+
+            recognition.onerror = (err) => console.error('Speech Recognition Error:', err);
+            recognition.start();
+        }
+
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            audioUrl = URL.createObjectURL(audioBlob);
+            $('audio-playback').style.display = 'flex';
+            $('audio-mic-icon').style.color = '#388E3C';
+            $('audio-record-status').textContent = 'Nota gravada com sucesso!';
+            $('audio-record-btn').style.borderColor = '#388E3C';
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordSeconds = 0;
+        $('audio-record-status').textContent = 'Gravando...';
+        $('audio-mic-icon').style.color = '#D32F2F';
+        $('audio-record-btn').style.borderColor = '#D32F2F';
+        $('audio-playback').style.display = 'none';
+
+        recordTimer = setInterval(() => {
+            recordSeconds++;
+            $('audio-record-timer').textContent = `${recordSeconds}s / 15s`;
+            if (recordSeconds >= 15) stopAudioRecording();
+        }, 1000);
+
+    } catch (err) {
+        console.error('Erro ao acessar microfone:', err);
+        showToast('Erro ao acessar microfone. Verifique as permissões.', 'error');
+    }
+}
+
+function stopAudioRecording() {
+    if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        if (recognition) recognition.stop();
+        isRecording = false;
+        clearInterval(recordTimer);
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+}
+
+function playRecordedAudio() {
+    if (audioUrl) {
+        const audio = new Audio(audioUrl);
+        audio.play();
+    }
+}
+
+function deleteRecordedAudio() {
+    audioBlob = null;
+    audioUrl = null;
+    audioChunks = [];
+    $('audio-playback').style.display = 'none';
+    $('audio-record-status').textContent = 'Pressione para gravar uma nota.';
+    $('audio-record-timer').textContent = 'Máx.: 15 segundos.';
+    $('audio-mic-icon').style.color = '#666';
+    $('audio-record-btn').style.borderColor = '#ccc';
+}
+

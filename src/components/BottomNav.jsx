@@ -1,13 +1,12 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Calendar, MessageCircle, Bell, User } from 'lucide-react';
+import { Home, Calendar, MessageCircle, TrendingUp, User } from 'lucide-react';
 
 const BottomNav = () => {
   const tabs = [
     { path: '/aluno', icon: Home, label: 'Início' },
     { path: '/aluno/treinos', icon: Calendar, label: 'Treino' },
     { path: '/aluno/coach', icon: MessageCircle, label: 'Coach' },
-    { path: '/aluno/avisos', icon: Bell, label: 'Avisos' },
     { path: '/aluno/perfil', icon: User, label: 'Perfil' },
   ];
 
@@ -24,7 +23,8 @@ const BottomNav = () => {
         return (
           <NavLink 
             key={tab.path} 
-            to={tab.path} 
+            to={tab.path}
+            end={tab.path === '/aluno'}
             style={({ isActive }) => ({
               textDecoration: 'none',
               background: 'none', border: 'none', display: 'flex', flexDirection: 'column',

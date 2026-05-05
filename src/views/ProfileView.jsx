@@ -89,7 +89,7 @@ const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete }) =
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
           <ProfileStatCard label="VAM" value={athlete.vam} unit="km/h" />
           <ProfileStatCard label="FC MÁX" value={athlete.maxHr} unit="bpm" />
-          <ProfileStatCard label="PESO" value="74" unit="kg" />
+          <ProfileStatCard label="PESO" value={athlete.weight || '--'} unit="kg" />
         </div>
 
         <button 
@@ -137,7 +137,7 @@ const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete }) =
               }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>{zone.name}</p>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '2px' }}>❤️ {zone.hr} bpm</p>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{zone.hrRange} bpm</p>
                 </div>
                 <span style={{ fontSize: '1rem', fontWeight: 800, color, textShadow: '0 1px 2px rgba(0,0,0,0.08)' }}>{zone.pace}</span>
               </div>

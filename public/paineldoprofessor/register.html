@@ -113,6 +113,20 @@
             box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
         }
 
+        .toggle-pass {
+            position: absolute !important;
+            right: 16px;
+            left: auto !important;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: color 0.2s;
+            z-index: 5;
+        }
+
+        .toggle-pass:hover {
+            color: var(--primary);
+        }
+
         .btn-entrar {
             width: 100%;
             padding: 14px;
@@ -182,6 +196,13 @@
             <div class="input-group">
                 <i class="ri-lock-line"></i>
                 <input type="password" id="auth-pass" placeholder="Senha (Mínimo 6 caracteres)">
+                <i class="ri-eye-off-line toggle-pass" onclick="togglePass('auth-pass', this)"></i>
+            </div>
+
+            <div class="input-group">
+                <i class="ri-lock-password-line"></i>
+                <input type="password" id="auth-pass-confirm" placeholder="Confirmar Senha">
+                <i class="ri-eye-off-line toggle-pass" onclick="togglePass('auth-pass-confirm', this)"></i>
             </div>
 
             <button class="btn-entrar" id="register-btn" onclick="register()">
@@ -200,6 +221,20 @@
         </div>
     </div>
 
+    <script>
+        function togglePass(id, icon) {
+            const input = document.getElementById(id);
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('ri-eye-off-line');
+                icon.classList.add('ri-eye-line');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('ri-eye-line');
+                icon.classList.add('ri-eye-off-line');
+            }
+        }
+    </script>
     <script src="auth.js"></script>
 </body>
 </html>

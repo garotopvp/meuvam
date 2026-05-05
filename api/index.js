@@ -17,7 +17,7 @@ app.use(cors({
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow all for now to avoid issues during migration
+      callback(new Error('Bloqueado pela política de CORS'));
     }
   }, 
   credentials: true 

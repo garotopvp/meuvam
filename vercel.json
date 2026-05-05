@@ -22,7 +22,11 @@
       "destination": "/index.html"
     },
     {
-      "source": "/((?!paineldoprofessor|professor|aluno).*)",
+      "source": "/api/:path*",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/((?!paineldoprofessor|professor|aluno|api).*)",
       "destination": "/index.html"
     }
   ]
