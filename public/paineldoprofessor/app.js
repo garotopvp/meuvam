@@ -221,7 +221,7 @@ function importBasePlans() {
             const dayData = item.days.find(d => d.d === i);
             const steps = dayData ? dayData.steps.map(s => ({
                 id: Date.now() + Math.random(),
-                type: s.t,
+                type: s.t === 'run' ? 'main' : s.t,
                 label: s.t === 'warmup' ? 'Aquecimento' : s.t === 'cooldown' ? 'Desaquecimento' : 'Rodagem',
                 duration: { type: 'distance', value: s.v.toString() },
                 intensity: { type: 'pace', value: s.p },
@@ -337,7 +337,11 @@ function renderGroups(){
             const rows=g.plan.map((d,i)=>{
                 if(!d.active)return'';
                 const phases = d.phases || [];
-                const ph=phases.filter(p=>p.volPct>0).map(p=>`<div class="plan-ph"><span><strong>${phaseLabels[p.type] || p.type}:</strong> ${p.volPct}%V / ${p.vamPct}%VAM</span>${p.desc?`<span style="font-style:italic;color:#059669;">${p.desc}</span>`:''}</div>`).join('');
+                const ph=phases.filter(p=>p.volPct>0 || p.km).map(p=>{
+                    const label = phaseLabels[p.type] || p.title || p.type;
+                    const detail = p.km ? `${p.km}km @ ${p.pace || 'Livre'}` : `${p.volPct}%V / ${p.vamPct}%VAM`;
+                    return `<div class="plan-ph"><span><strong>${label}:</strong> ${detail}</span>${p.desc?`<span style="font-style:italic;color:#059669;">${p.desc}</span>`:''}</div>`;
+                }).join('');
                 return`<div class="plan-row"><div class="plan-row-top"><div class="day">${daysNames[i]}</div></div>${ph}</div>`;
             }).join('');
             return`<div class="plan-card"><div class="plan-header"><div><h3>${g.name}</h3><span style="font-size:11px;color:var(--text-muted);">Vol: ${g.volume}km/sem</span></div><div style="display:flex;gap:2px;">
