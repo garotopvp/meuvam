@@ -1,9 +1,4 @@
-import React, { useState, useEffect } from 'react';
-window.onerror = function(msg, url, line, col, error) {
-  console.log('[Global Error]', msg, 'at', url, ':', line, ':', col);
-  document.body.innerHTML = '<div style="color:red;padding:20px;">Erro Fatal: ' + msg + '</div>';
-  return false;
-};
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
@@ -73,7 +68,6 @@ const calculateZones = (vamInput, maxHr) => {
 };
 
 const mapSupabaseToAthlete = (data, integrations = []) => {
-  console.log('[App] mapSupabaseToAthlete calling with:', data.id);
   const strava = integrations.find(i => i.platform === 'strava');
   const garmin = integrations.find(i => i.platform === 'garmin');
 
@@ -195,15 +189,12 @@ const AppContent = () => {
   };
 
   useEffect(() => {
-    console.log('[App] Initializing session...');
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('[App] Session received:', session?.user?.id || 'none');
       setSession(session);
       setIsLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('[App] Auth state changed:', _event, session?.user?.id || 'none');
       setSession(session);
     });
 
@@ -325,18 +316,13 @@ const AppContent = () => {
     }
   }, [session, fetchProfile]);
 
-  console.log('[App] Rendering state:', { isLoading, session: !!session, athlete: !!athlete });
-
   if (isLoading || (session && !athlete)) {
-    console.log('[App] Showing Loader');
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)' }}>
         <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
       </div>
     );
   }
-
-  console.log('[App] Rendering Routes');
 
   return (
     <Routes>
