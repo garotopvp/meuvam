@@ -121,7 +121,7 @@ function buildGarminStep(step, stepOrder) {
     description: step.label || null,
     stepType,
     endCondition,
-    endConditionValue,
+    endConditionValue: endConditionValue !== null ? endConditionValue : 0,
     preferredEndConditionUnit: preferredEndConditionUnit || null,
     endConditionCompare: null,
     endConditionZone: null,
@@ -135,8 +135,6 @@ function buildGarminStep(step, stepOrder) {
     secondaryTargetValueTwo: null,
     secondaryTargetValueUnit: null,
     secondaryZoneNumber: null,
-    strokeType: { strokeTypeId: 0, strokeTypeKey: null },
-    equipmentType: { equipmentTypeId: 0, equipmentTypeKey: null },
   };
 }
 
@@ -145,20 +143,21 @@ function buildGarminStep(step, stepOrder) {
  * In Garmin's model, a repeat block is a WorkoutRepeatStepDTO that contains nested steps.
  */
 function buildRepeatGroup(step, startOrder) {
-  let order = startOrder + 1;
+  let order = 1; // Order within the group starts at 1 in Garmin's model
   const nested = step.steps.map(s => buildGarminStep(s, order++));
 
   return {
     garminStep: {
-      type: 'WorkoutRepeatGroupDTO',
+      type: 'WorkoutRepeatStepDTO',
       stepId: null,
       stepOrder: startOrder,
       childStepId: null,
       stepType: { stepTypeId: 6, stepTypeKey: 'repeat' },
-      numberOfIterations: step.count,
+      numberOfIterations: step.count || 1,
       workoutSteps: nested,
+      smartRepeat: false
     },
-    nextOrder: order,
+    nextOrder: startOrder + 1, // The repeat block itself occupies 1 slot in the main list
   };
 }
 
