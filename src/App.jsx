@@ -167,9 +167,8 @@ const AppContent = () => {
   const [workouts, setWorkouts] = useState([]);
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [photoToEdit, setPhotoToEdit] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [importing, setImporting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -290,6 +289,82 @@ const AppContent = () => {
     }
   }, [session, fetchProfile, fetchWorkouts]);
 
+  const importSophiaPlan = async () => {
+    if (!session?.user?.email?.includes('rinaldo')) return;
+    setImporting(true);
+    try {
+      const sophiaId = 'b8bb5dd9-f0e0-4926-94ab-69a3771a021c';
+      const email = 'rodriguesophia013@gmail.com';
+      const name = 'Sophia Rodrigues';
+
+      // 1. Create Profile
+      await supabase.from('profiles').upsert([{ id: sophiaId, email, name, role: 'athlete' }]);
+
+      // 2. Create Workouts
+      const workouts = [
+        {
+          athlete_id: sophiaId, date: '2026-05-04', title: 'Rodagem Regenerativa',
+          description: '1km Z1 + 5km Z2 + 1km Z1',
+          metrics: {
+            structured_steps: [
+              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } },
+              { type: 'run', label: 'Rodagem', duration: { type: 'distance', value: 5.0 }, intensity: { type: 'pace', value: '08:15' } },
+              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } }
+            ]
+          }
+        },
+        { athlete_id: sophiaId, date: '2026-05-05', title: 'Descanso', description: 'Dia de recuperação' },
+        {
+          athlete_id: sophiaId, date: '2026-05-06', title: 'Tiros de 400m',
+          description: '10 tiros de 400m com pausa ativa de 150m trote leve',
+          metrics: {
+            structured_steps: [
+              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '06:30' } },
+              {
+                type: 'repetition', count: 10,
+                steps: [
+                  { type: 'run', label: 'Tiro 400m', duration: { type: 'distance', value: 0.4 }, intensity: { type: 'pace', value: '05:30' } },
+                  { type: 'recovery', label: 'Pausa Ativa', duration: { type: 'distance', value: 0.15 }, intensity: { type: 'pace', value: '06:30' } }
+                ]
+              },
+              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '06:30' } }
+            ]
+          }
+        },
+        { athlete_id: sophiaId, date: '2026-05-07', title: 'Descanso', description: 'Dia de recuperação' },
+        {
+          athlete_id: sophiaId, date: '2026-05-08', title: 'Rodagem Moderada',
+          description: '1km Z1 + 8km Z2 + 1km Z1',
+          metrics: {
+            structured_steps: [
+              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '08:42' } },
+              { type: 'run', label: 'Rodagem', duration: { type: 'distance', value: 8.0 }, intensity: { type: 'pace', value: '07:42' } },
+              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '08:42' } }
+            ]
+          }
+        },
+        {
+          athlete_id: sophiaId, date: '2026-05-09', title: 'Longo',
+          description: '1km Z1 + 17km Z2 + 1km Z1',
+          metrics: {
+            structured_steps: [
+              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } },
+              { type: 'run', label: 'Longo', duration: { type: 'distance', value: 17.0 }, intensity: { type: 'pace', value: '08:15' } },
+              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } }
+            ]
+          }
+        }
+      ];
+
+      await supabase.from('workouts').insert(workouts);
+      alert('Planilha da Sophia importada com sucesso!');
+    } catch (err) {
+      alert('Erro ao importar: ' + err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const updateProfile = useCallback(async (updates) => {
     try {
       const { error } = await supabase
@@ -317,8 +392,17 @@ const AppContent = () => {
 
   if (isLoading || (session && !athlete)) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)' }}>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)', gap: '20px' }}>
         <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
+        {session?.user?.email?.includes('rinaldo') && (
+          <button 
+            onClick={importSophiaPlan}
+            disabled={importing}
+            style={{ padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 800, cursor: 'pointer' }}
+          >
+            {importing ? 'Importando...' : 'IMPORTAR PLANILHA SOPHIA'}
+          </button>
+        )}
       </div>
     );
   }
