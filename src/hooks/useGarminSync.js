@@ -1,6 +1,10 @@
 import { useState, useCallback } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+// Internal helper — strips the '/api' prefix from API_BASE if already included
+// so that callers can always write `${API}/garmin/...` uniformly.
+const API = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 
 /**
  * useGarminSync — manages Garmin Connect authentication and workout sync.
@@ -24,7 +28,7 @@ export function useGarminSync() {
   const checkStatus = useCallback(async (userId) => {
     if (!userId) return;
     try {
-      const r = await fetch(`${API_BASE}/api/garmin/status?userId=${userId}`);
+      const r = await fetch(`${API}/garmin/status?userId=${userId}`);
       const data = await r.json();
       setGarminStatus({ connected: data.connected, user: data.user });
       return data;
@@ -38,7 +42,7 @@ export function useGarminSync() {
     setIsLoading(true);
     setLastResult(null);
     try {
-      const r = await fetch(`${API_BASE}/api/garmin/login`, {
+      const r = await fetch(`${API}/garmin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, userId }),
@@ -63,7 +67,7 @@ export function useGarminSync() {
   // ── Logout ─────────────────────────────────────────────────────────────────
   const garminLogout = useCallback(async (userId) => {
     try {
-      await fetch(`${API_BASE}/api/garmin/disconnect`, {
+      await fetch(`${API}/garmin/disconnect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
@@ -78,7 +82,7 @@ export function useGarminSync() {
     setIsLoading(true);
     setLastResult(null);
     try {
-      const r = await fetch(`${API_BASE}/api/garmin/workout/push`, {
+      const r = await fetch(`${API}/garmin/workout/push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, workout }),
@@ -100,7 +104,7 @@ export function useGarminSync() {
     setIsLoading(true);
     setLastResult(null);
     try {
-      const r = await fetch(`${API_BASE}/api/garmin/workout/sync-plan`, {
+      const r = await fetch(`${API}/garmin/workout/sync-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, workouts }),
