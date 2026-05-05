@@ -381,11 +381,20 @@ router.post('/workout/push', async (req, res) => {
     let scheduledDate = null;
     if (workoutId && (date || workout.date)) {
       scheduledDate = date || workout.date;
-      await client.post(
-        `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
-        { date: scheduledDate }
-      );
-      console.log(`[Garmin Push] Agendado para ${scheduledDate}`);
+      console.log(`[Garmin Push] Agendando para ${scheduledDate}`);
+      
+      try {
+        await client.post(
+          `https://connectapi.garmin.com/workout-service/schedule/${workoutId}`,
+          { date: scheduledDate }
+        );
+      } catch (scheduleErr) {
+        console.warn(`[Garmin Push] Falha no agendamento via connectapi, tentando proxy:`, scheduleErr.message);
+        await client.post(
+          `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
+          { date: scheduledDate }
+        );
+      }
     }
 
     res.json({
@@ -426,10 +435,24 @@ router.post('/workout/sync-plan', async (req, res) => {
       let scheduledDate = null;
       if (workoutId && workout.date) {
         scheduledDate = workout.date;
-        await client.post(
-          `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
-          { date: scheduledDate }
-        );
+        console.log(`[Sync Plan] Agendando treino ${workoutId} para ${scheduledDate}`);
+        
+        try {
+          // Try modern API endpoint first
+          await client.post(
+            `https://connectapi.garmin.com/workout-service/schedule/${workoutId}`,
+            { date: scheduledDate }
+          );
+          console.log(`[Sync Plan] Agendamento via connectapi concluído para ${scheduledDate}`);
+        } catch (scheduleErr) {
+          console.warn(`[Sync Plan] Falha no agendamento via connectapi, tentando proxy:`, scheduleErr.message);
+          // Fallback to legacy proxy endpoint
+          await client.post(
+            `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
+            { date: scheduledDate }
+          );
+          console.log(`[Sync Plan] Agendamento via proxy concluído para ${scheduledDate}`);
+        }
       }
 
       results.push({
