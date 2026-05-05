@@ -166,7 +166,7 @@ function renderDashboard(){
     }).join('');
 
     // Add Import Button if not enough groups
-    if (groups.length < 5) {
+    if (groups.length < 10) {
         const importBtn = document.createElement('div');
         importBtn.style.cssText = "margin-top:20px; padding:20px; background:var(--primary); border-radius:var(--radius); color:white; text-align:center; cursor:pointer; font-weight:800;";
         importBtn.innerHTML = '<i class="ri-download-cloud-2-line"></i> IMPORTAR PLANILHAS BASE (1 A 4)';
@@ -236,6 +236,7 @@ function importBasePlans() {
 
     saveState(['cats', 'groups']);
     renderDashboard();
+    renderGroups();
     showToast("Treinos importados para 'Planilha Importada'!");
 }
 
