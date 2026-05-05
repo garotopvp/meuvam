@@ -1,7 +1,13 @@
 import express from 'express';
 import GarminConnect from 'garmin-connect';
+import { createClient } from '@supabase/supabase-js';
 
 const router = express.Router();
+
+// Initialize Supabase for session persistence
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://zljqlzwzwfzslftnymur.supabase.co';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsanFsend6d2Z6c2xmdG55bXVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczOTM0MTcsImV4cCI6MjA5Mjk2OTQxN30.fQVJWpPVw5ZmV-FXpLyqpUoXvITOAedvbRpxlzdm-Ec';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-user session map (keyed by userId to avoid data leakage between athletes)
@@ -11,8 +17,39 @@ const garminUsers = new Map();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-function getClient(userId) {
-  return userId ? garminClients.get(userId) : null;
+async function getClient(userId) {
+  if (!userId) return null;
+  
+  // 1. Check memory
+  if (garminClients.has(userId)) return garminClients.get(userId);
+
+  // 2. Check DB for tokens
+  try {
+    const { data, error } = await supabase
+      .from('integrations')
+      .select('access_token, username')
+      .match({ athlete_id: userId, platform: 'garmin' })
+      .single();
+
+    if (data?.access_token) {
+      console.log(`[Garmin Session] Restaurando sessão para ${userId}`);
+      const { oauth1, oauth2 } = JSON.parse(data.access_token);
+      const GarminConstructor = GarminConnect.GarminConnect || GarminConnect;
+      const client = new GarminConstructor({});
+      client.loadToken(oauth1, oauth2);
+      
+      // Save back to memory
+      garminClients.set(userId, client);
+      if (data.username) {
+        garminUsers.set(userId, { displayName: data.username });
+      }
+      return client;
+    }
+  } catch (err) {
+    console.warn(`[Garmin Session] Erro ao buscar tokens no DB para ${userId}:`, err.message);
+  }
+
+  return null;
 }
 
 function formatPace(secsPerKm) {
@@ -196,6 +233,22 @@ router.post('/login', async (req, res) => {
     garminClients.set(userId, client);
     garminUsers.set(userId, user);
 
+    // Persist tokens to Supabase so we don't have to login again
+    try {
+      const tokens = client.exportToken();
+      await supabase.from('integrations').upsert({
+        athlete_id: userId,
+        platform: 'garmin',
+        username: user.displayName,
+        connected: true,
+        access_token: JSON.stringify(tokens),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'athlete_id, platform' });
+      console.log(`[Garmin Login] Sessão persistida no banco para ${userId}`);
+    } catch (dbErr) {
+      console.error(`[Garmin Login] Erro ao persistir sessão:`, dbErr.message);
+    }
+
     res.json({ success: true, user });
   } catch (err) {
     console.error('Erro login Garmin:', err.message);
@@ -205,15 +258,16 @@ router.post('/login', async (req, res) => {
 });
 
 // ─── 2. STATUS ────────────────────────────────────────────────────────────────
-router.get('/status', (req, res) => {
+router.get('/status', async (req, res) => {
   const { userId } = req.query;
-  const connected = userId ? garminClients.has(userId) : false;
+  const client = await getClient(userId);
+  const connected = !!client;
   res.json({ connected, user: garminUsers.get(userId) || null });
 });
 
 // ─── 3. ACTIVITIES ────────────────────────────────────────────────────────────
 router.get('/activities', async (req, res) => {
-  const client = getClient(req.query.userId);
+  const client = await getClient(req.query.userId);
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
 
   try {
@@ -242,7 +296,7 @@ router.get('/activities', async (req, res) => {
 
 // ─── 4. HEART RATE ────────────────────────────────────────────────────────────
 router.get('/heartrate', async (req, res) => {
-  const client = getClient(req.query.userId);
+  const client = await getClient(req.query.userId);
   if (!client) return res.status(401).json({ error: 'Não conectado' });
   try {
     const date = req.query.date || new Date().toISOString().split('T')[0];
@@ -254,7 +308,7 @@ router.get('/heartrate', async (req, res) => {
 
 // ─── 5. STEPS ─────────────────────────────────────────────────────────────────
 router.get('/steps', async (req, res) => {
-  const client = getClient(req.query.userId);
+  const client = await getClient(req.query.userId);
   if (!client) return res.status(401).json({ error: 'Não conectado' });
   try {
     const date = req.query.date || new Date().toISOString().split('T')[0];
@@ -266,7 +320,7 @@ router.get('/steps', async (req, res) => {
 
 // ─── 6. USER PROFILE ──────────────────────────────────────────────────────────
 router.get('/profile', async (req, res) => {
-  const client = getClient(req.query.userId);
+  const client = await getClient(req.query.userId);
   if (!client) return res.status(401).json({ error: 'Não conectado' });
   try {
     const profile = await client.getUserProfile();
@@ -345,7 +399,7 @@ router.post('/workout/create', async (req, res) => {
 // Body: { userId, workoutId, date: "YYYY-MM-DD" }
 router.post('/workout/schedule', async (req, res) => {
   const { userId, workoutId, date } = req.body;
-  const client = getClient(userId);
+  const client = await getClient(userId);
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
   if (!workoutId || !date) return res.status(400).json({ error: 'workoutId e date são obrigatórios' });
 
@@ -366,7 +420,7 @@ router.post('/workout/schedule', async (req, res) => {
 // Body: { userId, workout: <Superação workout>, date: "YYYY-MM-DD" }
 router.post('/workout/push', async (req, res) => {
   const { userId, workout, date } = req.body;
-  const client = getClient(userId);
+  const client = await getClient(userId);
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
   if (!workout) return res.status(400).json({ error: 'workout é obrigatório' });
 
@@ -417,7 +471,7 @@ router.post('/workout/push', async (req, res) => {
 // Body: { userId, workouts: [ <Superação workout>, ... ] }
 router.post('/workout/sync-plan', async (req, res) => {
   const { userId, workouts } = req.body;
-  const client = getClient(userId);
+  const client = await getClient(userId);
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
   if (!Array.isArray(workouts) || workouts.length === 0) {
     return res.status(400).json({ error: 'Lista de treinos é obrigatória' });
