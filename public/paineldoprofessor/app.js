@@ -166,7 +166,7 @@ function renderDashboard(){
     }).join('');
 
     // Add Import Button if not enough groups
-    if (groups.length < 10) {
+    if (groups.length < 20) {
         const importBtn = document.createElement('div');
         importBtn.style.cssText = "margin-top:20px; padding:20px; background:var(--primary); border-radius:var(--radius); color:white; text-align:center; cursor:pointer; font-weight:800;";
         importBtn.innerHTML = '<i class="ri-download-cloud-2-line"></i> IMPORTAR PLANILHAS BASE (1 A 4)';
@@ -219,17 +219,27 @@ function importBasePlans() {
     data.forEach(item => {
         const plan = Array.from({ length: 7 }, (_, i) => {
             const dayData = item.days.find(d => d.d === i);
-            return {
-                active: !!dayData,
-                steps: dayData ? dayData.steps.map(s => ({
-                    id: Date.now() + Math.random(),
-                    type: s.t,
-                    label: s.t === 'warmup' ? 'Aquecimento' : s.t === 'cooldown' ? 'Desaquecimento' : 'Rodagem',
-                    duration: { type: 'distance', value: s.v.toString() },
-                    intensity: { type: 'pace', value: s.p },
-                    notes: s.n || ""
-                })) : []
-            };
+            const steps = dayData ? dayData.steps.map(s => ({
+                id: Date.now() + Math.random(),
+                type: s.t,
+                label: s.t === 'warmup' ? 'Aquecimento' : s.t === 'cooldown' ? 'Desaquecimento' : 'Rodagem',
+                duration: { type: 'distance', value: s.v.toString() },
+                intensity: { type: 'pace', value: s.p },
+                notes: s.n || ""
+            })) : [];
+
+            // Add phases for backward compatibility
+            const phases = steps.map(s => ({
+                type: s.type,
+                title: s.label,
+                km: s.duration.value,
+                pace: s.intensity.value,
+                desc: s.notes,
+                volPct: 100,
+                vamPct: 100
+            }));
+
+            return { active: !!dayData, steps, phases };
         });
         groups.push({ id: Date.now() + Math.random(), name: item.name, category: targetCat, volume: item.vol, plan });
     });
@@ -324,7 +334,12 @@ function renderGroups(){
         header.style.display='none';
         const cg=groups.filter(g=>g.category===activeCategory);
         const cards=cg.map(g=>{
-            const rows=g.plan.map((d,i)=>{if(!d.active)return'';const ph=d.phases.filter(p=>p.volPct>0).map(p=>`<div class="plan-ph"><span><strong>${phaseLabels[p.type]}:</strong> ${p.volPct}%V / ${p.vamPct}%VAM</span>${p.desc?`<span style="font-style:italic;color:#059669;">${p.desc}</span>`:''}</div>`).join('');return`<div class="plan-row"><div class="plan-row-top"><div class="day">${daysNames[i]}</div></div>${ph}</div>`;}).join('');
+            const rows=g.plan.map((d,i)=>{
+                if(!d.active)return'';
+                const phases = d.phases || [];
+                const ph=phases.filter(p=>p.volPct>0).map(p=>`<div class="plan-ph"><span><strong>${phaseLabels[p.type] || p.type}:</strong> ${p.volPct}%V / ${p.vamPct}%VAM</span>${p.desc?`<span style="font-style:italic;color:#059669;">${p.desc}</span>`:''}</div>`).join('');
+                return`<div class="plan-row"><div class="plan-row-top"><div class="day">${daysNames[i]}</div></div>${ph}</div>`;
+            }).join('');
             return`<div class="plan-card"><div class="plan-header"><div><h3>${g.name}</h3><span style="font-size:11px;color:var(--text-muted);">Vol: ${g.volume}km/sem</span></div><div style="display:flex;gap:2px;">
                 <button class="btn btn-tertiary" onclick="openAssignModal(${g.id})" title="Vincular Alunos"><i class="ri-user-add-line"></i></button>
                 <button class="btn btn-tertiary" onclick="openDuplicateModal(${g.id})" title="Duplicar p/ outra pasta"><i class="ri-folders-line"></i></button>
