@@ -22,40 +22,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .eq('id', data.session.user.id)
                 .single();
 
-            if (profileError || !profile) {
-                console.error("Erro ou Perfil não encontrado no Supabase:", profileError);
-                console.log("ID do Usuário Logado:", data.session.user.id);
-                
-                // Tentar auto-criar perfil se o usuário for marcado como professor no metadata
-                const userRole = data.session.user.user_metadata?.role;
-
-                if (userRole === 'professor') {
-                    const { error: insertError } = await supabaseClient.from('profiles').upsert([{
-                        id: data.session.user.id,
-                        email: data.session.user.email,
-                        name: data.session.user.user_metadata?.full_name || data.session.user.email.split('@')[0],
-                        role: 'professor'
-                    }], { onConflict: 'id' });
-                    
-                    if (!insertError) {
-                        console.log("Perfil de professor sincronizado/criado.");
-                        window.location.reload();
-                        return;
-                    } else {
-                        console.error("Erro ao sincronizar perfil:", insertError);
-                    }
+            if (profileError || !profile || profile.role !== 'professor') {
+                console.log("Acesso negado ao portal do professor: perfil não encontrado ou papel incorreto.");
+                // Se estiver tentando entrar no painel logado mas não for professor, volta pro início
+                if (isIndex) {
+                    window.location.href = "/";
                 }
-
-                alert("Erro: Perfil de professor não encontrado ou sem permissão no banco de dados.\n\nID: " + data.session.user.id + "\nEmail: " + data.session.user.email + "\n\nPor favor, peça ao administrador para verificar as políticas de RLS ou insira o registro manualmente.");
-                await supabaseClient.auth.signOut();
-                window.location.href = "/professor";
-                return;
-            }
-
-            if (profile.role !== 'professor') {
-                alert("Acesso Negado: Esta conta não possui permissão de Professor.");
-                await supabaseClient.auth.signOut();
-                window.location.href = "/professor";
                 return;
             }
 

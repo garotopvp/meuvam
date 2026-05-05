@@ -239,8 +239,7 @@ const AppContent = () => {
 
       if (profileData) {
         if (profileData.role === 'professor') {
-          window.location.href = '/paineldoprofessor/';
-          return;
+          console.log('[App] Usuário é professor, mantendo no portal ou aguardando seleção manual.');
         }
         
         const { data: integrations } = await supabase
