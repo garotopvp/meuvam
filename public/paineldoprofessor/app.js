@@ -176,10 +176,13 @@ function renderDashboard(){
 }
 
 function importBasePlans() {
-    if (!confirm('Deseja importar as planilhas Base 1, 2, 3 e 4 agora?')) return;
+    if (!confirm('Deseja importar os treinos Base 1, 2, 3 e 4 dentro da pasta "Planilha Importada"?')) return;
     
+    const targetCat = "Planilha Importada";
+    if (!categories.includes(targetCat)) categories.push(targetCat);
+
     const data = [
-        { name: "Base 01", cat: "Base 1", vol: 72, days: [
+        { name: "Base 01", vol: 72, days: [
             { d: 0, steps: [{ t: "warmup", v: 1.0, p: "06:40" }, { t: "run", v: 6.0, p: "06:29" }, { t: "cooldown", v: 1.0, p: "06:40" }] },
             { d: 1, steps: [{ t: "warmup", v: 1.0, p: "06:40" }, { t: "run", v: 10.0, p: "06:40" }, { t: "cooldown", v: 1.0, p: "06:40" }] },
             { d: 2, steps: [{ t: "warmup", v: 1.0, p: "06:40" }, { t: "run", v: 12.0, p: "06:59" }, { t: "cooldown", v: 1.0, p: "06:40" }] },
@@ -187,7 +190,7 @@ function importBasePlans() {
             { d: 4, steps: [{ t: "warmup", v: 1.0, p: "06:40" }, { t: "run", v: 11.2, p: "06:59", n: "7 voltas Asturias" }, { t: "cooldown", v: 1.0, p: "06:40" }] },
             { d: 5, steps: [{ t: "warmup", v: 1.0, p: "06:40" }, { t: "run", v: 15.0, p: "06:29" }, { t: "cooldown", v: 1.0, p: "06:40" }] }
         ]},
-        { name: "Base 02", cat: "Base 2", vol: 59, days: [
+        { name: "Base 02", vol: 59, days: [
             { d: 0, steps: [{ t: "warmup", v: 1.0, p: "07:00" }, { t: "run", v: 6.0, p: "06:29" }, { t: "cooldown", v: 1.0, p: "07:00" }] },
             { d: 1, steps: [{ t: "warmup", v: 1.0, p: "07:00" }, { t: "run", v: 8.0, p: "06:40" }, { t: "cooldown", v: 1.0, p: "07:00" }] },
             { d: 2, steps: [{ t: "warmup", v: 1.0, p: "07:30" }, { t: "run", v: 10.0, p: "06:59" }, { t: "cooldown", v: 1.0, p: "07:30" }] },
@@ -195,7 +198,7 @@ function importBasePlans() {
             { d: 4, steps: [{ t: "warmup", v: 1.0, p: "07:30" }, { t: "run", v: 6.0, p: "06:59", n: "Areia Tombo" }, { t: "cooldown", v: 1.0, p: "07:30" }] },
             { d: 5, steps: [{ t: "warmup", v: 1.0, p: "07:00" }, { t: "run", v: 15.0, p: "06:29" }, { t: "cooldown", v: 1.0, p: "07:00" }] }
         ]},
-        { name: "Base 03", cat: "Base 3", vol: 70, days: [
+        { name: "Base 03", vol: 70, days: [
             { d: 0, steps: [{ t: "warmup", v: 1.0, p: "07:00" }, { t: "run", v: 7.0, p: "06:03" }, { t: "cooldown", v: 1.0, p: "07:00" }] },
             { d: 1, steps: [{ t: "warmup", v: 1.0, p: "07:00" }, { t: "run", v: 6.0, p: "06:13" }, { t: "cooldown", v: 1.0, p: "07:00" }] },
             { d: 2, steps: [{ t: "warmup", v: 1.0, p: "07:30" }, { t: "run", v: 10.0, p: "06:03" }, { t: "cooldown", v: 1.0, p: "07:30" }] },
@@ -203,7 +206,7 @@ function importBasePlans() {
             { d: 4, steps: [{ t: "warmup", v: 1.0, p: "07:30" }, { t: "run", v: 9.6, p: "06:03", n: "Asturias" }, { t: "cooldown", v: 1.0, p: "07:30" }] },
             { d: 5, steps: [{ t: "warmup", v: 1.0, p: "07:00" }, { t: "run", v: 16.0, p: "06:18" }, { t: "cooldown", v: 1.0, p: "07:00" }] }
         ]},
-        { name: "Base 04", cat: "Base 4", vol: 62, days: [
+        { name: "Base 04", vol: 62, days: [
             { d: 0, steps: [{ t: "warmup", v: 1.0, p: "07:03" }, { t: "run", v: 5.0, p: "06:03" }, { t: "cooldown", v: 1.0, p: "07:03" }] },
             { d: 1, steps: [{ t: "warmup", v: 1.0, p: "07:13" }, { t: "run", v: 7.0, p: "06:13" }, { t: "cooldown", v: 1.0, p: "07:13" }] },
             { d: 2, steps: [{ t: "warmup", v: 1.0, p: "07:03" }, { t: "run", v: 10.0, p: "06:03" }, { t: "cooldown", v: 1.0, p: "07:03" }] },
@@ -214,7 +217,6 @@ function importBasePlans() {
     ];
 
     data.forEach(item => {
-        if (!categories.includes(item.cat)) categories.push(item.cat);
         const plan = Array.from({ length: 7 }, (_, i) => {
             const dayData = item.days.find(d => d.d === i);
             return {
@@ -229,12 +231,12 @@ function importBasePlans() {
                 })) : []
             };
         });
-        groups.push({ id: Date.now() + Math.random(), name: item.name, category: item.cat, volume: item.vol, plan });
+        groups.push({ id: Date.now() + Math.random(), name: item.name, category: targetCat, volume: item.vol, plan });
     });
 
     saveState(['cats', 'groups']);
     renderDashboard();
-    showToast("Todas as planilhas base foram importadas!");
+    showToast("Treinos importados para 'Planilha Importada'!");
 }
 
 // ═══════════════════════════════════════
