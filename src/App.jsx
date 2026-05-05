@@ -24,6 +24,82 @@ import NotificationsView from './components/NotificationsView';
 // Data
 import { athleteData } from './data/mockData';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const calculateZones = (vamInput, maxHr) => {
+  let vamKmh = 0;
+  if (typeof vamInput === 'string' && vamInput.includes(':')) {
+    const [m, s] = vamInput.split(':').map(Number);
+    vamKmh = 60 / (m + (s / 60));
+  } else {
+    vamKmh = parseFloat(vamInput) || 0;
+  }
+
+  const maxHeartRate = parseInt(maxHr) || 0;
+  const zoneNames = ['Recuperação', 'Aeróbico Leve', 'Aeróbico', 'Limiar', 'VAM (Máximo)'];
+  const vamPcts = [0.65, 0.75, 0.85, 0.92, 1.0];
+  
+  // Percentuais de FC: 
+  // Z1: <65%, Z2: 65-75%, Z3: 75-85%, Z4: 85-92%, Z5: 92-100%
+  const hrPcts = [
+    { min: 0, max: 0.65 },
+    { min: 0.65, max: 0.75 },
+    { min: 0.75, max: 0.85 },
+    { min: 0.85, max: 0.92 },
+    { min: 0.92, max: 1.0 }
+  ];
+
+  return zoneNames.map((name, i) => {
+    const speed = vamKmh * vamPcts[i];
+    const paceDecimal = speed > 0 ? 60 / speed : 0;
+    const m = Math.floor(paceDecimal);
+    const s = Math.round((paceDecimal - m) * 60);
+    const pace = paceDecimal > 0 ? `${m}:${s.toString().padStart(2, '0')}` : '--';
+    
+    let hrRange = '--';
+    if (maxHeartRate > 0) {
+      const minHr = Math.round(maxHeartRate * hrPcts[i].min);
+      const maxHrZone = Math.round(maxHeartRate * hrPcts[i].max);
+      hrRange = i === 0 ? `< ${maxHrZone}` : `${minHr} - ${maxHrZone}`;
+    }
+
+    return { name, pace, hrRange };
+  });
+};
+
+const mapSupabaseToAthlete = (data, integrations = []) => {
+  const strava = integrations.find(i => i.platform === 'strava');
+  const garmin = integrations.find(i => i.platform === 'garmin');
+
+  const athleteBase = {
+    ...athleteData,
+    id: data.id,
+    name: data.name || 'Atleta',
+    vam: data.vam || '--',
+    maxHr: data.max_hr || '--',
+    objective: data.objective || 'Definir Objetivo',
+    profileImage: data.avatar_url || null,
+    gender: data.gender || '--',
+    email: data.email || '',
+    birthDate: data.birth_date || '',
+    lastVamTest: data.last_vam_test || '--',
+    weight: data.weight || '--',
+    nextRaceName: data.next_race_name || '',
+    nextRaceDate: data.next_race_date || '',
+    integrations: {
+      strava: { connected: !!strava?.connected, username: strava?.username || '' },
+      garmin: { connected: !!garmin?.connected, username: garmin?.username || '' },
+      polar: { connected: false, username: '' },
+      coros: { connected: false, username: '' }
+    }
+  };
+
+  return {
+    ...athleteBase,
+    zones: calculateZones(athleteBase.vam, athleteBase.maxHr)
+  };
+};
+
 const UrlCleanup = ({ onConnected }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -214,80 +290,6 @@ const AppContent = () => {
         };
     }
   }, [session, fetchProfile, fetchWorkouts]);
-
-  const calculateZones = (vamInput, maxHr) => {
-    let vamKmh = 0;
-    if (typeof vamInput === 'string' && vamInput.includes(':')) {
-      const [m, s] = vamInput.split(':').map(Number);
-      vamKmh = 60 / (m + (s / 60));
-    } else {
-      vamKmh = parseFloat(vamInput) || 0;
-    }
-
-    const maxHeartRate = parseInt(maxHr) || 0;
-    const zoneNames = ['Recuperação', 'Aeróbico Leve', 'Aeróbico', 'Limiar', 'VAM (Máximo)'];
-    const vamPcts = [0.65, 0.75, 0.85, 0.92, 1.0];
-    
-    // Percentuais de FC: 
-    // Z1: <65%, Z2: 65-75%, Z3: 75-85%, Z4: 85-92%, Z5: 92-100%
-    const hrPcts = [
-      { min: 0, max: 0.65 },
-      { min: 0.65, max: 0.75 },
-      { min: 0.75, max: 0.85 },
-      { min: 0.85, max: 0.92 },
-      { min: 0.92, max: 1.0 }
-    ];
-
-    return zoneNames.map((name, i) => {
-      const speed = vamKmh * vamPcts[i];
-      const paceDecimal = speed > 0 ? 60 / speed : 0;
-      const m = Math.floor(paceDecimal);
-      const s = Math.round((paceDecimal - m) * 60);
-      const pace = paceDecimal > 0 ? `${m}:${s.toString().padStart(2, '0')}` : '--';
-      
-      let hrRange = '--';
-      if (maxHeartRate > 0) {
-        const minHr = Math.round(maxHeartRate * hrPcts[i].min);
-        const maxHrZone = Math.round(maxHeartRate * hrPcts[i].max);
-        hrRange = i === 0 ? `< ${maxHrZone}` : `${minHr} - ${maxHrZone}`;
-      }
-
-      return { name, pace, hrRange };
-    });
-  };
-
-  const mapSupabaseToAthlete = (data, integrations = []) => {
-    const strava = integrations.find(i => i.platform === 'strava');
-    const garmin = integrations.find(i => i.platform === 'garmin');
-
-    const athleteBase = {
-      ...athleteData,
-      id: data.id,
-      name: data.name || 'Novo Atleta',
-      vam: data.vam || '--',
-      maxHr: data.max_hr || '--',
-      objective: data.objective || 'Definir Objetivo',
-      profileImage: data.avatar_url || null,
-      gender: data.gender || '--',
-      email: data.email || '',
-      birthDate: data.birth_date || '',
-      lastVamTest: data.last_vam_test || '--',
-      weight: data.weight || '--',
-      nextRaceName: data.next_race_name || '',
-      nextRaceDate: data.next_race_date || '',
-      integrations: {
-        strava: { connected: !!strava?.connected, username: strava?.username || '' },
-        garmin: { connected: !!garmin?.connected, username: garmin?.username || '' },
-        polar: { connected: false, username: '' },
-        coros: { connected: false, username: '' }
-      }
-    };
-
-    return {
-      ...athleteBase,
-      zones: calculateZones(athleteBase.vam, athleteBase.maxHr)
-    };
-  };
 
   const updateProfile = useCallback(async (updates) => {
     try {
