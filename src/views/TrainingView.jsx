@@ -234,14 +234,17 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
       style={{
         position: 'fixed',
         top: 0,
-        left: '-1.5rem', // Compensa o padding de 1.5rem do container pai (MainLayout)
-        width: '100vw',
-        height: '100vh',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100%',
+        height: '100dvh', // Use dvh for mobile browser support
         background: 'var(--bg-color)',
         zIndex: 1000,
         overflowY: 'auto',
         display: 'flex',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        padding: '0'
       }}
     >
       <motion.div 
@@ -252,10 +255,10 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
         style={{
           width: '100%',
           maxWidth: '500px',
-          minHeight: '100vh',
+          minHeight: '100%',
           background: 'var(--bg-color)',
           padding: '1.5rem',
-          paddingBottom: '4rem',
+          paddingBottom: '8rem',
           position: 'relative'
         }}
       >
