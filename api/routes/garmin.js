@@ -345,7 +345,7 @@ router.post('/workout/schedule', async (req, res) => {
   try {
     // Garmin Connect schedule endpoint (reverse-engineered, stable since 2022)
     const result = await client.post(
-      `https://connectapi.garmin.com/workout-service/schedule/${workoutId}`,
+      `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
       { date }
     );
     res.json({ success: true, scheduled: true, date, workoutId, result });
@@ -375,7 +375,7 @@ router.post('/workout/push', async (req, res) => {
     if (workoutId && (date || workout.date)) {
       scheduledDate = date || workout.date;
       await client.post(
-        `https://connectapi.garmin.com/workout-service/schedule/${workoutId}`,
+        `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
         { date: scheduledDate }
       );
       console.log(`[Garmin Push] Agendado para ${scheduledDate}`);
@@ -420,7 +420,7 @@ router.post('/workout/sync-plan', async (req, res) => {
       if (workoutId && workout.date) {
         scheduledDate = workout.date;
         await client.post(
-          `https://connect.garmin.com/workout-service/schedule/${workoutId}`,
+          `https://connect.garmin.com/modern/proxy/workout-service/schedule/${workoutId}`,
           { date: scheduledDate }
         );
       }
