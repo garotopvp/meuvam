@@ -78,7 +78,7 @@ function buildGarminStep(step, stepOrder) {
 
   // ── End condition ────────────────────────────────────────────────────────
   let endCondition = { conditionTypeKey: 'lap.button', conditionTypeId: 1 };
-  let endConditionValue = 0;
+  let endConditionValue = null;
   let preferredEndConditionUnit = null;
 
   if (step.duration?.type === 'time' && step.duration?.value) {
@@ -113,7 +113,6 @@ function buildGarminStep(step, stepOrder) {
       console.warn('Garmin sync: failed to parse pace', intensity.value);
     }
   } else if (intensity.type === 'hr' && intensity.value) {
-    // BPM Target (e.g. "140-150" or just "145")
     const hrVal = String(intensity.value);
     if (hrVal.includes('-')) {
       const [low, high] = hrVal.split('-').map(Number);
@@ -135,29 +134,20 @@ function buildGarminStep(step, stepOrder) {
     description: step.label || null,
     stepType,
     endCondition,
-    endConditionValue,
     preferredEndConditionUnit,
-    endConditionCompare: null,
-    endConditionZone: null,
+    endConditionValue,
     targetType,
     targetValueOne,
     targetValueTwo,
-    targetValueUnit: null,
-    zoneNumber: null,
-    secondaryTargetType: null,
-    secondaryTargetValueOne: null,
-    secondaryTargetValueTwo: null,
-    secondaryTargetValueUnit: null,
-    secondaryZoneNumber: null,
+    zoneNumber: null
   };
 }
 
 /**
  * Build a Garmin repeat group step.
- * In Garmin's model, a repeat block is a WorkoutRepeatStepDTO that contains nested steps.
  */
 function buildRepeatGroup(step, startOrder) {
-  let order = 1; // Order within the group starts at 1 in Garmin's model
+  let order = 1;
   const nested = step.steps.map(s => buildGarminStep(s, order++));
 
   return {
@@ -171,7 +161,7 @@ function buildRepeatGroup(step, startOrder) {
       workoutSteps: nested,
       smartRepeat: false
     },
-    nextOrder: startOrder + 1, // The repeat block itself occupies 1 slot in the main list
+    nextOrder: startOrder + 1,
   };
 }
 
