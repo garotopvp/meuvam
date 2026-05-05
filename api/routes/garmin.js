@@ -22,120 +22,109 @@ function formatPace(secsPerKm) {
 }
 
 /**
- * Convert a Superação structured_steps array → Garmin Connect workout JSON.
- *
- * Garmin workout step types (sportType = 1 → running):
- *   stepType: { stepTypeId, stepTypeKey }  e.g. { 0, "body" } | { 1, "warmup" } | { 2, "cooldown" }
- *   endCondition: { conditionTypeId, conditionTypeKey }  e.g. { 0, "lap.button" } | { 2, "distance" } | { 3, "time" }
- *   targetType: { workoutTargetTypeId, workoutTargetTypeKey }  e.g. { 1, "no.target" } | { 6, "pace.zone" }
+ * Build a single Garmin step from a Superação step object.
+ * Format reverse-engineered from garmin-connect lib's Running.toJson().
  */
-function buildGarminStep(step, stepOrderIndex) {
-  const garminTypeMap = {
+function buildGarminStep(step, stepOrder) {
+  // ── Step type mapping ────────────────────────────────────────────────────
+  const stepTypeMap = {
     warmup:   { stepTypeId: 1, stepTypeKey: 'warmup' },
     cooldown: { stepTypeId: 2, stepTypeKey: 'cooldown' },
-    run:      { stepTypeId: 0, stepTypeKey: 'body' },
-    walk:     { stepTypeId: 0, stepTypeKey: 'body' },
-    recovery: { stepTypeId: 0, stepTypeKey: 'body' },
-    rest:     { stepTypeId: 0, stepTypeKey: 'body' },
-    other:    { stepTypeId: 0, stepTypeKey: 'body' },
+    run:      { stepTypeId: 3, stepTypeKey: 'interval' },
+    walk:     { stepTypeId: 3, stepTypeKey: 'interval' },
+    recovery: { stepTypeId: 4, stepTypeKey: 'recovery' },
+    rest:     { stepTypeId: 5, stepTypeKey: 'rest' },
+    other:    { stepTypeId: 3, stepTypeKey: 'interval' },
   };
 
-  const typeInfo = garminTypeMap[step.type] || garminTypeMap.other;
+  const stepType = stepTypeMap[step.type] || stepTypeMap.other;
 
-  // Duration / end condition
-  let endCondition = { conditionTypeId: 0, conditionTypeKey: 'lap.button', conditionValue: null };
-  if (step.duration?.type === 'time') {
-    endCondition = {
-      conditionTypeId: 3,
-      conditionTypeKey: 'time',
-      conditionValue: step.duration.value * 60, // minutes → seconds
-    };
-  } else if (step.duration?.type === 'distance') {
-    endCondition = {
-      conditionTypeId: 2,
-      conditionTypeKey: 'distance',
-      conditionValue: step.duration.value * 1000, // km → metres
-    };
+  // ── End condition ────────────────────────────────────────────────────────
+  let endCondition = { conditionTypeKey: 'lap.button', conditionTypeId: 1 };
+  let endConditionValue = null;
+  let preferredEndConditionUnit = null;
+
+  if (step.duration?.type === 'time' && step.duration?.value) {
+    endCondition = { conditionTypeKey: 'time', conditionTypeId: 2 };
+    endConditionValue = step.duration.value * 60; // minutes → seconds
+    preferredEndConditionUnit = { unitKey: 'minute' };
+  } else if (step.duration?.type === 'distance' && step.duration?.value) {
+    endCondition = { conditionTypeKey: 'distance', conditionTypeId: 3 };
+    endConditionValue = step.duration.value * 1000; // km → metres
+    preferredEndConditionUnit = { unitKey: 'kilometer' };
   }
 
-  // Target pace from intensity (% VAM or pace string)
+  // ── Target pace ──────────────────────────────────────────────────────────
   let targetType = { workoutTargetTypeId: 1, workoutTargetTypeKey: 'no.target' };
   let targetValueOne = null;
   let targetValueTwo = null;
+
   if (step.intensity?.type === 'pace' && step.intensity?.value) {
-    // Explicit pace in "min:sec" format
     const [min, sec] = step.intensity.value.split(':').map(Number);
     if (!isNaN(min) && !isNaN(sec)) {
-      const mPerSec = 1000 / (min * 60 + sec); // m/s
+      const totalSec = min * 60 + sec;
+      const mPerSec = 1000 / totalSec;
+      const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; // ±15s/km band
       targetType = { workoutTargetTypeId: 6, workoutTargetTypeKey: 'pace.zone' };
-      // Garmin expects pace in m/s; provide a ±5 s/km band
-      const band = 1000 / ((min * 60 + sec - 5) || 1) - mPerSec;
-      targetValueOne = mPerSec - band;
-      targetValueTwo = mPerSec + band;
+      targetValueOne = Math.max(0, mPerSec - bandMs);
+      targetValueTwo = mPerSec + bandMs;
     }
   }
 
   return {
+    type: 'ExecutableStepDTO',
     stepId: null,
-    stepOrder: stepOrderIndex,
-    stepType: typeInfo,
+    stepOrder,
     childStepId: null,
-    description: step.label || step.type,
+    description: step.label || null,
+    stepType,
     endCondition,
-    endConditionValue: endCondition.conditionValue,
+    ...(preferredEndConditionUnit ? { preferredEndConditionUnit } : {}),
+    endConditionValue,
+    endConditionCompare: null,
+    endConditionZone: null,
     targetType,
     targetValueOne,
     targetValueTwo,
-    secondaryTargetType: null,
-    secondaryTargetValueOne: null,
-    secondaryTargetValueTwo: null,
-    numberOfIterations: null,
-    smartRepeat: false,
-    repeatFirstStepIndex: null,
-    repeatLastStepIndex: null,
-    workoutProvider: null,
-    providerExerciseSourceId: null,
-    exerciseCategory: null,
-    exerciseName: null,
-    exerciseWeight: 0,
-    weightDisplayUnit: null,
+    zoneNumber: null,
   };
 }
 
 /**
- * Expand a Superação structured_steps array into a flat list of Garmin steps,
- * handling repetition blocks by generating repeat group steps.
+ * Build a Garmin repeat group step.
+ * In Garmin's model, a repeat block is a WorkoutRepeatStepDTO that contains nested steps.
+ */
+function buildRepeatGroup(step, startOrder) {
+  let order = startOrder + 1;
+  const nested = step.steps.map(s => buildGarminStep(s, order++));
+
+  return {
+    garminStep: {
+      type: 'WorkoutRepeatGroupDTO',
+      stepId: null,
+      stepOrder: startOrder,
+      childStepId: null,
+      stepType: { stepTypeId: 6, stepTypeKey: 'repeat' },
+      endCondition: { conditionTypeKey: 'iterations', conditionTypeId: 7 },
+      endConditionValue: step.count,
+      workoutSteps: nested,
+    },
+    nextOrder: order,
+  };
+}
+
+/**
+ * Expand a Superação steps array → Garmin workoutSteps array.
  */
 function expandSteps(steps) {
   const garminSteps = [];
   let order = 1;
 
   for (const step of steps) {
-    if (step.type === 'repetition') {
-      // Garmin encodes a repeat as: first step has numberOfIterations + repeat range
-      const groupStartOrder = order;
-      const innerSteps = [];
-
-      for (const inner of step.steps) {
-        const gs = buildGarminStep(inner, order++);
-        innerSteps.push(gs);
-      }
-
-      // Mark first inner step as the start of the repeat group
-      if (innerSteps.length > 0) {
-        innerSteps[0].numberOfIterations = step.count;
-        innerSteps[0].repeatFirstStepIndex = groupStartOrder;
-        innerSteps[0].repeatLastStepIndex = order - 1;
-        innerSteps[0].stepType = { stepTypeId: 6, stepTypeKey: 'repeat' };
-        innerSteps[0].endCondition = {
-          conditionTypeId: 7,
-          conditionTypeKey: 'iterations',
-          conditionValue: step.count,
-        };
-        innerSteps[0].endConditionValue = step.count;
-      }
-
-      garminSteps.push(...innerSteps);
+    if (step.type === 'repetition' && Array.isArray(step.steps)) {
+      const { garminStep, nextOrder } = buildRepeatGroup(step, order);
+      garminSteps.push(garminStep);
+      order = nextOrder;
     } else {
       garminSteps.push(buildGarminStep(step, order++));
     }
@@ -145,10 +134,22 @@ function expandSteps(steps) {
 }
 
 /**
- * Convert a Superação workout object into a Garmin Connect workout payload.
+ * Convert a Superação workout object → Garmin Connect workout payload.
  */
 function workoutToGarminPayload(workout) {
-  const steps = workout.structured_steps || workout.metrics?.structured_steps || [];
+  const rawSteps = workout.structured_steps || workout.metrics?.structured_steps || [];
+  const workoutSteps = Array.isArray(rawSteps) && rawSteps.length > 0
+    ? expandSteps(rawSteps)
+    : [
+        // Fallback: single body step of the prescribed distance/duration
+        buildGarminStep({
+          type: 'run',
+          label: workout.title,
+          duration: workout.metrics?.distance
+            ? { type: 'distance', value: parseFloat(workout.metrics.distance) }
+            : { type: 'lap_button' },
+        }, 1),
+      ];
 
   return {
     workoutName: workout.title || 'Treino Superação',
@@ -158,7 +159,7 @@ function workoutToGarminPayload(workout) {
       {
         segmentOrder: 1,
         sportType: { sportTypeId: 1, sportTypeKey: 'running' },
-        workoutSteps: expandSteps(steps),
+        workoutSteps,
       },
     ],
   };

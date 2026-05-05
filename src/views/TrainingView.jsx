@@ -522,9 +522,14 @@ const GarminSyncPanel = ({ workouts, userId, garminSync }) => {
   };
 
   const handleSyncWeek = async () => {
-    const weekWorkouts = workouts.filter(w => w.structured_steps || w.metrics?.structured_steps);
+    // Send all workouts visible in the current week — backend handles fallback for non-structured ones
+    const weekWorkouts = workouts.filter(w => w.date); // any workout with a date
     if (weekWorkouts.length === 0) return;
-    await syncPlan(userId, weekWorkouts);
+    const result = await syncPlan(userId, weekWorkouts);
+    // If there were errors, expand the details
+    if (result?.errors?.length > 0) {
+      console.warn('[GarminSync] Errors:', result.errors);
+    }
   };
 
   return (
