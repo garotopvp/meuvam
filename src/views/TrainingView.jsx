@@ -527,9 +527,10 @@ const GarminSyncPanel = ({ workouts, userId, garminSync }) => {
     const weekWorkouts = workouts.filter(w => w.date); // any workout with a date
     if (weekWorkouts.length === 0) return;
     const result = await syncPlan(userId, weekWorkouts);
-    // If there were errors, expand the details
+    // If there were errors, show an alert with the actual Garmin error details
     if (result?.errors?.length > 0) {
       console.warn('[GarminSync] Errors:', result.errors);
+      alert(`Falha no Garmin:\n\n${result.errors[0].error}`);
     }
   };
 
