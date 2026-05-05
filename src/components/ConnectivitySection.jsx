@@ -62,7 +62,7 @@ const ConnectivitySection = ({ athlete, setAthlete }) => {
       const res = await fetch(`${API}/garmin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, userId: athlete?.id })
       });
       const data = await res.json();
 
