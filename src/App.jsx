@@ -1,4 +1,9 @@
 import React, { useState, useEffect } from 'react';
+window.onerror = function(msg, url, line, col, error) {
+  console.log('[Global Error]', msg, 'at', url, ':', line, ':', col);
+  document.body.innerHTML = '<div style="color:red;padding:20px;">Erro Fatal: ' + msg + '</div>';
+  return false;
+};
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
