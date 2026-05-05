@@ -125,6 +125,68 @@ const AppContent = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const fetchWorkouts = useCallback(async () => {
+    if (!session?.user?.id) return;
+    setIsRefreshing(true);
+    try {
+      const { data, error } = await supabase
+        .from('workouts')
+        .select('*')
+        .eq('athlete_id', session.user.id)
+        .order('date', { ascending: false });
+
+      if (!error && data) {
+        setWorkouts(data);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar treinos:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [session]);
+
+  const fetchProfile = useCallback(async () => {
+    if (!session?.user?.id) return;
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError) {
+        console.error('Erro ao carregar perfil:', profileError);
+        // Se não encontrar perfil, define um objeto básico para não travar o app
+        setAthleteRaw(mapSupabaseToAthlete({ id: session.user.id, email: session.user.email }, []));
+        return;
+      }
+
+      if (profileData) {
+        if (profileData.role === 'professor') {
+          window.location.href = '/paineldoprofessor/';
+          return;
+        }
+        
+        const { data: integrations } = await supabase
+          .from('integrations')
+          .select('*')
+          .eq('athlete_id', session.user.id);
+          
+        const athleteObj = mapSupabaseToAthlete(profileData, integrations || []);
+        setAthleteRaw(athleteObj);
+
+        // Check for first login / incomplete profile
+        if ((!profileData.vam || profileData.vam === '--' || !profileData.birth_date) && window.location.pathname === '/aluno') {
+          navigate('/aluno/perfil/edit');
+        }
+      }
+    } catch (err) {
+      console.error('Erro crítico em fetchProfile:', err);
+      // Fallback para evitar tela branca infinita
+      setAthleteRaw(mapSupabaseToAthlete({ id: session.user.id, email: session.user.email }, []));
+    }
+  }, [session, navigate]);
+
   useEffect(() => {
     if (session) {
         fetchProfile();
@@ -142,7 +204,7 @@ const AppContent = () => {
             },
             (payload) => {
               console.log('Treino atualizado via Real-time:', payload);
-              fetchWorkouts(); // Recarrega os treinos ao receber alteração
+              fetchWorkouts(); 
             }
           )
           .subscribe();
@@ -151,7 +213,7 @@ const AppContent = () => {
           supabase.removeChannel(workoutSubscription);
         };
     }
-  }, [session]);
+  }, [session, fetchProfile, fetchWorkouts]);
 
   const calculateZones = (vamInput, maxHr) => {
     let vamKmh = 0;
@@ -227,56 +289,7 @@ const AppContent = () => {
     };
   };
 
-  const fetchWorkouts = async () => {
-    if (!session?.user?.id) return;
-    setIsRefreshing(true);
-    const { data, error } = await supabase
-      .from('workouts')
-      .select('*')
-      .eq('athlete_id', session.user.id)
-      .order('date', { ascending: false });
-
-    if (!error && data) {
-      setWorkouts(data);
-    }
-    setIsRefreshing(false);
-  };
-
-  const fetchProfile = async () => {
-    if (!session?.user?.id) return;
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    if (profileError) {
-      console.error('Erro ao carregar perfil:', profileError);
-      return;
-    }
-
-    if (profileData) {
-      if (profileData.role === 'professor') {
-        window.location.href = '/paineldoprofessor/';
-        return;
-      }
-      
-      const { data: integrations } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('athlete_id', session.user.id);
-        
-      const athleteObj = mapSupabaseToAthlete(profileData, integrations || []);
-      setAthleteRaw(athleteObj);
-
-      // Check for first login / incomplete profile
-      if ((!profileData.vam || profileData.vam === '--' || !profileData.birth_date) && window.location.pathname === '/aluno') {
-        navigate('/aluno/perfil/edit');
-      }
-    }
-  };
-
-  const updateProfile = async (updates) => {
+  const updateProfile = useCallback(async (updates) => {
     try {
       const { error } = await supabase
         .from('profiles')
@@ -299,7 +312,7 @@ const AppContent = () => {
     } catch (err) {
       alert('Erro: ' + err.message);
     }
-  };
+  }, [session, fetchProfile]);
 
   if (isLoading || (session && !athlete)) {
     return (
