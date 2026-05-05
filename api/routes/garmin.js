@@ -431,7 +431,10 @@ router.post('/workout/sync-plan', async (req, res) => {
       await new Promise(r => setTimeout(r, 300));
     } catch (err) {
       console.error(`[Sync Plan] Erro em "${workout.title}":`, err.message);
-      errors.push({ workoutName: workout.title, error: err.message });
+      if (err.response?.data) {
+        console.error(`[Sync Plan] Detalhes do erro Garmin:`, JSON.stringify(err.response.data));
+      }
+      errors.push({ workoutName: workout.title, error: err.response?.data?.message || err.message });
     }
   }
 
