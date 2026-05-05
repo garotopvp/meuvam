@@ -237,14 +237,12 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
         left: 0,
         right: 0,
         bottom: 0,
-        width: '100%',
-        height: '100dvh', // Use dvh for mobile browser support
         background: 'var(--bg-color)',
-        zIndex: 1000,
+        zIndex: 9999, // Ensure it's above everything including any new bottom navs
         overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
         display: 'flex',
-        justifyContent: 'center',
-        padding: '0'
+        justifyContent: 'center'
       }}
     >
       <motion.div 
