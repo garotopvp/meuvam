@@ -60,14 +60,19 @@ function buildGarminStep(step, stepOrder) {
   let targetValueTwo = null;
 
   if (step.intensity?.type === 'pace' && step.intensity?.value) {
-    const [min, sec] = step.intensity.value.split(':').map(Number);
-    if (!isNaN(min) && !isNaN(sec)) {
-      const totalSec = min * 60 + sec;
-      const mPerSec = 1000 / totalSec;
-      const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; // ±15s/km band
-      targetType = { workoutTargetTypeId: 6, workoutTargetTypeKey: 'pace.zone' };
-      targetValueOne = Math.max(0, mPerSec - bandMs);
-      targetValueTwo = mPerSec + bandMs;
+    try {
+      const paceStr = String(step.intensity.value);
+      const [min, sec] = paceStr.split(':').map(Number);
+      if (!isNaN(min) && !isNaN(sec)) {
+        const totalSec = min * 60 + sec;
+        const mPerSec = 1000 / totalSec;
+        const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; // ±15s/km band
+        targetType = { workoutTargetTypeId: 6, workoutTargetTypeKey: 'pace.zone' };
+        targetValueOne = Math.max(0, mPerSec - bandMs);
+        targetValueTwo = mPerSec + bandMs;
+      }
+    } catch (e) {
+      console.warn('Garmin sync: failed to parse pace', step.intensity.value);
     }
   }
 
