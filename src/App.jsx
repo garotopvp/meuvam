@@ -293,12 +293,21 @@ const AppContent = () => {
     if (!session?.user?.email?.includes('rinaldo')) return;
     setImporting(true);
     try {
-      const sophiaId = 'b8bb5dd9-f0e0-4926-94ab-69a3771a021c';
       const email = 'rodriguesophia013@gmail.com';
-      const name = 'Sophia Rodrigues';
+      
+      // 1. Find Existing Profile
+      const { data: profile, error: findError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
 
-      // 1. Create Profile
-      await supabase.from('profiles').upsert([{ id: sophiaId, email, name, role: 'athlete' }]);
+      if (findError || !profile) {
+        alert('Perfil da Sophia não encontrado com o e-mail: ' + email + '. Peça para ela logar uma vez no app primeiro.');
+        return;
+      }
+
+      const sophiaId = profile.id;
 
       // 2. Create Workouts
       const workouts = [
