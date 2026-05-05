@@ -78,39 +78,53 @@ function buildGarminStep(step, stepOrder) {
 
   // ── End condition ────────────────────────────────────────────────────────
   let endCondition = { conditionTypeKey: 'lap.button', conditionTypeId: 1 };
-  let endConditionValue = null;
+  let endConditionValue = 0;
   let preferredEndConditionUnit = null;
 
   if (step.duration?.type === 'time' && step.duration?.value) {
     endCondition = { conditionTypeKey: 'time', conditionTypeId: 2 };
-    endConditionValue = step.duration.value * 60; // minutes → seconds
+    endConditionValue = Math.round(parseFloat(step.duration.value) * 60); 
     preferredEndConditionUnit = { unitKey: 'minute' };
   } else if (step.duration?.type === 'distance' && step.duration?.value) {
     endCondition = { conditionTypeKey: 'distance', conditionTypeId: 3 };
-    endConditionValue = step.duration.value * 1000; // km → metres
+    endConditionValue = Math.round(parseFloat(step.duration.value) * 1000); 
     preferredEndConditionUnit = { unitKey: 'kilometer' };
   }
 
-  // ── Target pace ──────────────────────────────────────────────────────────
+  // ── Intensity Target ─────────────────────────────────────────────────────
   let targetType = { workoutTargetTypeId: 1, workoutTargetTypeKey: 'no.target' };
   let targetValueOne = null;
   let targetValueTwo = null;
 
-  if (step.intensity?.type === 'pace' && step.intensity?.value) {
+  const intensity = step.intensity || {};
+  if (intensity.type === 'pace' && intensity.value) {
     try {
-      const paceStr = String(step.intensity.value);
+      const paceStr = String(intensity.value);
       const [min, sec] = paceStr.split(':').map(Number);
       if (!isNaN(min) && !isNaN(sec)) {
         const totalSec = min * 60 + sec;
         const mPerSec = 1000 / totalSec;
-        const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; // ±15s/km band
+        const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; 
         targetType = { workoutTargetTypeId: 6, workoutTargetTypeKey: 'pace.zone' };
         targetValueOne = Math.max(0, mPerSec - bandMs);
         targetValueTwo = mPerSec + bandMs;
       }
     } catch (e) {
-      console.warn('Garmin sync: failed to parse pace', step.intensity.value);
+      console.warn('Garmin sync: failed to parse pace', intensity.value);
     }
+  } else if (intensity.type === 'hr' && intensity.value) {
+    // BPM Target (e.g. "140-150" or just "145")
+    const hrVal = String(intensity.value);
+    if (hrVal.includes('-')) {
+      const [low, high] = hrVal.split('-').map(Number);
+      targetValueOne = low || 100;
+      targetValueTwo = high || 200;
+    } else {
+      const val = Number(hrVal) || 140;
+      targetValueOne = val - 5;
+      targetValueTwo = val + 5;
+    }
+    targetType = { workoutTargetTypeId: 4, workoutTargetTypeKey: 'heart.rate.zone' };
   }
 
   return {
@@ -121,8 +135,8 @@ function buildGarminStep(step, stepOrder) {
     description: step.label || null,
     stepType,
     endCondition,
-    endConditionValue: endConditionValue !== null ? endConditionValue : 0,
-    preferredEndConditionUnit: preferredEndConditionUnit || null,
+    endConditionValue,
+    preferredEndConditionUnit,
     endConditionCompare: null,
     endConditionZone: null,
     targetType,
