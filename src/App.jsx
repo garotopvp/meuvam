@@ -169,6 +169,8 @@ const AppContent = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [photoToEdit, setPhotoToEdit] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -190,6 +192,9 @@ const AppContent = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+    }).catch(err => {
+      console.error('Erro de sessão:', err);
+    }).finally(() => {
       setIsLoading(false);
     });
 
@@ -253,6 +258,10 @@ const AppContent = () => {
         if ((!profileData.vam || profileData.vam === '--' || !profileData.birth_date) && window.location.pathname === '/aluno') {
           navigate('/aluno/perfil/edit');
         }
+      } else {
+        // Se não encontrar perfil (profileData é null), define um objeto básico
+        console.log('[App] Perfil não encontrado, usando fallback.');
+        setAthleteRaw(mapSupabaseToAthlete({ id: session.user.id, email: session.user.email }, []));
       }
     } catch (err) {
       console.error('Erro crítico em fetchProfile:', err);

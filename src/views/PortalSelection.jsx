@@ -15,11 +15,18 @@ const PortalSelection = ({ onSelectAthlete, onSelectProfessor }) => {
     }}>
       <div style={{ marginBottom: '3rem', animation: 'fadeIn 0.8s ease-out' }}>
         <div style={{ 
-          width: '80px', height: '80px', background: 'var(--primary-color)', 
-          borderRadius: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 1.5rem', boxShadow: '0 10px 25px rgba(0,122,255,0.3)'
+          width: '120px', 
+          height: '120px', 
+          background: 'white', 
+          borderRadius: '30px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          margin: '0 auto 1.5rem',
+          padding: '10px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.08)'
         }}>
-          <Zap color="#fff" size={40} fill="#fff" />
+          <img src="/assets/logo.png" alt="Superação Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
         <h1 style={{ fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-1px', marginBottom: '8px' }}>Superação</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', fontWeight: 500 }}>Assessoria Esportiva</p>

@@ -108,11 +108,18 @@ const AuthView = ({ onBack }) => {
 
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ 
-          width: '64px', height: '64px', background: 'var(--primary-color)', 
-          borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 1.5rem', boxShadow: '0 8px 16px rgba(0,122,255,0.25)'
+          width: '80px', 
+          height: '80px', 
+          background: 'white', 
+          borderRadius: '20px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          margin: '0 auto 1.5rem',
+          padding: '8px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
         }}>
-          <Zap color="#fff" size={32} fill="#fff" />
+          <img src="/assets/logo.png" alt="Superação Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '8px' }}>Superação</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Assessoria de Corrida</p>
