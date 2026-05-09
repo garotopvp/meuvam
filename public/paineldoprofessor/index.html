@@ -508,13 +508,19 @@
         </div>
     </div>
 
-    <!-- Duplicate to Folder Modal -->
-    <div class="modal" id="modal-duplicate">
-        <div class="modal-card" style="max-width:400px;">
-            <div class="modal-header"><h3>Duplicar para Outra Pasta</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
-            <div class="modal-body">
-                <p style="margin-bottom:12px;font-size:14px;color:var(--text-muted);">Escolha a pasta de destino:</p>
-                <div id="dup-folder-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <!-- Strava Activities Modal -->
+    <div class="modal" id="modal-strava">
+        <div class="modal-card" style="max-width:600px;">
+            <div class="modal-header">
+                <h3>Atividades Strava: <span id="strava-athlete-name"></span></h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="padding:0; background:var(--bg);">
+                <div id="strava-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
+                    <i class="ri-loader-4-line ri-spin" style="font-size:32px; display:block; margin-bottom:8px;"></i>
+                    Buscando atividades no Strava...
+                </div>
+                <div id="strava-list" class="history-list"></div>
             </div>
         </div>
     </div>

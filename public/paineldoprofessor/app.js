@@ -47,7 +47,7 @@ function saveState(k=['cats','groups','athletes','history']){
 
 // ─── DOM ───
 const $=id=>document.getElementById(id);
-const allModals=['modal-group','modal-athlete','modal-history','modal-export','modal-assign','modal-duplicate'].map(id=>$(id)).filter(Boolean);
+const allModals=['modal-group','modal-athlete','modal-history','modal-export','modal-assign','modal-duplicate','modal-strava'].map(id=>$(id)).filter(Boolean);
 const daysNames=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 const phaseLabels={warmup:'Aquecimento',main:'Principal',cooldown:'Desaquec.'};
 const VAM_ZONES=[{label:'Recuperação',pct:60,color:'#94a3b8'},{label:'Aeróbico Leve',pct:70,color:'#3b82f6'},{label:'Aeróbico',pct:80,color:'#10b981'},{label:'Limiar',pct:90,color:'#f59e0b'},{label:'VAM (Máximo)',pct:100,color:'#ef4444'}];
@@ -782,6 +782,7 @@ function renderAthletes(){
             <td style="font-weight:700;color:var(--primary);">${vam}</td>
             <td>${noteSnip}</td>
             <td style="text-align:right;white-space:nowrap;">
+                <button class="btn btn-tertiary" onclick="openStravaActivities('${a.id}')" title="Atividades Strava" style="color:#fc4c02;"><i class="ri-strava-line"></i></button>
                 <button class="btn btn-tertiary" onclick="openHistory('${a.id}')" title="Histórico"><i class="ri-history-line"></i></button>
                 <button class="btn btn-tertiary" onclick="editAthlete('${a.id}')" title="Editar"><i class="ri-edit-line"></i></button>
                 <button class="btn btn-tertiary" onclick="deleteAthlete('${a.id}')" title="Excluir" style="color:var(--danger);"><i class="ri-delete-bin-line"></i></button>
@@ -848,6 +849,56 @@ function updateHistoryToolbar(){const all=[...document.querySelectorAll('.hist-c
 function toggleSelectAllHistory(){const checked=$('hist-select-all').checked;document.querySelectorAll('.hist-chk').forEach(c=>{c.checked=checked;});updateHistoryToolbar();}
 function deleteHistory(hId){if(!confirm('Excluir do histórico?'))return;historyPlans=historyPlans.filter(h=>h.id!==hId);saveState(['history']);renderHistoryList(currentHistoryAthleteId);renderDashboard();showToast('Excluído.');}
 function deleteSelectedHistory(){const sel=[...document.querySelectorAll('.hist-chk:checked')].map(c=>parseInt(c.value));if(!sel.length)return;if(!confirm(`Excluir ${sel.length} treino(s)?`))return;const s=new Set(sel);historyPlans=historyPlans.filter(h=>!s.has(h.id));saveState(['history']);renderHistoryList(currentHistoryAthleteId);renderDashboard();showToast(`${sel.length} excluído(s).`);}
+
+// ─── STRAVA ACTIVITIES ───
+async function openStravaActivities(athleteId) {
+    const a = athletes.find(x => x.id == athleteId);
+    if (!a) return;
+    
+    $('strava-athlete-name').textContent = a.name;
+    $('strava-list').innerHTML = '';
+    $('strava-loading').style.display = 'block';
+    $('modal-strava').classList.add('show');
+
+    try {
+        // Usar a URL absoluta se estiver no painel do professor (que está em /paineldoprofessor/)
+        const response = await fetch(`/api/strava/activities?userId=${athleteId}`);
+        const activities = await response.json();
+        
+        $('strava-loading').style.display = 'none';
+        
+        if (!activities || activities.error || !activities.length) {
+            $('strava-list').innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">
+                <i class="ri-information-line" style="font-size:32px; display:block; margin-bottom:8px; opacity:0.5;"></i>
+                ${activities?.error || 'Nenhuma atividade encontrada no Strava para este atleta.'}
+            </div>`;
+            return;
+        }
+
+        $('strava-list').innerHTML = activities.map(act => {
+            const date = new Date(act.date).toLocaleDateString('pt-BR');
+            return `<div class="history-item">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:36px; height:36px; border-radius:8px; background:#fc4c0215; color:#fc4c02; display:flex; align-items:center; justify-content:center;">
+                        <i class="ri-run-line"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700; font-size:14px; color:var(--text-primary);">${act.title}</div>
+                        <div style="font-size:12px; color:var(--text-muted);">${date} · ${act.metrics.distance} · ${act.metrics.pace}/km</div>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-weight:800; color:var(--primary);">${act.metrics.duration}</div>
+                    <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Duração</div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        console.error('Erro ao buscar Strava:', err);
+        $('strava-loading').style.display = 'none';
+        $('strava-list').innerHTML = `<div style="padding:40px; text-align:center; color:var(--danger);">Erro ao conectar com o Strava.</div>`;
+    }
+}
 
 // ═══════════════════════════════════════
 //  EXPORT / IMAGE

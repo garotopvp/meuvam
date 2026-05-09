@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-color: #ffffff;
+  --bg-color: #f8fafc;
   --surface-color: #ffffff;
-  --surface-accent: #f8f9fa;
-  --border-color: #eeeeee;
-  --primary-color: #007aff; /* Apple Blue */
-  --accent-color: #000000;
-  --text-primary: #1d1d1f; /* Apple Dark Text */
-  --text-secondary: #86868b; /* Apple Gray Text */
-  --success: #34c759;
-  --warning: #ff9500;
-  --error: #ff3b30;
+  --surface-accent: #f1f5f9;
+  --border-color: #e2e8f0;
+  --primary-color: #ef4444; /* Minimalist Red */
+  --accent-color: #0f172a; /* Deep Slate */
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
   
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);

@@ -184,6 +184,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 
 /* Loader */
 .loader { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.ri-spin { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Calculator tabs */

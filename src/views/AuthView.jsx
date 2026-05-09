@@ -5,13 +5,17 @@ import {
   Lock, 
   User as UserIcon, 
   Loader2,
-  ChevronRight
+  ChevronLeft,
+  Eye,
+  EyeOff,
+  ArrowLeft
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const AuthView = ({ onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -27,6 +31,25 @@ const AuthView = ({ onBack }) => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleRecoverPassword = async () => {
+    if (!email) {
+      setError('Por favor, digite seu e-mail acima para recuperar a senha.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setError('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
+    } catch (err) {
+      setError('Erro ao enviar e-mail: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -96,124 +119,175 @@ const AuthView = ({ onBack }) => {
       alignItems: 'center', 
       justifyContent: 'center',
       padding: '2rem',
-      background: 'var(--bg-color)',
+      background: '#f8fafc',
       textAlign: 'center'
     }}>
+      {/* Botão de Voltar Padronizado */}
       <button 
         onClick={onBack}
-        style={{ position: 'absolute', top: '2rem', left: '2rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}
+        style={{ 
+          position: 'absolute', 
+          top: '1.5rem', 
+          left: '1.5rem', 
+          background: '#fff', 
+          border: '1px solid #e2e8f0', 
+          color: '#64748b', 
+          cursor: 'pointer', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px', 
+          padding: '10px 16px',
+          borderRadius: '12px',
+          fontSize: '0.85rem',
+          fontWeight: 700,
+          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+          transition: 'all 0.2s'
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = '#0f172a'; e.currentTarget.style.transform = 'translateX(-4px)'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateX(0)'; }}
       >
-        <ChevronRight size={18} style={{ transform: 'rotate(180deg)' }} /> Voltar
+        <ArrowLeft size={18} /> Voltar
       </button>
 
-      <div style={{ marginBottom: '2.5rem' }}>
+      <div style={{ marginBottom: '1rem', animation: 'fadeIn 0.8s ease-out' }}>
         <div style={{ 
-          width: '80px', 
-          height: '80px', 
-          background: 'white', 
-          borderRadius: '20px', 
+          width: '220px', 
+          height: '220px', 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          margin: '0 auto 1.5rem',
-          padding: '8px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
+          margin: '0 auto',
+          position: 'relative'
         }}>
-          <img src="/assets/logo.png" alt="Superação Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <img 
+            src="/assets/logo.png" 
+            alt="Superação Logo" 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'contain'
+            }} 
+          />
         </div>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '8px' }}>Superação</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Assessoria de Corrida</p>
       </div>
 
-      <div className="card" style={{ width: '100%', maxWidth: '380px', padding: '2rem' }}>
-        <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(0, 122, 255, 0.1)', color: 'var(--primary-color)', borderRadius: '100px', fontSize: '11px', fontWeight: 700, marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      <div className="card" style={{ 
+        width: '100%', 
+        maxWidth: '380px', 
+        padding: '2.5rem 2rem',
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '24px',
+        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.03)'
+      }}>
+        <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--primary-color)', borderRadius: '100px', fontSize: '11px', fontWeight: 800, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           Portal do Aluno
         </div>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>
-          {isLogin ? 'Bem-vindo de volta' : 'Criar sua conta'}
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', color: '#0f172a' }}>
+          {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
         </h2>
+
+        {error && (
+          <div style={{ 
+            padding: '12px', 
+            borderRadius: '12px', 
+            background: error.includes('sucesso') ? '#f0fdf4' : '#fef2f2', 
+            color: error.includes('sucesso') ? '#166534' : '#991b1b',
+            border: `1px solid ${error.includes('sucesso') ? '#bbf7d0' : '#fecaca'}`,
+            fontSize: '0.85rem',
+            marginBottom: '20px',
+            fontWeight: 500
+          }}>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {!isLogin && !isResettingPassword && (
             <div style={{ position: 'relative' }}>
-              <UserIcon size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <UserIcon size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 className="auth-input"
                 type="text" placeholder="Seu nome completo" required 
                 value={name} onChange={e => setName(e.target.value)}
+                style={{ paddingLeft: '48px' }}
               />
             </div>
           )}
           {!isResettingPassword && (
             <div style={{ position: 'relative' }}>
-              <Mail size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <Mail size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 className="auth-input"
                 type="email" placeholder="E-mail" required 
                 value={email} onChange={e => setEmail(e.target.value)}
+                style={{ paddingLeft: '48px' }}
               />
             </div>
           )}
           <div style={{ position: 'relative' }}>
-            <Lock size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+            <Lock size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input 
               className="auth-input"
-              type="password" placeholder={isResettingPassword ? "Digite a NOVA senha" : "Senha"} required 
+              type={showPassword ? "text" : "password"} 
+              placeholder={isResettingPassword ? "Digite a NOVA senha" : "Senha"} required 
               value={password} onChange={e => setPassword(e.target.value)}
+              style={{ paddingLeft: '48px', paddingRight: '48px' }}
             />
-          </div>
-
-          {error && <p style={{ color: error.includes('sucesso') ? 'var(--primary-color)' : 'var(--error)', fontSize: '0.85rem', marginTop: '4px', fontWeight: error.includes('sucesso') ? 600 : 400 }}>{error}</p>}
-          {error === 'E-mail ou senha incorretos.' && isLogin && (
             <button 
               type="button"
-              onClick={async () => {
-                if (!email) return setError('Por favor, digite seu e-mail para recuperar a senha.');
-                setLoading(true);
-                const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                  redirectTo: window.location.origin,
-                });
-                setLoading(false);
-                if (error) setError('Erro ao enviar e-mail de recuperação.');
-                else setError('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
-              }}
-              style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', textAlign: 'right', marginTop: '-8px' }}
+              onClick={() => setShowPassword(!showPassword)}
+              style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
             >
-              Esqueci minha senha
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
+          </div>
+
+          {isLogin && !isResettingPassword && (
+            <div style={{ textAlign: 'right', marginTop: '-4px', marginBottom: '8px' }}>
+              <button 
+                type="button"
+                onClick={handleRecoverPassword}
+                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Esqueceu a senha?
+              </button>
+            </div>
           )}
 
           <button 
             type="submit" 
             disabled={loading}
             className="btn-primary" 
-            style={{ marginTop: '0.5rem', background: 'var(--primary-color)', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ 
+              marginTop: '0.5rem', 
+              background: 'var(--primary-color)', 
+              color: '#fff', 
+              border: 'none', 
+              padding: '16px', 
+              borderRadius: '16px', 
+              fontWeight: 800, 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)'
+            }}
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : (isResettingPassword ? 'Salvar Nova Senha' : isLogin ? 'Entrar' : 'Cadastrar')}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (isResettingPassword ? 'Salvar Nova Senha' : isLogin ? 'Entrar no App' : 'Cadastrar Conta')}
           </button>
         </form>
 
         {!isResettingPassword && (
-          <>
-            <p style={{ marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'} {' '}
-              <button 
-                onClick={() => setIsLogin(!isLogin)}
-                style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {isLogin ? 'Cadastre-se' : 'Faça login'}
-              </button>
-            </p>
-            
-            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
-              <button 
-                onClick={() => window.location.href = '/paineldoprofessor/login.html'}
-                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}
-              >
-                Sou Professor? <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Acessar Portal do Coach</span>
-              </button>
-            </div>
-          </>
+          <p style={{ marginTop: '2rem', fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>
+            {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'} {' '}
+            <button 
+              onClick={() => setIsLogin(!isLogin)}
+              style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontWeight: 800, cursor: 'pointer' }}
+            >
+              {isLogin ? 'Cadastre-se' : 'Faça login'}
+            </button>
+          </p>
         )}
       </div>
     </div>

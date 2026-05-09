@@ -20,6 +20,7 @@ import AuthView from './views/AuthView';
 import PortalSelection from './views/PortalSelection';
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
+import ProfessorView from './views/ProfessorView';
 
 // Data
 import { athleteData } from './data/mockData';
@@ -88,9 +89,13 @@ const mapSupabaseToAthlete = (data, integrations = []) => {
     nextRaceDate: data.next_race_date || '',
     integrations: {
       strava: { connected: !!strava?.connected, username: strava?.username || '' },
-      garmin: { connected: !!garmin?.connected, username: garmin?.username || '' },
+      garmin: { 
+        connected: garmin ? (garmin.connected === true || garmin.connected === 'true') : false, 
+        username: garmin?.username || '' 
+      },
       polar: { connected: false, username: '' },
-      coros: { connected: false, username: '' }
+      coros: { connected: false, username: '' },
+      amazfit: { connected: false, username: '' }
     }
   };
 
@@ -168,7 +173,6 @@ const AppContent = () => {
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [importing, setImporting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [photoToEdit, setPhotoToEdit] = useState(null);
   const navigate = useNavigate();
@@ -298,90 +302,7 @@ const AppContent = () => {
     }
   }, [session, fetchProfile, fetchWorkouts]);
 
-  const importSophiaPlan = async () => {
-    if (!session?.user?.email?.includes('rinaldo')) return;
-    setImporting(true);
-    try {
-      const email = 'rodriguesophia013@gmail.com';
-      
-      // 1. Find Existing Profile
-      const { data: profile, error: findError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .single();
 
-      if (findError || !profile) {
-        alert('Perfil da Sophia não encontrado com o e-mail: ' + email + '. Peça para ela logar uma vez no app primeiro.');
-        return;
-      }
-
-      const sophiaId = profile.id;
-
-      // 2. Create Workouts
-      const workouts = [
-        {
-          athlete_id: sophiaId, date: '2026-05-04', title: 'Rodagem Regenerativa',
-          description: '1km Z1 + 5km Z2 + 1km Z1',
-          metrics: {
-            structured_steps: [
-              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } },
-              { type: 'run', label: 'Rodagem', duration: { type: 'distance', value: 5.0 }, intensity: { type: 'pace', value: '08:15' } },
-              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } }
-            ]
-          }
-        },
-        { athlete_id: sophiaId, date: '2026-05-05', title: 'Descanso', description: 'Dia de recuperação' },
-        {
-          athlete_id: sophiaId, date: '2026-05-06', title: 'Tiros de 400m',
-          description: '10 tiros de 400m com pausa ativa de 150m trote leve',
-          metrics: {
-            structured_steps: [
-              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '06:30' } },
-              {
-                type: 'repetition', count: 10,
-                steps: [
-                  { type: 'run', label: 'Tiro 400m', duration: { type: 'distance', value: 0.4 }, intensity: { type: 'pace', value: '05:30' } },
-                  { type: 'recovery', label: 'Pausa Ativa', duration: { type: 'distance', value: 0.15 }, intensity: { type: 'pace', value: '06:30' } }
-                ]
-              },
-              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '06:30' } }
-            ]
-          }
-        },
-        { athlete_id: sophiaId, date: '2026-05-07', title: 'Descanso', description: 'Dia de recuperação' },
-        {
-          athlete_id: sophiaId, date: '2026-05-08', title: 'Rodagem Moderada',
-          description: '1km Z1 + 8km Z2 + 1km Z1',
-          metrics: {
-            structured_steps: [
-              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '08:42' } },
-              { type: 'run', label: 'Rodagem', duration: { type: 'distance', value: 8.0 }, intensity: { type: 'pace', value: '07:42' } },
-              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '08:42' } }
-            ]
-          }
-        },
-        {
-          athlete_id: sophiaId, date: '2026-05-09', title: 'Longo',
-          description: '1km Z1 + 17km Z2 + 1km Z1',
-          metrics: {
-            structured_steps: [
-              { type: 'warmup', label: 'Aquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } },
-              { type: 'run', label: 'Longo', duration: { type: 'distance', value: 17.0 }, intensity: { type: 'pace', value: '08:15' } },
-              { type: 'cooldown', label: 'Desaquecimento', duration: { type: 'distance', value: 1.0 }, intensity: { type: 'pace', value: '09:15' } }
-            ]
-          }
-        }
-      ];
-
-      await supabase.from('workouts').insert(workouts);
-      alert('Planilha da Sophia importada com sucesso!');
-    } catch (err) {
-      alert('Erro ao importar: ' + err.message);
-    } finally {
-      setImporting(false);
-    }
-  };
 
   const updateProfile = useCallback(async (updates) => {
     try {
@@ -412,15 +333,7 @@ const AppContent = () => {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)', gap: '20px' }}>
         <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
-        {session?.user?.email?.includes('rinaldo') && (
-          <button 
-            onClick={importSophiaPlan}
-            disabled={importing}
-            style={{ padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 800, cursor: 'pointer' }}
-          >
-            {importing ? 'Importando...' : 'IMPORTAR PLANILHA SOPHIA'}
-          </button>
-        )}
+
       </div>
     );
   }
@@ -430,8 +343,16 @@ const AppContent = () => {
       <Route path="/" element={
         <PortalSelection 
           onSelectAthlete={() => navigate('/aluno')} 
-          onSelectProfessor={() => window.location.href = '/professor'} 
+          onSelectProfessor={() => navigate('/professor')} 
         />
+      } />
+
+      <Route path="/professor/*" element={
+        !session ? (
+          <AuthView onBack={() => navigate('/')} />
+        ) : (
+          <ProfessorView session={session} />
+        )
       } />
 
       <Route path="/aluno/*" element={
