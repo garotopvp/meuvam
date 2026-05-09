@@ -18,6 +18,7 @@ import ProfileView from './views/ProfileView';
 import EditProfileView from './views/EditProfileView';
 import AuthView from './views/AuthView';
 import PortalSelection from './views/PortalSelection';
+
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
 import ProfessorView from './views/ProfessorView';
@@ -394,6 +395,7 @@ const AppContent = () => {
             </>
         )
       } />
+
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

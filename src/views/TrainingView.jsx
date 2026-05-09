@@ -23,7 +23,8 @@ import {
   LogOut,
   CheckCheck,
   AlertCircle,
-  Loader2
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGarminSync } from '../hooks/useGarminSync.js';
@@ -392,27 +393,52 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
           </div>
         </div>
 
-        {/* External Integration — Strava */}
-        <div style={{ 
-          background: 'rgba(252, 82, 0, 0.08)', 
-          padding: '1.5rem', 
-          borderRadius: '24px', 
-          border: '1px solid rgba(252, 82, 0, 0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          marginBottom: '1rem'
-        }}>
-          <div style={{ background: '#FC5200', padding: '10px', borderRadius: '12px' }}>
-            <Activity size={24} color="#fff" />
+        {/* External Integration — Strava (Professor Only) */}
+        {isProfessor && (
+          <div style={{ 
+            background: 'rgba(252, 82, 0, 0.08)', 
+            padding: '1.5rem', 
+            borderRadius: '24px', 
+            border: '1px solid rgba(252, 82, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            marginBottom: '1rem'
+          }}>
+            <div style={{ background: '#FC5200', padding: '10px', borderRadius: '12px' }}>
+              <Activity size={24} color="#fff" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '1rem', fontWeight: 800, color: '#FC5200' }}>Integração com Strava</p>
+              <p style={{ fontSize: '0.85rem', color: 'rgba(252, 82, 0, 0.8)', fontWeight: 500 }}>
+                {athlete?.integrations?.strava?.connected 
+                  ? `Conectado como ${athlete.integrations.strava.username || 'Atleta'}`
+                  : 'O atleta ainda não conectou o Strava.'}
+              </p>
+            </div>
+            {athlete?.integrations?.strava?.connected && (
+              <button 
+                onClick={() => setShowStravaModal(true)}
+                style={{
+                  background: '#FC5200',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '12px',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <ExternalLink size={14} /> VER ATIVIDADES
+              </button>
+            )}
           </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: '1rem', fontWeight: 800, color: '#FC5200' }}>Strava Integration</p>
-            <p style={{ fontSize: '0.85rem', color: 'rgba(252, 82, 0, 0.8)', fontWeight: 500 }}>
-              Os dados de performance serão importados automaticamente após a atividade.
-            </p>
-          </div>
-        </div>
+        )}
+
 
         {/* Garmin Send Button */}
         {onPushToGarmin && (
@@ -696,8 +722,111 @@ const GarminSyncPanel = ({ workouts, userId, garminSync }) => {
   );
 };
 
-const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing }) => {
+const StravaActivitiesModal = ({ athlete, onClose }) => {
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchActivities();
+  }, []);
+
+  const fetchActivities = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/strava/activities?userId=${athlete.id}`);
+      if (!response.ok) throw new Error('Falha ao buscar atividades');
+      const data = await response.json();
+      setActivities(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.8)', zIndex: 10000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+      }}
+    >
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        style={{
+          width: '100%', maxWidth: '500px', background: 'var(--bg-color)',
+          borderRadius: '24px', padding: '1.5rem', maxHeight: '80vh',
+          display: 'flex', flexDirection: 'column', position: 'relative'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: '#FC5200', padding: '8px', borderRadius: '10px' }}>
+              <Activity size={20} color="#fff" />
+            </div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Atividades Strava</h3>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <X size={24} />
+          </button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px' }} className="no-scrollbar">
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3rem 0', gap: '12px' }}>
+              <Loader2 className="animate-spin" color="#FC5200" size={32} />
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Buscando atividades...</p>
+            </div>
+          ) : error ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--error)' }}>
+              <AlertCircle size={32} style={{ marginBottom: '10px' }} />
+              <p>{error}</p>
+            </div>
+          ) : activities.length === 0 ? (
+            <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <p>Nenhuma atividade recente encontrada.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {activities.map((activity, idx) => (
+                <div key={idx} style={{ 
+                  padding: '1rem', background: 'var(--surface-accent)', 
+                  borderRadius: '16px', border: '1px solid var(--border-color)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '4px' }}>{activity.title}</h4>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      <span>{new Date(activity.date).toLocaleDateString('pt-BR')}</span>
+                      <span style={{ color: '#FC5200' }}>{activity.metrics.distance}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>{activity.metrics.pace}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{activity.metrics.duration}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <p style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center', fontWeight: 500 }}>
+          Mostrando as últimas 10 atividades sincronizadas.
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor }) => {
   const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [showStravaModal, setShowStravaModal] = useState(false);
+
+
   const garminSync = useGarminSync();
   const scrollerRef = React.useRef(null);
   const dayRefs = React.useRef({});
@@ -778,14 +907,25 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing }) => {
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Minha Planilha</h1>
         </div>
-        <button 
-          onClick={() => onRefresh(true)}
-          disabled={isRefreshing}
-          style={{ background: 'var(--surface-accent)', color: 'var(--primary-color)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          <RotateCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          Sincronizar
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {isProfessor && athlete?.integrations?.strava?.connected && (
+            <button 
+              onClick={() => setShowStravaModal(true)}
+              style={{ background: 'rgba(252, 82, 0, 0.1)', color: '#FC5200', border: '1px solid rgba(252, 82, 0, 0.2)', padding: '8px 12px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Activity size={14} />
+              Strava
+            </button>
+          )}
+          <button 
+            onClick={() => onRefresh(true)}
+            disabled={isRefreshing}
+            style={{ background: 'var(--surface-accent)', color: 'var(--primary-color)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RotateCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            Sincronizar
+          </button>
+        </div>
       </div>
 
       {/* Garmin Sync Panel */}
@@ -921,6 +1061,12 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing }) => {
             onClose={() => setSelectedWorkout(null)}
             onPushToGarmin={handlePushToGarmin}
             garminStatus={garminSync.garminStatus}
+          />
+        )}
+        {showStravaModal && (
+          <StravaActivitiesModal 
+            athlete={athlete} 
+            onClose={() => setShowStravaModal(false)} 
           />
         )}
       </AnimatePresence>

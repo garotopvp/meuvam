@@ -1,17 +1,22 @@
 {
   "cleanUrls": false,
   "rewrites": [
+
     {
       "source": "/professor",
-      "destination": "/paineldoprofessor/login.html"
+      "destination": "/index.html"
+    },
+    {
+      "source": "/professor/:path*",
+      "destination": "/index.html"
     },
     {
       "source": "/paineldoprofessor",
-      "destination": "/paineldoprofessor/index.html"
+      "destination": "/index.html"
     },
     {
       "source": "/paineldoprofessor/:path*",
-      "destination": "/paineldoprofessor/:path*"
+      "destination": "/index.html"
     },
     {
       "source": "/aluno",
@@ -26,7 +31,7 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/((?!paineldoprofessor|professor|aluno|api).*)",
+      "source": "/((?!api).*)",
       "destination": "/index.html"
     }
   ]

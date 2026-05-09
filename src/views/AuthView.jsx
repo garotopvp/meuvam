@@ -72,6 +72,7 @@ const AuthView = ({ onBack }) => {
           await supabase.auth.signOut();
           throw new Error('Esta é uma conta de Professor e não pode ser usada no App do Aluno.');
         }
+
       } else {
         const { data, error } = await supabase.auth.signUp({ 
           email, 
@@ -148,6 +149,7 @@ const AuthView = ({ onBack }) => {
       >
         <ArrowLeft size={18} /> Voltar
       </button>
+
 
       <div style={{ marginBottom: '1rem', animation: 'fadeIn 0.8s ease-out' }}>
         <div style={{ 
@@ -275,6 +277,7 @@ const AuthView = ({ onBack }) => {
             }}
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : (isResettingPassword ? 'Salvar Nova Senha' : isLogin ? 'Entrar no App' : 'Cadastrar Conta')}
+
           </button>
         </form>
 
