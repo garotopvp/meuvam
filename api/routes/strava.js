@@ -5,22 +5,21 @@ const router = express.Router();
 
 // Função auxiliar para inicializar o Supabase com segurança
 const getSupabase = () => {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
+  const url = process.env.SUPABASE_URL || 'https://zljqlzwzwfzslftnymur.supabase.co';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsanFsend6d2Z6c2xmdG55bXVyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzM5MzQxNywiZXhwIjoyMDkyOTY5NDE3fQ.wJhriqog-ONdyulT2NG_puY_-Xj7OMDMPt7x_hnoRSQ';
   return createClient(url, key);
 };
 
 // 1. START AUTH - Redirect user to Strava login
 router.get('/auth', (req, res) => {
   try {
-    const clientId = process.env.STRAVA_CLIENT_ID;
-    const redirectUri = process.env.STRAVA_REDIRECT_URI;
+    const clientId = process.env.STRAVA_CLIENT_ID || '190374';
+    const redirectUri = process.env.STRAVA_REDIRECT_URI || 'https://meuvam.com.br/api/strava/callback';
     const scope = 'read,activity:read_all,profile:read_all';
     let userId = req.query.userId || '';
 
     if (!clientId || !redirectUri) {
-      console.error('Configurações do Strava faltando (CLIENT_ID ou REDIRECT_URI)');
+      console.error('Configurações do Strava faltando');
       return res.status(500).json({ error: 'Configuração do Strava incompleta no servidor' });
     }
 
@@ -48,9 +47,9 @@ router.get('/callback', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_id: process.env.STRAVA_CLIENT_ID,
-        client_secret: process.env.STRAVA_CLIENT_SECRET,
-        redirect_uri: process.env.STRAVA_REDIRECT_URI,
+        client_id: parseInt(process.env.STRAVA_CLIENT_ID || '190374', 10),
+        client_secret: process.env.STRAVA_CLIENT_SECRET || '98e467807fcb0fa87ab8df605542cb9de3f53bee',
+        redirect_uri: process.env.STRAVA_REDIRECT_URI || 'https://meuvam.com.br/api/strava/callback',
         code, 
         grant_type: 'authorization_code'
       })
@@ -113,8 +112,8 @@ const getValidToken = async (userId) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_id: process.env.STRAVA_CLIENT_ID,
-        client_secret: process.env.STRAVA_CLIENT_SECRET,
+        client_id: parseInt(process.env.STRAVA_CLIENT_ID || '190374', 10),
+        client_secret: process.env.STRAVA_CLIENT_SECRET || '98e467807fcb0fa87ab88df605542cb9de3f53bee',
         refresh_token: integration.refresh_token,
         grant_type: 'refresh_token'
       })
@@ -152,20 +151,34 @@ router.get('/activities', async (req, res) => {
 
     if (!Array.isArray(activities)) throw new Error('Falha na API do Strava');
 
-    const formattedWorkouts = activities.map(a => ({
-      athlete_id: userId,
-      date: a.start_date_local.split('T')[0],
-      type: a.type === 'Run' ? 'Rodagem' : a.type,
-      title: a.name,
-      description: `Importado do Strava. Esforço percebido: ${a.suffer_score || '--'}`,
-      status: 'completed',
-      effort: Math.round(a.suffer_score / 10) || 5, // Aprox.
+    const formattedWorkouts = activities.map(a => {
+      let garminId = null;
+      if (a.external_id && a.external_id.includes('garmin_push_')) {
+        const match = a.external_id.match(/garmin_push_(\d+)/i);
+        if (match) garminId = match[1];
+      }
+
+      return {
+        athlete_id: userId,
+        strava_id: a.id,
+        garmin_id: garminId,
+        date: a.start_date_local,
+        type: a.type === 'Run' ? 'Rodagem' : a.type,
+        title: a.name,
+        description: `Importado do Strava. Esforço percebido: ${a.suffer_score || '--'}`,
+        status: 'completed',
+        effort: Math.round(a.suffer_score / 10) || 5, // Aprox.
       metrics: {
         distance: `${(a.distance / 1000).toFixed(2)} km`,
         duration: `${Math.round(a.moving_time / 60)} min`,
         pace: a.distance > 0 ? formatPace(a.moving_time / (a.distance / 1000)) : null,
+        elevation: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)}m` : '--',
+        avgHeartRate: a.average_heartrate ? Math.round(a.average_heartrate) : '--',
+        maxHeartRate: a.max_heartrate ? Math.round(a.max_heartrate) : '--',
+        sufferScore: a.suffer_score || '--'
       }
-    }));
+    };
+    });
 
     // Salvar no banco (ignora se já existir pelo ID - vamos precisar do ID do strava para não duplicar, mas para teste simples vamos fazer upsert simples ou ignorar conflito)
     // Para simplificar, o frontend fará a chamada e o frontend salvará. Então vamos só devolver os dados!
@@ -173,6 +186,32 @@ router.get('/activities', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar atividades' });
+  }
+});
+
+// 5.5. STREAMS (For charts)
+router.get('/activity/:id/streams', async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+  if (!userId || !id) return res.status(400).json({ error: 'userId e id obrigatórios' });
+
+  const token = await getValidToken(userId);
+  if (!token) return res.status(401).json({ error: 'Strava não conectado' });
+
+  try {
+    const keys = 'time,distance,altitude,velocity_smooth,heartrate,cadence';
+    const response = await fetch(
+      `https://www.strava.com/api/v3/activities/${id}/streams?keys=${keys}&key_by_type=true`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    if (!response.ok) throw new Error('Falha ao buscar streams');
+    
+    const streams = await response.json();
+    res.json(streams);
+  } catch (err) {
+    console.error('Erro Strava streams:', err.message);
+    res.status(500).json({ error: 'Erro ao buscar dados do gráfico' });
   }
 });
 

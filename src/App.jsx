@@ -21,7 +21,6 @@ import PortalSelection from './views/PortalSelection';
 
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
-import ProfessorView from './views/ProfessorView';
 
 // Data
 import { athleteData } from './data/mockData';
@@ -169,6 +168,13 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
 };
 
 const AppContent = () => {
+  // Safeguard: Se o React for carregado acidentalmente em uma rota que deveria ser estática (paineldoprofessor),
+  // tentamos forçar o navegador a buscar o arquivo real.
+  if (window.location.pathname.includes('/paineldoprofessor')) {
+    window.location.replace('/paineldoprofessor/index.html?v=' + Date.now());
+    return null;
+  }
+
   const [athlete, setAthleteRaw] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [session, setSession] = useState(null);
@@ -248,7 +254,10 @@ const AppContent = () => {
 
       if (profileData) {
         if (profileData.role === 'professor') {
-          console.log('[App] Usuário é professor, mantendo no portal ou aguardando seleção manual.');
+          if (!window.location.pathname.includes('/paineldoprofessor')) {
+            window.location.href = '/paineldoprofessor/index.html?v=' + Date.now();
+          }
+          return;
         }
         
         const { data: integrations } = await supabase
@@ -330,11 +339,11 @@ const AppContent = () => {
     }
   }, [session, fetchProfile]);
 
-  if (isLoading || (session && !athlete)) {
+  if (isLoading) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)', gap: '20px' }}>
         <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
-
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Iniciando Superação...</p>
       </div>
     );
   }
@@ -342,23 +351,27 @@ const AppContent = () => {
   return (
     <Routes>
       <Route path="/" element={
-        <PortalSelection 
-          onSelectAthlete={() => navigate('/aluno')} 
-          onSelectProfessor={() => navigate('/professor')} 
-        />
-      } />
-
-      <Route path="/professor/*" element={
-        !session ? (
-          <AuthView onBack={() => navigate('/')} />
+        session ? (
+          <Navigate to="/aluno" replace />
         ) : (
-          <ProfessorView session={session} />
+          <PortalSelection 
+            onSelectAthlete={() => navigate('/aluno')} 
+            onSelectProfessor={() => window.location.assign('/paineldoprofessor/index.html?v=' + Date.now())} 
+          />
         )
       } />
+
+      <Route path="/professor/*" element={<Navigate to={`/paineldoprofessor/index.html?v=${Date.now()}`} replace />} />
+
 
       <Route path="/aluno/*" element={
         !session ? (
             <AuthView onBack={() => navigate('/')} />
+        ) : !athlete ? (
+            <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)', gap: '20px' }}>
+                <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Carregando seu perfil...</p>
+            </div>
         ) : (
             <>
                 <UrlCleanup onConnected={fetchProfile} />

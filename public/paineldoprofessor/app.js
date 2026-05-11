@@ -100,30 +100,50 @@ function toggleSidebar(){
 
 // ─── NAVIGATION ───
 function navigate(viewId,cat){
-    if(viewId!=='groups')activeCategory=null;
-    if(viewId==='groups'&&cat!==undefined)activeCategory=cat;
-    document.querySelectorAll('.view-section').forEach(s=>s.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    $(`view-${viewId}`).classList.add('active');
-    document.querySelector(`[data-view="${viewId}"]`)?.classList.add('active');
-    localStorage.setItem('vdot_lastView',viewId);
-    localStorage.setItem('vdot_lastCat',activeCategory||'');
-    if(viewId==='dashboard')renderDashboard();
-    if(viewId==='groups')renderGroups();
-    if(viewId==='athletes') {
-        renderAthletes();
-        setTimeout(() => syncAthletesFromSupabase(), 100); 
+    console.log('Navegando para:', viewId);
+    try {
+        if(viewId!=='groups')activeCategory=null;
+        if(viewId==='groups'&&cat!==undefined)activeCategory=cat;
+        
+        const section = $(`view-${viewId}`);
+        if (!section) {
+            console.error(`Erro: Seção view-${viewId} não encontrada no HTML.`);
+            return;
+        }
+
+        document.querySelectorAll('.view-section').forEach(s=>s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+        
+        section.classList.add('active');
+        document.querySelector(`[data-view="${viewId}"]`)?.classList.add('active');
+        
+        localStorage.setItem('vdot_lastView',viewId);
+        localStorage.setItem('vdot_lastCat',activeCategory||'');
+        
+        if(viewId==='dashboard') renderDashboard();
+        if(viewId==='groups') renderGroups();
+        if(viewId==='athletes') {
+            renderAthletes();
+            setTimeout(() => syncAthletesFromSupabase(), 100); 
+        }
+        if(viewId==='chat') {
+            renderChat();
+            setTimeout(() => syncAthletesFromSupabase(), 100);
+        }
+        if(viewId==='staff') renderStaff();
+        if(viewId==='strava-feed') renderStravaFeed();
+        if(viewId==='garmin-feed') {
+            renderGarminFeed();
+            setTimeout(() => syncAthletesFromSupabase(), 100);
+        }
+        if(viewId==='calculator') renderCalculator();
+        
+        // Close mobile sidebar
+        $('sidebar')?.classList.remove('open');
+        $('sidebar-overlay')?.classList.remove('open');
+    } catch (err) {
+        console.error('Falha na navegação:', err);
     }
-    if(viewId==='chat') {
-        renderChat();
-        setTimeout(() => syncAthletesFromSupabase(), 100);
-    }
-    if(viewId==='staff') {
-        renderStaff();
-    }
-    if(viewId==='calculator')renderCalculator();
-    // Close mobile sidebar
-    $('sidebar').classList.remove('open');$('sidebar-overlay').classList.remove('open');
 }
 document.querySelectorAll('.nav-item').forEach(item=>{item.addEventListener('click',e=>{e.preventDefault();navigate(e.currentTarget.dataset.view);});});
 (function restoreNav(){const v=localStorage.getItem('vdot_lastView')||'dashboard';const c=localStorage.getItem('vdot_lastCat')||'';if(c&&v==='groups')activeCategory=c;navigate(v);})();
@@ -774,7 +794,10 @@ function renderAthletes(){
         
         return`<tr>
             <td>
-                <strong onclick="editAthlete('${a.id}')" style="cursor:pointer;color:var(--primary-color);text-decoration:underline;text-underline-offset:3px;">${displayName}</strong>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <strong onclick="editAthlete('${a.id}')" style="cursor:pointer;color:var(--primary-color);text-decoration:underline;text-underline-offset:3px;">${displayName}</strong>
+                    ${a.supabaseId ? `<span class="badge" style="background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; font-size:10px; padding:2px 6px;"><i class="ri-checkbox-circle-line"></i> Vinculado</span>` : ''}
+                </div>
                 ${a.phone?`<div style="font-size:11px;color:var(--text-muted);">${a.phone}</div>`:''}
             </td>
             <td style="font-size:13px;color:var(--text-muted);">${a.email || '—'}</td>
@@ -1071,7 +1094,7 @@ async function syncAthletesFromSupabase(isManual = false) {
         const { data: profiles, error } = await dbClient
             .from('profiles')
             .select('*')
-            .eq('role', 'athlete'); // Filtrar apenas alunos
+            .in('role', ['athlete', 'professor']); // Incluir professor para que ele veja seus próprios treinos no feed
         
         if (error) throw error;
 
@@ -1121,6 +1144,8 @@ async function syncAthletesFromSupabase(isManual = false) {
         renderAthletes();
         renderDashboard();
         if (localStorage.getItem('vdot_lastView') === 'chat') renderChat();
+        if (localStorage.getItem('vdot_lastView') === 'strava-feed') renderStravaFeed();
+        if (localStorage.getItem('vdot_lastView') === 'garmin-feed') renderGarminFeed();
 
         if (isManual) {
             if (addedCount > 0) {
@@ -1585,3 +1610,582 @@ function deleteRecordedAudio() {
     $('audio-record-btn').style.borderColor = '#ccc';
 }
 
+async function renderStravaFeed() {
+    const list = $('strava-global-list');
+    const loading = $('strava-global-loading');
+    
+    if (!list || !loading) return;
+    
+    list.innerHTML = '';
+    loading.style.display = 'block';
+    
+    try {
+        // ✅ CORRIGIDO: Filtrar apenas atletas com supabaseId (conta real no app)
+        const athletesWithAccount = athletes.filter(a => a.supabaseId);
+        
+        if (athletesWithAccount.length === 0) {
+            loading.style.display = 'none';
+            list.innerHTML = `
+                <div style="padding:60px; text-align:center; color:var(--text-muted); background:var(--panel); border:2px dashed var(--border); border-radius:16px;">
+                    <i class="ri-information-line" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.3;"></i>
+                    <strong>Nenhum aluno com conta conectada</strong>
+                    <p style="font-size:13px; margin-top:4px;">Sincronize os alunos primeiro clicando em "Sincronizar Alunos" na seção Atletas.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // ✅ CORRIGIDO: Usar supabaseId (UUID do banco) na chamada à API
+        const activityPromises = athletesWithAccount.map(async (athlete) => {
+            try {
+                const response = await fetch(`/api/strava/activities?userId=${athlete.supabaseId}`);
+                if (!response.ok) return [];
+                const data = await response.json();
+                if (!Array.isArray(data)) return [];
+                return data.map(act => ({ ...act, athleteName: athlete.name, athleteId: athlete.supabaseId }));
+            } catch (err) {
+                return [];
+            }
+        });
+        
+        const results = await Promise.all(activityPromises);
+        const allActivities = results.flat().sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        loading.style.display = 'none';
+        
+        if (allActivities.length === 0) {
+            list.innerHTML = `
+                <div style="padding:60px; text-align:center; color:var(--text-muted); background:var(--panel); border:2px dashed var(--border); border-radius:16px;">
+                    <i class="ri-pulse-line" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.3;"></i>
+                    <strong>Nenhuma atividade encontrada</strong>
+                    <p style="font-size:13px; margin-top:4px;">Seus alunos ainda não sincronizaram treinos hoje.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        list.innerHTML = allActivities.map(act => {
+            const date = new Date(act.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+            return `
+                <div class="stat-card" style="padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 0; box-shadow: var(--shadow);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 10px; background: var(--primary)10; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1px solid var(--primary)20;">
+                                ${act.athleteName.charAt(0)}
+                            </div>
+                            <div>
+                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.athleteName}</div>
+                                <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${date}</div>
+                            </div>
+                        </div>
+                        <div style="background: #fc4c0215; color: #fc4c02; padding: 6px 12px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #fc4c0220;">
+                            ${act.type}
+                        </div>
+                    </div>
+                    
+                    <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.title}</h4>
+                    
+                    <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
+                            <div style="font-size: 18px; font-weight: 900; color: #fc4c02;">${act.metrics.distance}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Pace</div>
+                            <div style="font-size: 18px; font-weight: 900;">${act.metrics.pace}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Tempo</div>
+                            <div style="font-size: 18px; font-weight: 900;">${act.metrics.duration}</div>
+                        </div>
+                    </div>
+                    
+                    <details style="margin-top: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg);">
+                        <summary style="padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; list-style: none;">
+                            <i class="ri-bar-chart-2-line" style="font-size: 16px; color: #fc4c02;"></i> Ver métricas detalhadas (FC, Elevação)
+                        </summary>
+                        <div style="padding: 0 16px 16px 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px;">
+                            <div>
+                                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">FC Média / Máx</div>
+                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.metrics.avgHeartRate} / ${act.metrics.maxHeartRate} bpm</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ganho de Elevação</div>
+                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.metrics.elevation}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Esforço (Suffer Score)</div>
+                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.metrics.sufferScore}</div>
+                            </div>
+                        </div>
+                        <div style="padding: 0 16px 16px 16px; text-align: center; display: flex; flex-direction: column; gap: 8px;">
+                            <button onclick="openStravaGraph('${act.athleteId}', '${act.strava_id}')" style="background: #fc4c02; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                                <i class="ri-line-chart-line"></i> Ver Gráficos de Telemetria
+                            </button>
+                            ${act.garmin_id ? `
+                            <button onclick="openGarminDetails('${act.athleteId}', '${act.garmin_id}')" style="background: #000; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                                <i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin
+                            </button>
+                            ` : ''}
+                        </div>
+                    </details>
+                    
+                    <div style="margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                        ${act.garmin_id ? `
+                        <a href="https://connect.garmin.com/modern/activity/${act.garmin_id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #000; color: #fff; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; transition: all 0.2s;">
+                            <i class="ri-compass-discover-line"></i> Ver no Garmin Connect
+                        </a>
+                        ` : ''}
+                        ${act.strava_id ? `
+                        <a href="https://www.strava.com/activities/${act.strava_id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; border: 1px solid #fc4c0230; transition: all 0.2s;">
+                            <i class="ri-external-link-line"></i> Ver no Strava
+                        </a>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (err) {
+        console.error('Erro no feed global:', err);
+        loading.style.display = 'none';
+        showToast('Erro ao sincronizar feed global', 'error');
+    }
+}
+
+async function renderGarminFeed() {
+    const list = $('garmin-global-list');
+    const loading = $('garmin-global-loading');
+    
+    list.innerHTML = '';
+    loading.style.display = 'block';
+
+    try {
+        const athletesWithGarmin = athletes.filter(a => a.supabaseId);
+        if (athletesWithGarmin.length === 0) {
+            loading.style.display = 'none';
+            list.innerHTML = `
+                <div style="padding:48px; text-align:center; color:var(--text-muted); background: var(--panel); border-radius: 16px; border: 1px dashed var(--border);">
+                    <i class="ri-group-line" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.3;"></i>
+                    <strong>Nenhum atleta vinculado</strong>
+                    <p style="font-size:13px; margin-top:4px;">Seus alunos precisam acessar o app e vincular a conta Garmin.</p>
+                </div>
+            `;
+            return;
+        }
+
+        let allActivities = [];
+        let errorAthletes = [];
+
+        // Buscar atividades de todos os atletas em paralelo de forma segura
+        const results = await Promise.allSettled(athletesWithGarmin.map(async (athlete) => {
+            try {
+                // Anti-cache para garantir que a lista de atividades seja atualizada
+                const res = await fetch(`/api/garmin/activities?userId=${athlete.supabaseId}&limit=10&_t=${Date.now()}`);
+                if (!res.ok) {
+                    errorAthletes.push(athlete.name);
+                    return [];
+                }
+                const acts = await res.json();
+                if (!Array.isArray(acts)) return [];
+                
+                return acts.map(a => ({
+                    ...a,
+                    athleteName: athlete.name,
+                    athleteId: athlete.supabaseId
+                }));
+            } catch (e) {
+                console.warn(`Erro ao buscar Garmin do atleta ${athlete.name}:`, e);
+                return [];
+            }
+        }));
+
+        // Unir todos os resultados em uma única lista
+        allActivities = results
+            .filter(r => r.status === 'fulfilled')
+            .flatMap(r => r.value);
+
+        allActivities.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        loading.style.display = 'none';
+
+        let errorHtml = '';
+        if (errorAthletes.length > 0) {
+            errorHtml = `
+                <div style="padding: 12px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; color: #92400e; font-size: 13px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                    <i class="ri-error-warning-line"></i>
+                    <span>Atenção: Conexão expirada para: <strong>${errorAthletes.join(', ')}</strong>. Peça para eles reconectarem o Garmin no App.</span>
+                </div>
+            `;
+        }
+
+        if (allActivities.length === 0) {
+            list.innerHTML = errorHtml + `
+                <div style="padding:48px; text-align:center; color:var(--text-muted); background: var(--panel); border-radius: 16px; border: 1px dashed var(--border);">
+                    <i class="ri-compass-discover-line" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.3;"></i>
+                    <strong>Nenhuma atividade encontrada</strong>
+                    <p style="font-size:13px; margin-top:4px;">Seus alunos ainda não sincronizaram treinos Garmin hoje ou a conexão expirou.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        list.innerHTML = errorHtml + allActivities.map(act => {
+            const date = new Date(act.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+            return `
+                <div class="stat-card" style="padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 0; box-shadow: var(--shadow);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 10px; background: var(--primary)10; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1px solid var(--primary)20;">
+                                ${act.athleteName.charAt(0)}
+                            </div>
+                            <div>
+                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.athleteName}</div>
+                                <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${date}</div>
+                            </div>
+                        </div>
+                        <div style="background: #00000015; color: #000; padding: 6px 12px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #00000020;">
+                            ${act.type === 'running' ? 'Corrida' : act.type}
+                        </div>
+                    </div>
+                    
+                    <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.name}</h4>
+                    
+                    <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
+                            <div style="font-size: 18px; font-weight: 900; color: #000;">${act.distance} km</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Pace</div>
+                            <div style="font-size: 18px; font-weight: 900;">${act.pace || '--'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Tempo</div>
+                            <div style="font-size: 18px; font-weight: 900;">${act.duration} min</div>
+                        </div>
+                    </div>
+                    
+                    <div style="padding: 16px 0 0 0; text-align: center; display: flex; flex-direction: column; gap: 8px;">
+                        <button onclick="openGarminDetails('${act.athleteId}', '${act.id}')" style="background: #000; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                            <i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin
+                        </button>
+                    </div>
+                    
+                    <div style="margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                        <a href="https://connect.garmin.com/modern/activity/${act.id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #00000015; color: #000; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; border: 1px solid #00000030; transition: all 0.2s;">
+                            <i class="ri-external-link-line"></i> Ver no site do Garmin
+                        </a>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (err) {
+        console.error('Erro no feed Garmin:', err);
+        loading.style.display = 'none';
+        showToast('Erro ao sincronizar feed Garmin', 'error');
+    }
+}
+
+function checkDOMIntegrity() {
+    const main = document.querySelector('.main-content');
+    if (!main) return console.error('Main content container NOT FOUND!');
+    
+    ['dashboard', 'groups', 'athletes', 'chat', 'staff', 'strava-feed', 'calculator'].forEach(view => {
+        const el = document.getElementById(`view-${view}`);
+        if (el) {
+            const isInside = main.contains(el);
+            console.log(`View [${view}]: ${isInside ? '✅ CORRETO (Dentro do main)' : '❌ ERRO (Fora do main!)'}`);
+        } else {
+            console.warn(`View [${view}]: Não encontrada no DOM.`);
+        }
+    });
+}
+window.addEventListener('load', checkDOMIntegrity);
+
+let stravaChartInstance = null;
+
+async function openStravaGraph(athleteId, stravaId) {
+    if (!stravaId || stravaId === 'undefined') {
+        showToast('Atividade não possui ID válido', 'error');
+        return;
+    }
+
+    $('modal-strava-graph').classList.add('show');
+    $('modal-strava-graph').style.display = ''; // Limpar estilo inline para que a classe .show funcione
+    $('strava-graph-loading').style.display = 'block';
+    $('strava-graph-error').style.display = 'none';
+    $('strava-graph-container').style.display = 'none';
+
+    try {
+        const response = await fetch(`/api/strava/activity/${stravaId}/streams?userId=${athleteId}`);
+        if (!response.ok) throw new Error('Não foi possível carregar os dados de telemetria do Strava.');
+        
+        const rawStreams = await response.json();
+        
+        // Strava returns an object if key_by_type=true, or an array otherwise.
+        const streams = {};
+        if (Array.isArray(rawStreams)) {
+            rawStreams.forEach(s => { streams[s.type] = s.data; });
+        } else if (rawStreams && typeof rawStreams === 'object') {
+            for (const key in rawStreams) {
+                if (rawStreams[key] && rawStreams[key].data) {
+                    streams[key] = rawStreams[key].data;
+                }
+            }
+        }
+
+        if (!streams.distance || streams.distance.length === 0) {
+            throw new Error('A atividade não possui dados de GPS suficientes.');
+        }
+
+        const distanceKm = streams.distance.map(d => (d / 1000).toFixed(2));
+        
+        const datasets = [];
+        
+        // 1. Altitude (Área preenchida no fundo)
+        if (streams.altitude) {
+            datasets.push({
+                label: 'Elevação (m)',
+                data: streams.altitude,
+                borderColor: '#8e8e93',
+                backgroundColor: 'rgba(142, 142, 147, 0.2)',
+                fill: true,
+                yAxisID: 'yElevation',
+                pointRadius: 0,
+                borderWidth: 1,
+                tension: 0.4
+            });
+        }
+        
+        // 2. Heart Rate (Linha vermelha)
+        if (streams.heartrate) {
+            datasets.push({
+                label: 'FC (bpm)',
+                data: streams.heartrate,
+                borderColor: '#ff2d55',
+                backgroundColor: 'transparent',
+                yAxisID: 'yHR',
+                pointRadius: 0,
+                borderWidth: 2,
+                tension: 0.4
+            });
+        }
+
+        // 3. Pace/Velocity (Linha azul)
+        if (streams.velocity_smooth) {
+            const paceData = streams.velocity_smooth.map(v => {
+                if (v <= 0) return null;
+                return (1000 / v) / 60; // Minutos decimais
+            });
+            
+            datasets.push({
+                label: 'Ritmo (Pace min/km)',
+                data: paceData,
+                borderColor: '#007aff',
+                backgroundColor: 'transparent',
+                yAxisID: 'yPace',
+                pointRadius: 0,
+                borderWidth: 2,
+                tension: 0.4
+            });
+        }
+        
+        // 4. Cadence (Linha verde)
+        if (streams.cadence) {
+            // Strava retorna cadência para uma perna, multiplicar por 2 para passo (spm) em corrida
+            const spmData = streams.cadence.map(c => c * 2);
+            datasets.push({
+                label: 'Cadência (spm)',
+                data: spmData,
+                borderColor: '#34c759',
+                backgroundColor: 'transparent',
+                yAxisID: 'yCadence',
+                pointRadius: 0,
+                borderWidth: 1,
+                tension: 0.4,
+                hidden: true // Ocultar por padrão para não poluir muito
+            });
+        }
+
+        $('strava-graph-loading').style.display = 'none';
+        $('strava-graph-container').style.display = 'block';
+
+        if (stravaChartInstance) {
+            stravaChartInstance.destroy();
+        }
+
+        const ctx = document.getElementById('stravaChart').getContext('2d');
+        stravaChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: distanceKm,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Distância (km)' },
+                        ticks: { maxTicksLimit: 10 }
+                    },
+                    yElevation: {
+                        type: 'linear',
+                        display: !!streams.altitude,
+                        position: 'right',
+                        title: { display: true, text: 'Elevação' },
+                        grid: { display: false }
+                    },
+                    yHR: {
+                        type: 'linear',
+                        display: !!streams.heartrate,
+                        position: 'left',
+                        title: { display: true, text: 'FC' },
+                        suggestedMin: 60,
+                        suggestedMax: 200
+                    },
+                    yPace: {
+                        type: 'linear',
+                        display: !!streams.velocity_smooth,
+                        position: 'left',
+                        reverse: true,
+                        title: { display: true, text: 'Pace' },
+                        grid: { display: false },
+                        suggestedMin: 3, 
+                        suggestedMax: 10,
+                        ticks: {
+                            callback: function(value) {
+                                const m = Math.floor(value);
+                                const s = Math.round((value - m) * 60);
+                                return `${m}:${s.toString().padStart(2, '0')}`;
+                            }
+                        }
+                    },
+                    yCadence: {
+                        type: 'linear',
+                        display: false, // Ocultar eixo
+                        position: 'right'
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.dataset.yAxisID === 'yPace') {
+                                    const val = context.parsed.y;
+                                    const m = Math.floor(val);
+                                    const s = Math.round((val - m) * 60);
+                                    label += `${m}:${s.toString().padStart(2, '0')}`;
+                                } else {
+                                    label += Math.round(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error(err);
+        $('strava-graph-loading').style.display = 'none';
+        const errDiv = $('strava-graph-error');
+        errDiv.style.display = 'block';
+        errDiv.innerText = err.message || 'Erro ao carregar gráficos.';
+    }
+}
+
+async function openGarminDetails(athleteId, garminId) {
+    if (!garminId || garminId === 'undefined') {
+        showToast('ID Garmin inválido', 'error');
+        return;
+    }
+
+    $('modal-garmin-details').classList.add('show');
+    $('modal-garmin-details').style.display = '';
+    $('garmin-loading').style.display = 'block';
+    $('garmin-error').style.display = 'none';
+    $('garmin-details-container').innerHTML = '';
+
+    try {
+        // Cache-busting para evitar erros repetidos do navegador
+        const response = await fetch(`/api/garmin/activity/${garminId}?userId=${athleteId}&_t=${Date.now()}`);
+        const data = await response.json().catch(() => ({}));
+        
+        if (!response.ok) {
+            const msg = data.error || `Erro ${response.status}: Falha na comunicação com o servidor Garmin.`;
+            throw new Error(msg);
+        }
+        
+        const details = data;
+        
+        // Helper function to create metric cards
+        const makeCard = (label, value, icon, color) => `
+            <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                    <i class="${icon}" style="color: ${color}; font-size: 14px;"></i> ${label}
+                </div>
+                <div style="font-size: 16px; font-weight: 900; color: var(--text);">${value !== null && value !== undefined ? value : '--'}</div>
+            </div>
+        `;
+
+        const getVal = (key) => details[key] ?? details.summaryDTO?.[key] ?? details.summary?.[key];
+
+        const vo2 = getVal('vO2MaxValue');
+        const teAerobic = getVal('aerobicTrainingEffect');
+        const teAnaerobic = getVal('anaerobicTrainingEffect');
+        const avgCadence = getVal('averageRunningCadenceInStepsPerMinute');
+        const maxCadence = getVal('maxRunningCadenceInStepsPerMinute');
+        const strideLen = getVal('averageStrideLength');
+        const gct = getVal('averageGroundContactTime');
+        const gctBalance = getVal('averageGroundContactBalance');
+        const vertOsc = getVal('averageVerticalOscillation');
+        const vertRatio = getVal('averageVerticalRatio');
+        const cals = getVal('calories');
+        const avgPower = getVal('averagePower');
+        const steps = getVal('steps');
+        const avgHR = getVal('averageHR') || getVal('averageHeartRate');
+        const maxHR = getVal('maxHR') || getVal('maxHeartRate');
+
+        let html = '';
+        
+        if (vo2) html += makeCard('VO2 Max', Math.round(vo2), 'ri-lungs-line', '#ff2d55');
+        if (teAerobic) html += makeCard('TE Aeróbico', teAerobic.toFixed(1), 'ri-heart-pulse-line', '#007aff');
+        if (teAnaerobic) html += makeCard('TE Anaeróbico', teAnaerobic.toFixed(1), 'ri-flashlight-line', '#ff9500');
+        if (avgCadence) html += makeCard('Cadência Média', `${Math.round(avgCadence)} spm`, 'ri-footprint-line', '#34c759');
+        if (maxCadence) html += makeCard('Cadência Máx', `${Math.round(maxCadence)} spm`, 'ri-footprint-fill', '#34c759');
+        if (strideLen) html += makeCard('Comp. Passada', `${(strideLen / 100).toFixed(2)} m`, 'ri-ruler-line', '#8e8e93');
+        if (gct) html += makeCard('Tempo Contato Solo', `${Math.round(gct)} ms`, 'ri-timer-line', '#af52de');
+        if (gctBalance) html += makeCard('Balanço Contato Solo', `${gctBalance.toFixed(1)}%`, 'ri-scales-3-line', '#af52de');
+        if (vertOsc) html += makeCard('Osc. Vertical', `${(vertOsc).toFixed(1)} cm`, 'ri-arrow-up-down-line', '#5856d6');
+        if (vertRatio) html += makeCard('Razão Vertical', `${(vertRatio).toFixed(1)} %`, 'ri-percent-line', '#5ac8fa');
+        if (cals) html += makeCard('Calorias', `${Math.round(cals)} kcal`, 'ri-fire-line', '#ff3b30');
+        if (avgPower) html += makeCard('Potência Média', `${Math.round(avgPower)} W`, 'ri-thunderstorms-line', '#ffcc00');
+        if (steps) html += makeCard('Passos Totais', steps.toLocaleString('pt-BR'), 'ri-walk-line', '#64748b');
+        if (avgHR) html += makeCard('FC Média', `${Math.round(avgHR)} bpm`, 'ri-heart-3-line', '#ef4444');
+        if (maxHR) html += makeCard('FC Máxima', `${Math.round(maxHR)} bpm`, 'ri-heart-fill', '#ef4444');
+        
+        if (!html) {
+            html = '<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); font-size: 14px;">Poucas dinâmicas de corrida disponíveis para este treino ou os dados estão em um formato novo.</div>';
+        }
+
+        $('garmin-details-container').innerHTML = html;
+        $('garmin-loading').style.display = 'none';
+
+    } catch (err) {
+        console.error(err);
+        $('garmin-loading').style.display = 'none';
+        const errDiv = $('garmin-error');
+        errDiv.style.display = 'block';
+        errDiv.innerText = err.message || 'Erro ao extrair dados da Garmin.';
+    }
+}

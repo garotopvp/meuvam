@@ -27,3 +27,5 @@ server/.env
 
 .vercel
 scratch/
+
+.vercel

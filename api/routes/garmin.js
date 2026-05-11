@@ -5,9 +5,12 @@ import { createClient } from '@supabase/supabase-js';
 const router = express.Router();
 
 // Initialize Supabase for session persistence
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://zljqlzwzwfzslftnymur.supabase.co';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsanFsend6d2Z6c2xmdG55bXVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczOTM0MTcsImV4cCI6MjA5Mjk2OTQxN30.fQVJWpPVw5ZmV-FXpLyqpUoXvITOAedvbRpxlzdm-Ec';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const getSupabase = () => {
+  const url = process.env.SUPABASE_URL || 'https://zljqlzwzwfzslftnymur.supabase.co';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsanFsend6d2Z6c2xmdG55bXVyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzM5MzQxNywiZXhwIjoyMDkyOTY5NDE3fQ.wJhriqog-ONdyulT2NG_puY_-Xj7OMDMPt7x_hnoRSQ';
+  return createClient(url, key);
+};
+const supabase = getSupabase();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-user session map (keyed by userId to avoid data leakage between athletes)
@@ -33,17 +36,23 @@ async function getClient(userId) {
 
     if (data?.access_token) {
       console.log(`[Garmin Session] Restaurando sessão para ${userId}`);
-      const { oauth1, oauth2 } = JSON.parse(data.access_token);
-      const GarminConstructor = GarminConnect.GarminConnect || GarminConnect;
-      const client = new GarminConstructor({});
-      client.loadToken(oauth1, oauth2);
-      
-      // Save back to memory
-      garminClients.set(userId, client);
-      if (data.username) {
-        garminUsers.set(userId, { displayName: data.username });
+      try {
+        const tokens = JSON.parse(data.access_token);
+        const GarminConstructor = GarminConnect.GarminConnect || GarminConnect;
+        const client = new GarminConstructor({});
+        
+        // A biblioteca garmin-connect v1.x aceita o objeto de tokens completo no loadToken
+        client.loadToken(tokens);
+        
+        // Save back to memory
+        garminClients.set(userId, client);
+        if (data.username) {
+          garminUsers.set(userId, { displayName: data.username });
+        }
+        return client;
+      } catch (parseErr) {
+        console.error(`[Garmin Session] Erro ao carregar tokens para ${userId}:`, parseErr.message);
       }
-      return client;
     }
   } catch (err) {
     console.warn(`[Garmin Session] Erro ao buscar tokens no DB para ${userId}:`, err.message);
@@ -274,7 +283,20 @@ router.get('/activities', async (req, res) => {
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
 
   try {
-    const activities = await client.getActivities(0, parseInt(req.query.limit) || 20);
+    // Função de retry para mitigar instabilidades da API do Garmin
+    const fetchActivities = async (retries = 3) => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          return await client.getActivities(0, parseInt(req.query.limit) || 20);
+        } catch (err) {
+          console.warn(`[Garmin Activities] Tentativa ${i + 1} falhou para ${req.query.userId}: ${err.message}`);
+          if (i === retries - 1) throw err;
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+    };
+
+    const activities = await fetchActivities();
     const formatted = activities.map(a => ({
       id: a.activityId,
       name: a.activityName,
@@ -289,11 +311,51 @@ router.get('/activities', async (req, res) => {
       elevation: a.elevationGain || null,
       avgCadence: a.averageRunningCadenceInStepsPerMinute || null,
       vo2Max: a.vO2MaxValue || null,
+      trainingEffect: a.aerobicTrainingEffect || null,
+      anaerobicTrainingEffect: a.anaerobicTrainingEffect || null
     }));
     res.json(formatted);
   } catch (err) {
-    console.error('Erro atividades Garmin:', err.message);
-    res.status(500).json({ error: 'Erro ao buscar atividades' });
+    console.error('[Garmin Activities] Erro:', err.message);
+    const isAuthError = err.message?.includes('403') || err.message?.includes('401');
+    res.status(isAuthError ? 403 : 500).json({ error: err.message || 'Falha ao buscar treinos' });
+  }
+});
+
+// ─── 3.5. ACTIVITY DETAILS ────────────────────────────────────────────────────
+router.get('/activity/:id', async (req, res) => {
+  const { id } = req.params;
+  const client = await getClient(req.query.userId);
+  if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
+
+  try {
+    // Garmin Connect IDs podem ser muito grandes; tratar como Number e usar retry para estabilidade
+    const activityIdNum = Number(id);
+    console.log(`[Garmin Details] Buscando atividade ${activityIdNum} para o usuário ${req.query.userId}`);
+
+    // Função de retry para mitigar instabilidades da API do Garmin (otimizada para evitar timeout da Vercel)
+    const fetchActivity = async (retries = 3) => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          return await client.getActivity({ activityId: activityIdNum });
+        } catch (err) {
+          console.warn(`[Garmin Details] Tentativa ${i + 1} falhou para ${activityIdNum}: ${err.message}`);
+          if (i === retries - 1) throw err;
+          // Espera curta de 500ms para não estourar o timeout de 10s da Vercel
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+    };
+
+    const details = await fetchActivity();
+    res.json(details);
+  } catch (err) {
+    console.error(`[Garmin Details] Erro definitivo após retentativas para ${id}:`, err.message);
+    const isAuthError = err.message?.includes('403') || err.message?.includes('401') || err.message?.includes('Cloudflare');
+    res.status(isAuthError ? 403 : 500).json({ 
+      error: isAuthError ? 'Sessão instável ou expirada. Tente novamente em instantes ou reconecte o Garmin.' : 'Falha ao buscar detalhes do treino após várias tentativas',
+      details: err.message 
+    });
   }
 });
 
@@ -355,7 +417,7 @@ router.post('/disconnect', (req, res) => {
 
 // ─── 8. LIST WORKOUTS in Garmin Connect ───────────────────────────────────────
 router.get('/workouts', async (req, res) => {
-  const client = getClient(req.query.userId);
+  const client = await getClient(req.query.userId);
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
 
   try {
@@ -378,7 +440,7 @@ router.get('/workouts', async (req, res) => {
 // Body: { userId, workout: <Superação workout object> }
 router.post('/workout/create', async (req, res) => {
   const { userId, workout } = req.body;
-  const client = getClient(userId);
+  const client = await getClient(userId);
   if (!client) return res.status(401).json({ error: 'Não conectado ao Garmin' });
   if (!workout) return res.status(400).json({ error: 'workout é obrigatório' });
 

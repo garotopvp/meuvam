@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Info, Loader2 } from 'lucide-react';
 import { StravaLogo, GarminLogo, PolarLogo, CorosLogo, AmazfitLogo } from './BrandLogos';
 
@@ -19,6 +19,27 @@ const ConnectivitySection = ({ athlete, setAthlete }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL + '/api' : '/api';
+  
+  // Verifica o status do Garmin diretamente no backend (bypassa problemas de RLS)
+  useEffect(() => {
+    if (athlete?.id) {
+      fetch(`${API}/garmin/status?userId=${athlete.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.connected && !athlete.integrations?.garmin?.connected) {
+            setAthlete(prev => ({
+              ...prev,
+              integrations: {
+                ...prev.integrations,
+                garmin: { connected: true, username: data.user?.displayName || 'garmin_user' }
+              }
+            }));
+          }
+        })
+        .catch(console.error);
+    }
+  }, [athlete?.id]);
 
   const handleToggle = async (platform) => {
     const data = athlete.integrations ? athlete.integrations[platform.key] : null;

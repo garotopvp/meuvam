@@ -531,7 +531,7 @@ const IntensityChart = ({ description, vamPace }) => {
 };
 
 // ─── Garmin Sync Panel ────────────────────────────────────────────────────────
-const GarminSyncPanel = ({ workouts, userId, garminSync }) => {
+const GarminSyncPanel = ({ workouts, userId, garminSync, athlete }) => {
   const { garminStatus, isLoading, lastResult, garminLogin, garminLogout, checkStatus, syncPlan } = garminSync;
   const [showLogin, setShowLogin] = useState(false);
   const [email, setEmail] = useState('');
@@ -539,7 +539,7 @@ const GarminSyncPanel = ({ workouts, userId, garminSync }) => {
 
   useEffect(() => {
     if (userId) checkStatus(userId);
-  }, [userId]);
+  }, [userId, athlete?.integrations?.garmin?.connected]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -929,7 +929,7 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
       </div>
 
       {/* Garmin Sync Panel */}
-      <GarminSyncPanel workouts={workouts} userId={userId} garminSync={garminSync} />
+      <GarminSyncPanel workouts={workouts} userId={userId} garminSync={garminSync} athlete={athlete} />
 
       {/* Horizontal Day Scroller */}
       <div 

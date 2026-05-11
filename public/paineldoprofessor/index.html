@@ -11,7 +11,8 @@
     <!-- html2canvas REMOVIDO -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <base href="/paineldoprofessor/">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=3.1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <!-- Mobile toggle -->
@@ -35,6 +36,8 @@
                 <a href="#" class="nav-item" data-view="athletes"><i class="ri-group-line"></i> Atletas</a>
                 <a href="#" class="nav-item" data-view="chat"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
                 <a href="#" class="nav-item" data-view="staff"><i class="ri-shield-user-line"></i> Equipe</a>
+                <a href="#" class="nav-item" data-view="strava-feed"><i class="ri-pulse-line" style="color: #fc4c02;"></i> Feed Strava</a>
+                <a href="#" class="nav-item" data-view="garmin-feed"><i class="ri-compass-discover-line" style="color: #000;"></i> Feed Garmin</a>
                 <a href="#" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> Calculadoras</a>
             </nav>
             <div class="sidebar-footer">
@@ -178,6 +181,42 @@
                         <span style="font-size:13px;display:block;margin-top:4px;">Tente outro nome ou adicione um novo atleta.</span>
                     </div>
                 </div>
+            </section>
+
+            <!-- Feed Strava Global -->
+            <section id="view-strava-feed" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Feed de Atividades</h1>
+                        <p>Acompanhe em tempo real os treinos realizados por todos os seus alunos via Strava.</p>
+                    </div>
+                    <button class="btn btn-secondary" onclick="renderStravaFeed()"><i class="ri-refresh-line"></i> Atualizar</button>
+                </div>
+
+                <div id="strava-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
+                    <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #fc4c02;"></i>
+                    Sincronizando atividades de toda a equipe...
+                </div>
+
+                <div id="strava-global-list" style="display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto;"></div>
+            </section>
+
+            <!-- Feed Garmin Global -->
+            <section id="view-garmin-feed" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Feed Garmin Connect</h1>
+                        <p>Acompanhe em tempo real os treinos realizados pelos seus alunos via conexão direta Garmin.</p>
+                    </div>
+                    <button class="btn btn-secondary" onclick="renderGarminFeed()"><i class="ri-refresh-line"></i> Atualizar Garmin</button>
+                </div>
+
+                <div id="garmin-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
+                    <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #000;"></i>
+                    Sincronizando atividades do Garmin Connect...
+                </div>
+
+                <div id="garmin-global-list" style="display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto;"></div>
             </section>
 
             <!-- Calculadoras -->
@@ -525,13 +564,52 @@
         </div>
     </div>
 
+    <!-- Strava Graphs Modal -->
+    <div class="modal" id="modal-strava-graph">
+        <div class="modal-card" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h3>Gráficos do Treino</h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="strava-graph-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
+                    Buscando dados de telemetria...
+                </div>
+                <div id="strava-graph-error" style="padding:40px; text-align:center; color:#fc4c02; display:none; font-weight: bold;">
+                </div>
+                <div id="strava-graph-container" style="position: relative; height: 400px; width: 100%; display: none;">
+                    <canvas id="stravaChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Garmin Details Modal -->
+    <div class="modal" id="modal-garmin-details">
+        <div class="modal-card" style="max-width: 600px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin</h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="garmin-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
+                    Extraindo dados da Garmin...
+                </div>
+                <div id="garmin-error" style="padding:40px; text-align:center; color:#fc4c02; display:none; font-weight: bold;">
+                </div>
+                <div id="garmin-details-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 16px 0;">
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal de Exportação Removido -->
 
     <!-- Template de Exportação Removido -->
 
     <div class="toast" id="toast"><span id="toast-msg">Sucesso!</span></div>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-    <script src="auth.js"></script>
-    <script src="app.js?v=1.2.2"></script>
+    <script src="auth.js?v=3.1"></script>
+    <script src="app.js?v=3.1"></script>
 </body>
 </html>

@@ -24,9 +24,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (profileError || !profile || profile.role !== 'professor') {
                 console.log("Acesso negado ao portal do professor: perfil não encontrado ou papel incorreto.");
-                // Se estiver tentando entrar no painel logado mas não for professor, volta pro início
+                
                 if (isIndex) {
-                    window.location.href = "/";
+                    // Se o usuário já está logado como aluno, perguntamos se ele quer sair para entrar como professor
+                    // Isso evita o loop infinito de redirecionamento entre / e /paineldoprofessor
+                    if (confirm("Esta conta está registrada como Aluno. Deseja sair para entrar com uma conta de Professor?")) {
+                        await supabaseClient.auth.signOut();
+                        window.location.href = "login.html?role_error=true";
+                    } else {
+                        // Se não quiser sair, volta para o portal de seleção (onde poderá escolher 'Sou Aluno')
+                        window.location.href = "/";
+                    }
                 }
                 return;
             }
@@ -36,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } else {
             if (isIndex && !localStorage.getItem('vdot_offline')) {
-                window.location.href = "/professor";
+                window.location.href = "login.html";
             }
         }
     }
@@ -230,6 +238,6 @@ async function logout() {
             await supabaseClient.auth.signOut();
         }
         localStorage.removeItem('vdot_offline');
-        window.location.href = "/professor";
+        window.location.href = "/paineldoprofessor/login.html";
     }
 }

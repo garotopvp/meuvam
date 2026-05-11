@@ -14,6 +14,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Forçar a limpeza de qualquer Service Worker antigo que esteja travando o cache
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+            console.log('Service Worker antigo removido para forçar atualização.');
+          }
+        });
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

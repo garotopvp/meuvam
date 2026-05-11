@@ -1,21 +1,12 @@
 {
   "cleanUrls": false,
   "rewrites": [
-
     {
       "source": "/professor",
       "destination": "/index.html"
     },
     {
       "source": "/professor/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/paineldoprofessor",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/paineldoprofessor/:path*",
       "destination": "/index.html"
     },
     {
@@ -31,7 +22,7 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/((?!api).*)",
+      "source": "/((?!api|paineldoprofessor).*)",
       "destination": "/index.html"
     }
   ]

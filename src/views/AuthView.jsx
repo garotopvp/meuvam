@@ -183,7 +183,7 @@ const AuthView = ({ onBack }) => {
         boxShadow: '0 10px 25px rgba(0, 0, 0, 0.03)'
       }}>
         <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--primary-color)', borderRadius: '100px', fontSize: '11px', fontWeight: 800, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Portal do Aluno
+          {window.location.pathname.includes('professor') ? 'Portal do Professor' : 'Portal do Aluno'}
         </div>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', color: '#0f172a' }}>
           {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
