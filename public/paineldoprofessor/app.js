@@ -2758,7 +2758,7 @@ async function renderActivityTelemetry(act) {
             const paceData = streams.velocity_smooth.map(v => {
                 if (v <= 0) return null;
                 const pace = (1000 / v) / 60;
-                return pace > 15 ? null : pace;
+                return pace > 14 ? null : pace;
             });
             
             // Média de ritmo
@@ -2812,8 +2812,8 @@ async function renderActivityTelemetry(act) {
                         y: { 
                             ...commonOptions.scales.y, 
                             reverse: true, 
-                            suggestedMin: 3.5, 
-                            suggestedMax: 14,
+                            min: 4, 
+                            max: 14,
                             ticks: {
                                 ...commonOptions.scales.y.ticks,
                                 callback: value => {
@@ -2947,8 +2947,8 @@ function renderZoomChart(primaryType, overlayType = null) {
         yAxes.y.suggestedMin = 80;
         yAxes.y.suggestedMax = 190;
     } else if (primaryType === 'pace') {
-        yAxes.y.suggestedMin = 3.5;
-        yAxes.y.suggestedMax = 14;
+        yAxes.y.min = 4;
+        yAxes.y.max = 14;
     } else if (primaryType === 'altitude') {
         const alt = _currentStreams.altitude || [0];
         const minA = Math.min(...alt);
@@ -3033,8 +3033,8 @@ function renderZoomChart(primaryType, overlayType = null) {
         // Ajustar escala da sobreposição
         if (overlayType === 'pace') {
             yAxes.y1.reverse = true;
-            yAxes.y1.suggestedMin = 3.5;
-            yAxes.y1.suggestedMax = 14;
+            yAxes.y1.min = 4;
+            yAxes.y1.max = 14;
         } else if (overlayType === 'heartrate') {
             yAxes.y1.suggestedMin = 80;
             yAxes.y1.suggestedMax = 190;
@@ -3126,7 +3126,7 @@ function getDatasetConfig(type, streams, mode = 'zones') {
                 data: streams.velocity_smooth.map(v => {
                     if (v <= 0) return null;
                     const pace = (1000 / v) / 60;
-                    return pace > 15 ? null : pace;
+                    return pace > 14 ? null : pace;
                 }),
                 borderColor: '#00aaff',
                 backgroundColor: 'rgba(0, 170, 255, 0.05)',
