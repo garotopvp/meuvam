@@ -2785,7 +2785,7 @@ async function renderActivityTelemetry(act) {
                         backgroundColor: gradient, 
                         fill: true, 
                         pointRadius: 0, 
-                        borderWidth: 2.5, 
+                        borderWidth: 1.5, 
                         tension: 0.4,
                         segment: {
                             borderColor: ctx => {
@@ -2849,7 +2849,7 @@ async function renderActivityTelemetry(act) {
                         backgroundColor: gradient, 
                         fill: true, 
                         pointRadius: 0, 
-                        borderWidth: 2, 
+                        borderWidth: 1.5, 
                         tension: 0.4,
                         segment: {
                             borderColor: context => {
@@ -2885,7 +2885,7 @@ async function renderActivityTelemetry(act) {
 
             detailChartInstances.push(new Chart(ctx, {
                 type: 'line',
-                data: { labels: xLabels, datasets: [{ label: 'Elevação', data: streams.altitude, borderColor: '#64748b', backgroundColor: gradient, fill: true, pointRadius: 0, borderWidth: 1.5, tension: 0.4 }] },
+                data: { labels: xLabels, datasets: [{ label: 'Elevação', data: streams.altitude, borderColor: '#64748b', backgroundColor: gradient, fill: true, pointRadius: 0, borderWidth: 1.2, tension: 0.4 }] },
                 plugins: [crosshairPlugin],
                 options: { 
                     ...commonOptions, 
@@ -2965,7 +2965,7 @@ function renderZoomChart(primaryType, overlayType = null) {
         yAxisID: 'y',
         fill: false,
         pointRadius: 0,
-        borderWidth: 3,
+        borderWidth: 1.8,
         order: 1 // Sempre por cima
     });
     
@@ -3006,7 +3006,7 @@ function renderZoomChart(primaryType, overlayType = null) {
             yAxisID: 'y1',
             fill: false,
             pointRadius: 0,
-            borderWidth: 1.5,
+            borderWidth: 1.2,
             borderDash: [4, 4],
             order: 2 // Por baixo
         });
