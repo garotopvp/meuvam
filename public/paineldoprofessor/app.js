@@ -2984,7 +2984,7 @@ function renderZoomChart(primaryType, overlayType = null) {
         yAxisID: 'y',
         fill: false,
         pointRadius: 0,
-        borderWidth: 1.2,
+        borderWidth: 1.5,
         order: 1 // Sempre por cima
     });
     
@@ -3020,13 +3020,13 @@ function renderZoomChart(primaryType, overlayType = null) {
         datasets.push({
             ...configOverlay,
             label: `[Sobreposto] ${configOverlay.label}`,
-            borderColor: hexToRgba(configOverlay.borderColor, 0.3), // 30% de opacidade
-            backgroundColor: 'transparent',
+            borderColor: hexToRgba(configOverlay.borderColor, 0.4), 
+            backgroundColor: hexToRgba(configOverlay.borderColor, 0.08),
             yAxisID: 'y1',
-            fill: false,
+            fill: true,
             pointRadius: 0,
             borderWidth: 1,
-            borderDash: [4, 4],
+            borderDash: [],
             order: 2 // Por baixo
         });
 
