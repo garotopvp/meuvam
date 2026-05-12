@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import stravaRoutes from './routes/strava.js';
 import garminRoutes from './routes/garmin.js';
+import communityRoutes from './routes/community.js';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use(express.json());
 // Routes
 app.use('/api/strava', stravaRoutes);
 app.use('/api/garmin', garminRoutes);
+app.use('/api/community', communityRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

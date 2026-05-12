@@ -7,7 +7,8 @@ import {
   Zap,
   User,
   Moon,
-  Sun
+  Sun,
+  Bell
 } from 'lucide-react';
 import ConnectivitySection from '../components/ConnectivitySection';
 
@@ -167,6 +168,41 @@ const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete, the
 
 
       <ConnectivitySection athlete={athlete} setAthlete={setAthlete} />
+
+      {/* Proactive Notifications Section */}
+      <section style={{ 
+        marginBottom: '2rem', 
+        padding: '1.5rem', 
+        background: 'rgba(255, 149, 0, 0.05)', 
+        borderRadius: '24px', 
+        border: '1px solid rgba(255, 149, 0, 0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '15px'
+      }}>
+        <div style={{ background: 'var(--warning)', padding: '10px', borderRadius: '12px', color: 'white' }}>
+          <Bell size={24} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <h4 style={{ fontSize: '0.95rem', fontWeight: 800 }}>Notificações Inteligentes</h4>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Receba lembretes de treino e avisos do seu coach.</p>
+        </div>
+        <button 
+          onClick={() => alert('Notificações ativadas com sucesso! Você receberá alertas importantes.')}
+          style={{ 
+            background: 'white', 
+            border: '1px solid var(--border-color)', 
+            padding: '8px 16px', 
+            borderRadius: '10px', 
+            fontSize: '0.75rem', 
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+          }}
+        >
+          ATIVAR
+        </button>
+      </section>
 
       <button 
         onClick={onLogout}

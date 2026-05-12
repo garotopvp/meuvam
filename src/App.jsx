@@ -13,6 +13,7 @@ import PhotoEditorModal from './modals/PhotoEditorModal';
 // Views
 import HomeView from './views/HomeView';
 import TrainingView from './views/TrainingView';
+import FeedView from './views/FeedView';
 
 import ProfileView from './views/ProfileView';
 import EditProfileView from './views/EditProfileView';
@@ -21,6 +22,7 @@ import PortalSelection from './views/PortalSelection';
 
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
+import ProfessorDashboard from './views/ProfessorDashboard';
 
 // Data
 import { athleteData } from './data/mockData';
@@ -160,6 +162,7 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
           <Routes>
             <Route path="/" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
             <Route path="/treinos" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
+            <Route path="/feed" element={<FeedView athlete={athlete} />} />
             <Route path="/coach" element={<ChatView session={session} />} />
             <Route path="/avisos" element={<NotificationsView />} />
             <Route path="/perfil" element={
@@ -285,9 +288,7 @@ const AppContent = () => {
 
       if (profileData) {
         if (profileData.role === 'professor') {
-          if (!window.location.pathname.includes('/paineldoprofessor')) {
-            window.location.href = '/paineldoprofessor/index.html?v=' + Date.now();
-          }
+          setAthleteRaw({ ...profileData, role: 'professor' });
           return;
         }
         
@@ -390,13 +391,10 @@ const AppContent = () => {
         ) : (
           <PortalSelection 
             onSelectAthlete={() => navigate('/aluno')} 
-            onSelectProfessor={() => window.location.assign('/paineldoprofessor/index.html?v=' + Date.now())} 
+            onSelectProfessor={() => navigate('/professor')} 
           />
         )
       } />
-
-      <Route path="/professor/*" element={<Navigate to={`/paineldoprofessor/index.html?v=${Date.now()}`} replace />} />
-
 
       <Route path="/aluno/*" element={
         !session ? (
@@ -406,6 +404,8 @@ const AppContent = () => {
                 <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Carregando seu perfil...</p>
             </div>
+        ) : athlete.role === 'professor' ? (
+            <Navigate to="/professor" replace />
         ) : (
             <>
                 <UrlCleanup onConnected={fetchProfile} />
@@ -442,6 +442,16 @@ const AppContent = () => {
                     />
                 )}
             </>
+        )
+      } />
+
+      <Route path="/professor/*" element={
+        !session ? (
+          <AuthView onBack={() => navigate('/')} />
+        ) : athlete?.role !== 'professor' ? (
+          <Navigate to="/aluno" replace />
+        ) : (
+          <ProfessorDashboard session={session} onLogout={() => supabase.auth.signOut()} />
         )
       } />
 

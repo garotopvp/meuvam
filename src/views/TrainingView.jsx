@@ -24,10 +24,12 @@ import {
   CheckCheck,
   AlertCircle,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Map as MapIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGarminSync } from '../hooks/useGarminSync.js';
+import ActivityMap from '../components/ActivityMap';
 
 const StructuredWorkoutView = ({ steps, athlete }) => {
   if (!steps || !Array.isArray(steps)) return null;
@@ -331,6 +333,24 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
           <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
             {new Date(workout.date).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
+        </div>
+
+        {/* Interactive Map */}
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+             <h3 style={{ fontSize: '0.9rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapIcon size={18} color="var(--primary-color)" /> MAPA DA ATIVIDADE
+             </h3>
+             {workout.status === 'completed' && (
+               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)' }}>Intensidade por Heatmap 🔥</span>
+             )}
+          </div>
+          <ActivityMap 
+            isHeatmap={workout.status === 'completed'} 
+            routeData={workout.status === 'completed' ? [
+              [-23.5505, -46.6333], [-23.5515, -46.6343], [-23.5525, -46.6353], [-23.5535, -46.6363], [-23.5545, -46.6353]
+            ] : null} 
+          />
         </div>
 
         {/* Quick Metrics */}

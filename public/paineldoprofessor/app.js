@@ -57,6 +57,20 @@ const VAM_ZONES=[{label:'Recuperação',pct:60,color:'#94a3b8'},{label:'Aeróbic
 // ─── UTILS ───
 function generateId(){return Date.now();}
 function formatPace(p){let m=Math.floor(p),s=Math.round((p-m)*60);if(s===60){m++;s=0;}return`${m}:${s.toString().padStart(2,'0')}`;}
+function movingAverage(data, windowSize = 5) {
+    if (!data || data.length === 0) return [];
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+        let sum = 0, count = 0;
+        for (let j = Math.max(0, i - windowSize + 1); j <= i; j++) {
+            if (data[j] !== null && data[j] !== undefined) {
+                sum += data[j]; count++;
+            }
+        }
+        result.push(count > 0 ? sum / count : null);
+    }
+    return result;
+}
 function vamToPace(k){if(!k||k<=0)return'Livre';return formatPace(60/k)+'/km';}
 function closeModals(){allModals.forEach(m=>m.classList.remove('show'));}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
@@ -2222,7 +2236,24 @@ async function openStravaGraph(athleteId, stravaId) {
                         fill: true,
                         pointRadius: 0,
                         borderWidth: 2.5,
-                        tension: 0.4
+                        tension: 0.4,
+                        segment: {
+                            borderColor: ctx => {
+                                const paceVal = ctx.p1.parsed.y;
+                                const athlete = athletes.find(a => a.supabaseId === athleteId);
+                                if (!athlete || !athlete.testTime || !paceVal) return '#007aff';
+                                
+                                const speedKmh = 60 / paceVal;
+                                const vamKmh = 180 / athlete.testTime;
+                                const pctVam = (speedKmh / vamKmh) * 100;
+                                
+                                if (pctVam < 65) return '#94a3b8'; // Z1
+                                if (pctVam < 75) return '#3b82f6'; // Z2
+                                if (pctVam < 85) return '#10b981'; // Z3
+                                if (pctVam < 95) return '#f59e0b'; // Z4
+                                return '#ef4444'; // Z5
+                            }
+                        }
                     }]
                 },
                 plugins: [syncPlugin],
@@ -2253,6 +2284,7 @@ async function openStravaGraph(athleteId, stravaId) {
 
         // 2. Gráfico de Frequência Cardíaca
         if (streams.heartrate) {
+            const hrMax = Math.max(...streams.heartrate);
             const ctx = document.getElementById('chartHR').getContext('2d');
             const chart = new Chart(ctx, {
                 type: 'line',
@@ -2292,7 +2324,7 @@ async function openStravaGraph(athleteId, stravaId) {
                         y: {
                             ...commonOptions.scales.y,
                             suggestedMin: 80,
-                            suggestedMax: 190
+                            suggestedMax: hrMax > 175 ? 200 : (hrMax > 155 ? 180 : 160)
                         }
                     }
                 }
@@ -2830,6 +2862,7 @@ async function renderActivityTelemetry(act) {
 
         // --- 2. HR CHART ---
         if (streams.heartrate) {
+            const maxHR = Math.max(...streams.heartrate);
             const avgHR = streams.heartrate.reduce((a, b) => a + b, 0) / streams.heartrate.length;
             $('avg-hr-tag').textContent = `Média: ${Math.round(avgHR)} bpm`;
 
@@ -2867,7 +2900,7 @@ async function renderActivityTelemetry(act) {
                     }] 
                 },
                 plugins: [crosshairPlugin],
-                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, suggestedMin: 80, suggestedMax: 190 } } }
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, suggestedMin: 80, suggestedMax: maxHR > 175 ? 200 : (maxHR > 155 ? 180 : 160) } } }
             }));
         }
 
@@ -2953,6 +2986,25 @@ function renderZoomChart(primaryType, overlayType = null) {
     }
 
     const datasets = [];
+    const hasOverlay = overlayType && overlayType !== primaryType;
+    
+    // Garmin Style: Se houver Ritmo e FC (em qualquer ordem), o FC vai para a esquerda (y) e Ritmo para a direita (y1)
+    let primaryAxis = 'y';
+    let overlayAxis = 'y1';
+    
+    const isPaceAndHR = (primaryType === 'pace' && overlayType === 'heartrate') || 
+                        (primaryType === 'heartrate' && overlayType === 'pace');
+
+    if (hasOverlay && isPaceAndHR) {
+        if (primaryType === 'pace') {
+            primaryAxis = 'y1';
+            overlayAxis = 'y';
+        } else {
+            primaryAxis = 'y';
+            overlayAxis = 'y1';
+        }
+    }
+
     const yAxes = {
         y: {
             position: 'left',
@@ -2961,111 +3013,84 @@ function renderZoomChart(primaryType, overlayType = null) {
         }
     };
 
-    // Ajustar escala primária conforme o tipo
-    if (primaryType === 'heartrate') {
-        yAxes.y.suggestedMin = 80;
-        yAxes.y.suggestedMax = 190;
-    } else if (primaryType === 'pace') {
-        yAxes.y.min = 4;
-        yAxes.y.max = 14;
-    } else if (primaryType === 'altitude') {
-        const alt = _currentStreams.altitude || [0];
-        const minA = Math.min(...alt);
-        const maxA = Math.max(...alt);
-        yAxes.y.suggestedMin = minA - 5;
-        yAxes.y.suggestedMax = maxA + 5;
+    if (hasOverlay) {
+        yAxes.y1 = {
+            position: 'right',
+            grid: { display: false },
+            ticks: { font: { weight: '600' }, padding: 10 }
+        };
     }
 
-    // Configuração do Dataset Primário
+    // Configuração dos Datasets
     const hrMode = $('zoom-hr-mode').value;
-    const configPrimary = getDatasetConfig(primaryType, _currentStreams, hrMode);
+    const forceGarminStyle = isPaceAndHR;
+
+    // Configuração dos Eixos (Setup helper)
+    const setupAxis = (axisId, type, label, color) => {
+        const axis = yAxes[axisId];
+        if (!axis) return;
+        axis.title = { display: true, text: label, color: color || '#666', font: { weight: '700', size: 12 } };
+        
+        if (type === 'heartrate') {
+            const hr = _currentStreams.heartrate || [];
+            const hrMax = hr.length ? Math.max(...hr) : 0;
+            axis.suggestedMin = 80;
+            axis.suggestedMax = hrMax > 175 ? 200 : (hrMax > 155 ? 180 : 160);
+        } else if (type === 'pace') {
+            axis.reverse = true;
+            axis.min = 4;
+            axis.max = 14;
+            axis.ticks.callback = value => {
+                if (value <= 0) return '';
+                const m = Math.floor(value);
+                const s = Math.round((value - m) * 60);
+                return `${m}:${s.toString().padStart(2, '0')}`;
+            };
+        } else if (type === 'altitude') {
+            const alt = _currentStreams.altitude || [0];
+            axis.suggestedMin = Math.min(...alt) - 5;
+            axis.suggestedMax = Math.max(...alt) + 5;
+        }
+        if (color) axis.ticks.color = color;
+    };
+
+    // Dataset Primário
+    let isPrimaryOverlayStyle = false;
+    if (forceGarminStyle && primaryType === 'heartrate') isPrimaryOverlayStyle = true;
+    
+    const configPrimary = getDatasetConfig(primaryType, _currentStreams, hrMode, isPrimaryOverlayStyle);
+    if (primaryType === 'pace') configPrimary.data = movingAverage(configPrimary.data, 7);
+
     datasets.push({
         ...configPrimary,
-        yAxisID: 'y',
-        fill: false,
+        yAxisID: primaryAxis,
+        fill: configPrimary.fill,
         pointRadius: 0,
-        borderWidth: 1.5,
-        order: 1 // Sempre por cima
+        borderWidth: 2,
+        order: (forceGarminStyle && primaryType === 'heartrate') ? 2 : 1 
     });
-    
-    if (primaryType === 'pace') {
-        yAxes.y.reverse = true;
-        yAxes.y.ticks.callback = value => {
-            if (value <= 0) return '';
-            const m = Math.floor(value);
-            const s = Math.round((value - m) * 60);
-            return `${m}:${s.toString().padStart(2, '0')}`;
-        };
-    }
+    setupAxis(primaryAxis, primaryType, configPrimary.label, configPrimary.borderColor);
 
-    // Configuração do Dataset de Sobreposição (Overlay)
-    if (overlayType && overlayType !== primaryType) {
-        const hrMode = $('zoom-hr-mode').value;
-        const configOverlay = getDatasetConfig(overlayType, _currentStreams, hrMode);
-        
-        const hexToRgba = (hex, alpha) => {
-            let r = 0, g = 0, b = 0;
-            if (hex.length === 4) {
-                r = parseInt(hex[1] + hex[1], 16);
-                g = parseInt(hex[2] + hex[2], 16);
-                b = parseInt(hex[3] + hex[3], 16);
-            } else if (hex.length === 7) {
-                r = parseInt(hex.substring(1, 3), 16);
-                g = parseInt(hex.substring(3, 5), 16);
-                b = parseInt(hex.substring(5, 7), 16);
-            }
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        };
+    // Dataset de Sobreposição
+    if (hasOverlay) {
+        let isOverlayOverlayStyle = true;
+        if (forceGarminStyle && overlayType === 'pace') isOverlayOverlayStyle = false;
+
+        const configOverlay = getDatasetConfig(overlayType, _currentStreams, hrMode, isOverlayOverlayStyle);
+        if (overlayType === 'pace') configOverlay.data = movingAverage(configOverlay.data, 7);
 
         datasets.push({
             ...configOverlay,
             label: `[Sobreposto] ${configOverlay.label}`,
-            borderColor: hexToRgba(configOverlay.borderColor, 0.4), 
-            backgroundColor: hexToRgba(configOverlay.borderColor, 0.08),
-            yAxisID: 'y1',
-            fill: true,
+            yAxisID: overlayAxis,
+            fill: configOverlay.fill,
             pointRadius: 0,
-            borderWidth: 1,
-            borderDash: [],
-            order: 2 // Por baixo
+            borderWidth: isOverlayOverlayStyle ? 1.5 : 2,
+            order: isOverlayOverlayStyle ? 2 : 1
         });
-
-        yAxes.y1 = {
-            position: 'right',
-            grid: { display: false },
-            ticks: { 
-                font: { weight: '600' }, 
-                color: configOverlay.borderColor,
-                callback: (value) => {
-                    if (overlayType === 'pace') {
-                        if (value <= 0) return '';
-                        const m = Math.floor(value);
-                        const s = Math.round((value - m) * 60);
-                        return `${m}:${s.toString().padStart(2, '0')}`;
-                    }
-                    return value;
-                }
-            },
-            title: { display: true, text: configOverlay.label, color: configOverlay.borderColor }
-        };
-
-        // Ajustar escala da sobreposição
-        if (overlayType === 'pace') {
-            yAxes.y1.reverse = true;
-            yAxes.y1.min = 4;
-            yAxes.y1.max = 14;
-        } else if (overlayType === 'heartrate') {
-            yAxes.y1.suggestedMin = 80;
-            yAxes.y1.suggestedMax = 190;
-        } else if (overlayType === 'altitude') {
-            const alt = _currentStreams.altitude || [0];
-            yAxes.y1.suggestedMin = Math.min(...alt) - 5;
-            yAxes.y1.suggestedMax = Math.max(...alt) + 5;
-        }
+        setupAxis(overlayAxis, overlayType, configOverlay.label, configOverlay.borderColor);
     }
 
-    const isPace = primaryType === 'pace';
-    
     _zoomChart = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: { labels, datasets },
@@ -3137,81 +3162,98 @@ function renderZoomChart(primaryType, overlayType = null) {
     });
 }
 
-function getDatasetConfig(type, streams, mode = 'zones') {
+function getDatasetConfig(type, streams, mode = 'zones', isOverlay = false) {
+    const athleteId = _currentAthleteId;
+    const athlete = athletes.find(a => String(a.supabaseId) === String(athleteId));
+
     switch(type) {
         case 'pace':
             const paceConfig = {
                 label: 'Ritmo',
-                data: streams.velocity_smooth.map(v => {
+                data: (streams.velocity_smooth || []).map(v => {
                     if (v <= 0) return null;
                     const pace = (1000 / v) / 60;
                     return pace > 14 ? null : pace;
                 }),
-                borderColor: '#00aaff',
-                backgroundColor: 'rgba(0, 170, 255, 0.05)',
-                fill: true
+                borderColor: '#007aff',
+                backgroundColor: 'rgba(0, 122, 255, 0.05)',
+                fill: false // Ritmo nunca é área no Garmin
             };
 
-            if (mode === 'classic') {
-                paceConfig.borderColor = '#00aaff';
-                return paceConfig;
+            if (!isOverlay && mode === 'zones' && athlete && athlete.testTime) {
+                const vamKmh = 180 / athlete.testTime;
+                paceConfig.segment = {
+                    borderColor: ctx => {
+                        const paceVal = ctx.p1.parsed.y;
+                        if (!paceVal) return '#007aff';
+                        const speedKmh = 60 / paceVal;
+                        const pctVam = (speedKmh / vamKmh) * 100;
+                        
+                        if (pctVam < 65) return '#94a3b8';
+                        if (pctVam < 75) return '#3b82f6';
+                        if (pctVam < 85) return '#10b981';
+                        if (pctVam < 95) return '#f59e0b';
+                        return '#ef4444';
+                    }
+                };
             }
-
-            if (mode === 'zones' && _currentAthleteId) {
-                const athlete = athletes.find(a => a.supabaseId === _currentAthleteId);
-                if (athlete && athlete.testTime) {
-                    const vamKmh = 180 / athlete.testTime;
-                    paceConfig.segment = {
-                        borderColor: ctx => {
-                            const paceVal = ctx.p1.parsed.y;
-                            if (!paceVal) return '#00aaff';
-                            const speedKmh = 60 / paceVal;
-                            const pctVam = (speedKmh / vamKmh) * 100;
-                            
-                            if (pctVam < 65) return '#94a3b8'; // Z1
-                            if (pctVam < 75) return '#3b82f6'; // Z2
-                            if (pctVam < 85) return '#10b981'; // Z3
-                            if (pctVam < 95) return '#f59e0b'; // Z4
-                            return '#ef4444'; // Z5
-                        }
-                    };
-                }
+            
+            if (isOverlay) {
+                paceConfig.borderColor = 'rgba(0, 122, 255, 0.7)';
+                paceConfig.borderWidth = 1.5;
             }
+            
             return paceConfig;
+
         case 'heartrate':
-            const config = {
+            const hrConfig = {
                 label: 'Frequência Cardíaca',
-                data: streams.heartrate,
-                borderColor: '#ff4d4d',
-                backgroundColor: 'rgba(255, 77, 77, 0.05)',
+                data: streams.heartrate || [],
+                borderColor: '#ff2d55',
+                backgroundColor: 'rgba(255, 45, 85, 0.05)',
                 fill: true
             };
             
-            if (mode === 'zones' && _currentAthleteId) {
-                const athlete = athletes.find(a => a.supabaseId === _currentAthleteId);
-                if (athlete) {
-                    const zones = calculateHRZones(athlete);
-                    config.segment = {
-                        borderColor: ctx => {
-                            const val = ctx.p1.parsed.y;
-                            if (val < zones.z1) return '#94a3b8'; // Z1
-                            if (val < zones.z2) return '#3b82f6'; // Z2
-                            if (val < zones.z3) return '#10b981'; // Z3
-                            if (val < zones.z4) return '#f59e0b'; // Z4
-                            return '#ef4444'; // Z5
-                        }
-                    };
-                }
+            if (!isOverlay && mode === 'zones' && athlete) {
+                const zones = calculateHRZones(athlete);
+                hrConfig.segment = {
+                    borderColor: ctx => {
+                        const val = ctx.p1.parsed.y;
+                        if (!val) return '#ff2d55';
+                        if (val < zones.z1) return '#94a3b8';
+                        if (val < zones.z2) return '#3b82f6';
+                        if (val < zones.z3) return '#10b981';
+                        if (val < zones.z4) return '#f59e0b';
+                        return '#ef4444';
+                    }
+                };
             }
-            return config;
+
+            if (isOverlay) {
+                // Garmin style: HR como sobreposição fica cinza ao fundo
+                hrConfig.borderColor = 'rgba(150, 150, 150, 0.5)';
+                hrConfig.backgroundColor = 'rgba(200, 200, 200, 0.25)';
+                delete hrConfig.segment;
+            }
+
+            return hrConfig;
+
         case 'altitude':
-            return {
+            const altConfig = {
                 label: 'Elevação',
-                data: streams.altitude,
-                borderColor: '#808080',
-                backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                data: streams.altitude || [],
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
                 fill: true
             };
+            if (isOverlay) {
+                altConfig.borderColor = '#10b981';
+                altConfig.backgroundColor = 'transparent';
+                altConfig.fill = false; // Elevação como sobreposição no Garmin é só uma linha verde
+            }
+            return altConfig;
+        default:
+            return { label: '', data: [] };
     }
 }
 

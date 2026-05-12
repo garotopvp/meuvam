@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Calendar, MessageCircle, TrendingUp, User } from 'lucide-react';
+import { Home, Calendar, MessageCircle, TrendingUp, User, Users } from 'lucide-react';
 
 const BottomNav = () => {
   const tabs = [
     { path: '/aluno', icon: Home, label: 'Início' },
     { path: '/aluno/treinos', icon: Calendar, label: 'Treino' },
+    { path: '/aluno/feed', icon: Users, label: 'Feed' },
     { path: '/aluno/coach', icon: MessageCircle, label: 'Coach' },
     { path: '/aluno/perfil', icon: User, label: 'Perfil' },
   ];
