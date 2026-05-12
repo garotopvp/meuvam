@@ -173,52 +173,71 @@ const HomeView = ({ athlete, workouts, deferredPrompt, onInstall }) => {
         style={{ 
           marginBottom: '2rem', 
           background: 'var(--surface-color)', 
-          position: 'relative',
-          overflow: 'hidden',
-          borderLeft: '4px solid var(--primary-color)',
-          cursor: 'pointer'
+          borderLeft: '5px solid var(--primary-color)',
+          cursor: 'pointer',
+          padding: '1.5rem'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div style={{ 
             padding: '6px 14px', 
             borderRadius: '10px', 
-            background: 'var(--surface-accent)', 
-            color: 'var(--text-primary)', 
-            fontSize: '0.7rem', 
-            fontWeight: 700,
+            background: 'rgba(255, 59, 48, 0.08)', 
+            color: 'var(--primary-color)', 
+            fontSize: '0.75rem', 
+            fontWeight: 800,
             textTransform: 'uppercase',
             letterSpacing: '0.5px'
           }}>
             Próximo Desafio
           </div>
-          <div style={{ background: 'rgba(0, 122, 255, 0.1)', padding: '6px', borderRadius: '50%' }}>
-            <CalendarIcon size={16} color="var(--primary-color)" />
+          <div style={{ background: 'var(--surface-accent)', padding: '8px', borderRadius: '50%' }}>
+            <CalendarIcon size={18} color="var(--primary-color)" />
           </div>
         </div>
         
         {athlete.nextRaceName ? (
           <>
-            <h4 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '4px' }}>{athlete.nextRaceName}</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-              {new Date(athlete.nextRaceDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <div style={{ background: 'var(--surface-accent)', padding: '6px 12px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700 }}>
-                <span style={{ color: 'var(--primary-color)' }}>
-                  {Math.ceil((new Date(athlete.nextRaceDate) - new Date()) / (1000 * 60 * 60 * 24))}
-                </span> dias
-              </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ fontSize: '1.35rem', fontWeight: 800, marginBottom: '4px', letterSpacing: '-0.5px' }}>{athlete.nextRaceName}</h4>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>
+                {new Date(athlete.nextRaceDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
             </div>
+            
+            {(() => {
+              const totalDays = 90; // Exemplo de ciclo de 90 dias
+              const daysLeft = Math.ceil((new Date(athlete.nextRaceDate) - new Date()) / (1000 * 60 * 60 * 24));
+              const progress = Math.max(0, Math.min(100, ((totalDays - daysLeft) / totalDays) * 100));
+              
+              return (
+                <div style={{ marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Faltam {daysLeft} dias</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-color)' }}>{Math.round(progress)}%</span>
+                  </div>
+                  <div style={{ height: '8px', background: 'var(--surface-accent)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${progress}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut" }}
+                      style={{ height: '100%', background: 'var(--primary-gradient)', borderRadius: '10px' }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </>
         ) : (
-          <div style={{ padding: '0.5rem 0' }}>
-            <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Qual o seu próximo desafio?</p>
+          <div style={{ padding: '0.5rem 0', textAlign: 'center' }}>
+            <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', fontWeight: 500 }}>Qual o seu próximo grande desafio?</p>
             <button 
               className="btn-primary" 
-              onClick={() => document.getElementById('nav-perfil')?.click()}
-              style={{ padding: '8px 16px', fontSize: '0.8rem' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                document.getElementById('nav-perfil')?.click();
+              }}
+              style={{ padding: '12px 24px', fontSize: '0.9rem', width: '100%' }}
             >
               Definir Prova Alvo
             </button>
@@ -228,54 +247,62 @@ const HomeView = ({ athlete, workouts, deferredPrompt, onInstall }) => {
 
       {/* Today's or Next Workout */}
       {displayWorkout ? (
-        <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', borderLeft: isToday ? '4px solid var(--warning)' : '4px solid var(--border-color)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <div className="card" style={{ marginBottom: '2rem', padding: '1.75rem', borderLeft: isToday ? '5px solid var(--warning)' : '5px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div style={{ 
               padding: '6px 14px', 
               borderRadius: '10px', 
-              background: 'var(--surface-accent)', 
-              color: 'var(--text-primary)', 
-              fontSize: '0.7rem', 
-              fontWeight: 700,
+              background: 'rgba(255, 149, 0, 0.1)', 
+              color: 'var(--warning)', 
+              fontSize: '0.75rem', 
+              fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: '0.5px'
             }}>
-              Treino de Hoje: {displayWorkout.type}
+              {isToday ? 'Treino de Hoje' : 'Próximo Treino'}: {displayWorkout.type}
             </div>
-            <div style={{ background: 'rgba(255, 149, 0, 0.1)', padding: '6px', borderRadius: '50%' }}>
-              <Zap size={18} color="var(--warning)" fill={displayWorkout.status === 'completed' ? "var(--warning)" : "none"} style={{ opacity: 0.8 }} />
+            <div style={{ background: 'rgba(255, 149, 0, 0.1)', padding: '10px', borderRadius: '50%' }}>
+              <Zap size={20} color="var(--warning)" fill={displayWorkout.status === 'completed' ? "var(--warning)" : "none"} style={{ opacity: 0.9 }} />
             </div>
           </div>
           
-          <h4 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{displayWorkout.title}</h4>
+          <h4 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.75rem', letterSpacing: '-0.3px' }}>{displayWorkout.title}</h4>
           <p style={{ 
             color: 'var(--text-secondary)', 
-            fontSize: '0.9rem', 
-            marginBottom: '1.5rem', 
+            fontSize: '0.95rem', 
+            marginBottom: '1.75rem', 
             lineHeight: '1.6',
+            fontWeight: 500,
             whiteSpace: 'pre-line' 
           }}>
             {displayWorkout.description}
           </p>
           
-          <div style={{ display: 'flex', gap: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <MapPin size={16} color="var(--text-secondary)" />
-              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{displayWorkout.metrics?.distance || '--'}</span>
+          <div style={{ display: 'flex', gap: '30px', background: 'var(--surface-accent)', padding: '15px 20px', borderRadius: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
+                <MapPin size={14} />
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Distância</span>
+              </div>
+              <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>{displayWorkout.metrics?.distance || '--'}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Clock size={16} color="var(--text-secondary)" />
-              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{displayWorkout.metrics?.duration || '--'}</span>
+            <div style={{ width: '1px', background: 'var(--border-color)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
+                <Clock size={14} />
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Duração</span>
+              </div>
+              <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>{displayWorkout.metrics?.duration || '--'}</span>
             </div>
           </div>
         </div>
       ) : (
-        <div className="card" style={{ marginBottom: '2rem', padding: '2rem', textAlign: 'center', background: 'var(--surface-accent)', border: '2px dashed var(--border-color)' }}>
-          <div style={{ width: '48px', height: '48px', background: 'rgba(52, 199, 89, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-            <CalendarIcon size={24} color="var(--success)" />
+        <div className="card" style={{ marginBottom: '2rem', padding: '2.5rem', textAlign: 'center', background: 'var(--surface-accent)', border: '2px dashed var(--border-color)', boxShadow: 'none' }}>
+          <div style={{ width: '56px', height: '56px', background: 'rgba(52, 199, 89, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+            <CalendarIcon size={28} color="var(--success)" />
           </div>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Dia de Descanso</h4>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Aproveite para recuperar as energias! 🏃‍♂️⚡</p>
+          <h4 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.5rem' }}>Dia de Descanso</h4>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Aproveite para recuperar as energias! 🏃‍♂️⚡</p>
         </div>
       )}
 

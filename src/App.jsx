@@ -27,7 +27,7 @@ import { athleteData } from './data/mockData';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const calculateZones = (vamInput, maxHr) => {
+const calculateZones = (vamInput, maxHr, hrMethod = 'max', restingHr = 60, lthrVal = 170) => {
   let vamKmh = 0;
   if (typeof vamInput === 'string' && vamInput.includes(':')) {
     const [m, s] = vamInput.split(':').map(Number);
@@ -37,18 +37,40 @@ const calculateZones = (vamInput, maxHr) => {
   }
 
   const maxHeartRate = parseInt(maxHr) || 0;
+  const restingHeartRate = parseInt(restingHr) || 60;
+  const lthr = parseInt(lthrVal) || 170;
+  const method = hrMethod || 'max';
+
   const zoneNames = ['Recuperação', 'Aeróbico Leve', 'Aeróbico', 'Limiar', 'VAM (Máximo)'];
-  const vamPcts = [0.65, 0.75, 0.85, 0.92, 1.0];
+  const vamPcts = [0.60, 0.70, 0.80, 0.90, 1.0];
   
-  // Percentuais de FC: 
-  // Z1: <65%, Z2: 65-75%, Z3: 75-85%, Z4: 85-92%, Z5: 92-100%
-  const hrPcts = [
-    { min: 0, max: 0.65 },
-    { min: 0.65, max: 0.75 },
-    { min: 0.75, max: 0.85 },
-    { min: 0.85, max: 0.92 },
-    { min: 0.92, max: 1.0 }
-  ];
+  let hrRanges = [];
+  
+  if (method === 'max') {
+    // Percentuais ajustados para bater com o perfil do aluno (71, 78, 85, 93)
+    const pcts = [0.71, 0.78, 0.85, 0.93, 1.0];
+    hrRanges = pcts.map((p, i) => {
+        const min = i === 0 ? 0 : pcts[i-1];
+        return { min: Math.round(maxHeartRate * min), max: Math.round(maxHeartRate * p) };
+    });
+  } else if (method === 'rfc') {
+    const reserve = maxHeartRate - restingHeartRate;
+    const pcts = [0.71, 0.78, 0.85, 0.93, 1.0];
+    hrRanges = pcts.map((p, i) => {
+        const min = i === 0 ? 0 : pcts[i-1];
+        return { min: Math.round((reserve * min) + restingHeartRate), max: Math.round((reserve * p) + restingHeartRate) };
+    });
+  } else if (method === 'lthr') {
+    // Protocolo Joe Friel
+    const pcts = [
+        { min: 0.80, max: 0.85 },
+        { min: 0.85, max: 0.89 },
+        { min: 0.89, max: 0.94 },
+        { min: 0.94, max: 0.99 },
+        { min: 0.99, max: 1.10 }
+    ];
+    hrRanges = pcts.map(p => ({ min: Math.round(lthr * p.min), max: Math.round(lthr * p.max) }));
+  }
 
   return zoneNames.map((name, i) => {
     const speed = vamKmh * vamPcts[i];
@@ -58,10 +80,8 @@ const calculateZones = (vamInput, maxHr) => {
     const pace = paceDecimal > 0 ? `${m}:${s.toString().padStart(2, '0')}` : '--';
     
     let hrRange = '--';
-    if (maxHeartRate > 0) {
-      const minHr = Math.round(maxHeartRate * hrPcts[i].min);
-      const maxHrZone = Math.round(maxHeartRate * hrPcts[i].max);
-      hrRange = i === 0 ? `< ${maxHrZone}` : `${minHr} - ${maxHrZone}`;
+    if (hrRanges[i]) {
+      hrRange = i === 0 ? `< ${hrRanges[i].max}` : `${hrRanges[i].min} - ${hrRanges[i].max}`;
     }
 
     return { name, pace, hrRange };
@@ -78,6 +98,9 @@ const mapSupabaseToAthlete = (data, integrations = []) => {
     name: data.name || 'Atleta',
     vam: data.vam || '--',
     maxHr: data.max_hr || '--',
+    hrMethod: data.hr_method || 'max',
+    restingHr: data.resting_hr || null,
+    lthr: data.lthr || null,
     objective: data.objective || 'Definir Objetivo',
     profileImage: data.avatar_url || null,
     gender: data.gender || '--',
@@ -101,7 +124,7 @@ const mapSupabaseToAthlete = (data, integrations = []) => {
 
   return {
     ...athleteBase,
-    zones: calculateZones(athleteBase.vam, athleteBase.maxHr)
+    zones: calculateZones(athleteBase.vam, athleteBase.maxHr, athleteBase.hrMethod, athleteBase.restingHr, athleteBase.lthr)
   };
 };
 
@@ -120,10 +143,10 @@ const UrlCleanup = ({ onConnected }) => {
   return null;
 };
 
-const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthleteRaw, handlePhotoUpload, session, updateProfile, navigate, deferredPrompt, handleInstallApp }) => {
+const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthleteRaw, handlePhotoUpload, session, updateProfile, navigate, deferredPrompt, handleInstallApp, theme, setTheme }) => {
   const location = useLocation();
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)', transition: 'background-color 0.3s ease' }}>
       <AnimatePresence mode="wait">
         <motion.div
           key={location.pathname}
@@ -146,6 +169,8 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
                 onEdit={() => navigate('/aluno/perfil/edit')} 
                 onPhotoUpload={handlePhotoUpload}
                 onLogout={() => supabase.auth.signOut()}
+                theme={theme}
+                setTheme={setTheme}
               />
             } />
             <Route path="/perfil/edit" element={
@@ -182,7 +207,13 @@ const AppContent = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [photoToEdit, setPhotoToEdit] = useState(null);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
@@ -326,6 +357,9 @@ const AppContent = () => {
           birth_date: updates.birthDate,
           vam: updates.vam,
           max_hr: updates.maxHr,
+          hr_method: updates.hrMethod,
+          resting_hr: updates.restingHr,
+          lthr: updates.lthr,
           weight: updates.weight,
           next_race_name: updates.nextRaceName,
           next_race_date: updates.nextRaceDate
@@ -394,6 +428,8 @@ const AppContent = () => {
                     navigate={navigate}
                     deferredPrompt={deferredPrompt}
                     handleInstallApp={handleInstallApp}
+                    theme={theme}
+                    setTheme={setTheme}
                 />
                 {photoToEdit && (
                     <PhotoEditorModal 

@@ -13,6 +13,8 @@
     <base href="/paineldoprofessor/">
     <link rel="stylesheet" href="style.css?v=3.1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
     <!-- Mobile toggle -->
@@ -500,8 +502,32 @@
                     <div class="input-col"><label>FC Máx. Teórica</label><input type="text" id="athlete-theo-hr" readonly style="background:var(--bg);border-style:dashed;"></div>
                 </div>
                 <div class="form-row">
-                    <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185"></div>
+                    <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185" oninput="previewAthleteVAM()"></div>
                     <div class="input-col"><label>Tempo VAM (min)</label><input type="number" step="0.1" min="0.1" id="athlete-test" placeholder="Ex: 11.5" oninput="previewAthleteVAM()"></div>
+                </div>
+                
+                <div style="margin-top: 16px; padding: 16px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border-strong);">
+                    <h4 style="font-size: 13px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ri-heart-pulse-line" style="color: var(--primary);"></i> Configuração de Zonas de FC
+                    </h4>
+                    <div class="form-row">
+                        <div class="input-col">
+                            <label>Método de Cálculo</label>
+                            <select id="athlete-hr-method" onchange="toggleHRFields(); previewAthleteVAM();">
+                                <option value="max">% FC Máxima</option>
+                                <option value="rfc">% FC Reserva (Karvonen)</option>
+                                <option value="lthr">% Limiar de Lactato (LTHR)</option>
+                            </select>
+                        </div>
+                        <div class="input-col" id="col-resting-hr" style="display:none;">
+                            <label>FC Repouso (bpm)</label>
+                            <input type="number" id="athlete-resting-hr" placeholder="Ex: 55" oninput="previewAthleteVAM()">
+                        </div>
+                        <div class="input-col" id="col-lthr" style="display:none;">
+                            <label>FC Limiar (LTHR)</label>
+                            <input type="number" id="athlete-lthr" placeholder="Ex: 172" oninput="previewAthleteVAM()">
+                        </div>
+                    </div>
                 </div>
                 <div id="athlete-vam-preview" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:16px;margin-bottom:16px;">
                     <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Pré-visualização do VAM</div>
@@ -564,21 +590,40 @@
         </div>
     </div>
 
-    <!-- Strava Graphs Modal -->
-    <div class="modal" id="modal-strava-graph">
-        <div class="modal-card" style="max-width: 800px; width: 90%;">
-            <div class="modal-header">
-                <h3>Gráficos do Treino</h3>
-                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+    <!-- Modal Zoom de Gráfico (Garmin Style) -->
+    <div class="modal" id="modal-zoom-chart" style="z-index: 110;">
+        <div class="modal-card modal-xl" style="height: 85vh; max-width: 1100px; background: #fff; color: #333; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 12px 20px;">
+                <h3 id="zoom-chart-title" style="font-size: 14px; font-weight: 700; color: #495057; text-transform: uppercase; letter-spacing: 1px;">Análise de Atividade</h3>
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #6c757d;">Visualização:</span>
+                        <select id="zoom-hr-mode" onchange="applyZoomOverlay()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
+                            <option value="zones">Zonas de Intensidade</option>
+                            <option value="classic">Clássico (Vermelho)</option>
+                        </select>
+                    </div>
+                    <div id="overlay-control" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #6c757d;">Sobreposição:</span>
+                        <select id="zoom-overlay-select" onchange="applyZoomOverlay()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
+                            <option value="">Nenhuma</option>
+                            <option value="pace">Ritmo</option>
+                            <option value="heartrate">Frequência Cardíaca</option>
+                            <option value="altitude">Elevação</option>
+                        </select>
+                    </div>
+                    <button class="btn-close" onclick="closeZoomModal()" style="background: none; border: none; font-size: 20px; color: #adb5bd; cursor: pointer;"><i class="ri-close-line"></i></button>
+                </div>
             </div>
-            <div class="modal-body">
-                <div id="strava-graph-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
-                    Buscando dados de telemetria...
+            <div class="modal-body" style="padding: 30px 40px; display: flex; flex-direction: column; background: #fff; height: calc(85vh - 60px);">
+                <div style="flex: 1; min-height: 0; position: relative; width: 100%;">
+                    <canvas id="zoomCanvas"></canvas>
                 </div>
-                <div id="strava-graph-error" style="padding:40px; text-align:center; color:#fc4c02; display:none; font-weight: bold;">
-                </div>
-                <div id="strava-graph-container" style="position: relative; height: 400px; width: 100%; display: none;">
-                    <canvas id="stravaChart"></canvas>
+                <div style="display: flex; justify-content: center; padding-top: 15px; border-top: 1px solid #f1f3f5;">
+                    <select id="zoom-xaxis-select" onchange="applyZoomXAxis()" style="padding: 4px 12px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
+                        <option value="distance">De acordo com a distância</option>
+                        <option value="time">De acordo com o tempo</option>
+                    </select>
                 </div>
             </div>
         </div>
@@ -598,6 +643,96 @@
                 <div id="garmin-error" style="padding:40px; text-align:center; color:#fc4c02; display:none; font-weight: bold;">
                 </div>
                 <div id="garmin-details-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 16px 0;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Detail Modal -->
+    <div class="modal" id="modal-activity-detail">
+        <div class="modal-card modal-xl" style="max-width: 1000px; height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3 id="act-detail-title">Detalhes da Atividade</h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0;">
+                <div id="act-detail-map" style="height: 45vh; width: 100%; background: #eee;"></div>
+                <div style="padding: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div id="act-detail-avatar" style="width: 48px; height: 48px; border-radius: 12px; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px;">
+                                A
+                            </div>
+                            <div>
+                                <div id="act-detail-athlete" style="font-size: 18px; font-weight: 800;">Nome do Atleta</div>
+                                <div id="act-detail-date" style="font-size: 13px; color: var(--text-muted);">Data da atividade</div>
+                            </div>
+                        </div>
+                        <div id="act-detail-type" style="background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 100px; font-size: 13px; font-weight: 800; text-transform: uppercase;">
+                            Corrida
+                        </div>
+                    </div>
+
+                    <div id="act-detail-metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                        <!-- Métricas serão inseridas aqui -->
+                    </div>
+
+
+                    <div id="act-detail-charts" style="display: none; border-top: 1px solid var(--border); padding-top: 24px;">
+                        <div class="chart-controls-bar">
+                            <h4 style="font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                                <i class="ri-line-chart-line" style="color: #fc4c02;"></i> Análise de Telemetria
+                            </h4>
+                            <div class="chart-toggle-group">
+                                <button id="btn-xaxis-distance" class="chart-toggle-btn active" onclick="setChartXAxis('distance')">Distância</button>
+                                <button id="btn-xaxis-time" class="chart-toggle-btn" onclick="setChartXAxis('time')">Tempo</button>
+                            </div>
+                        </div>
+                        
+                        <div class="premium-chart-stack" id="detail-charts-stack">
+                            <!-- Gráfico de Ritmo -->
+                            <div class="premium-chart-container">
+                                <div class="chart-label-wrap">
+                                    <div class="chart-title"><i class="ri-speed-up-line" style="color:#007aff;"></i> Ritmo</div>
+                                    <div id="avg-pace-tag" class="chart-avg-tag">Média: --</div>
+                                </div>
+                                <div class="chart-wrapper" style="height: 180px; position: relative;">
+                                    <canvas id="detailChartPace"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Gráfico de FC -->
+                            <div class="premium-chart-container">
+                                <div class="chart-label-wrap">
+                                    <div class="chart-title"><i class="ri-pulse-line" style="color:#ff2d55;"></i> Frequência Cardíaca</div>
+                                    <div id="avg-hr-tag" class="chart-avg-tag">Média: --</div>
+                                </div>
+                                <div class="chart-wrapper" style="height: 150px; position: relative;">
+                                    <canvas id="detailChartHR"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Gráfico de Elevação -->
+                            <div class="premium-chart-container">
+                                <div class="chart-label-wrap">
+                                    <div class="chart-title"><i class="ri-landscape-line" style="color:#64748b;"></i> Elevação</div>
+                                    <div id="avg-elev-tag" class="chart-avg-tag">-- m</div>
+                                </div>
+                                <div class="chart-wrapper" style="height: 120px; position: relative;">
+                                    <canvas id="detailChartElevation"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p style="font-size: 11px; color: var(--text-muted); text-align: center; margin-top: -10px; margin-bottom: 20px;">
+                            <i class="ri-information-line"></i> Passe o mouse sobre os gráficos para ver detalhes e sincronizar com o mapa.
+                        </p>
+                    </div>
+
+
+                    <div id="act-detail-extra" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; padding-top: 20px; border-top: 1px solid var(--border); margin-top: 20px;">
+                        <!-- Mais detalhes -->
+                    </div>
                 </div>
             </div>
         </div>

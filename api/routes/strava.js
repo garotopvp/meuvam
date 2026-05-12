@@ -113,7 +113,7 @@ const getValidToken = async (userId) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: parseInt(process.env.STRAVA_CLIENT_ID || '190374', 10),
-        client_secret: process.env.STRAVA_CLIENT_SECRET || '98e467807fcb0fa87ab88df605542cb9de3f53bee',
+        client_secret: process.env.STRAVA_CLIENT_SECRET || '98e467807fcb0fa87ab8df605542cb9de3f53bee',
         refresh_token: integration.refresh_token,
         grant_type: 'refresh_token'
       })
@@ -168,16 +168,17 @@ router.get('/activities', async (req, res) => {
         description: `Importado do Strava. Esforço percebido: ${a.suffer_score || '--'}`,
         status: 'completed',
         effort: Math.round(a.suffer_score / 10) || 5, // Aprox.
-      metrics: {
-        distance: `${(a.distance / 1000).toFixed(2)} km`,
-        duration: `${Math.round(a.moving_time / 60)} min`,
-        pace: a.distance > 0 ? formatPace(a.moving_time / (a.distance / 1000)) : null,
-        elevation: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)}m` : '--',
-        avgHeartRate: a.average_heartrate ? Math.round(a.average_heartrate) : '--',
-        maxHeartRate: a.max_heartrate ? Math.round(a.max_heartrate) : '--',
-        sufferScore: a.suffer_score || '--'
-      }
-    };
+        polyline: a.map ? a.map.summary_polyline : null,
+        metrics: {
+          distance: `${(a.distance / 1000).toFixed(2)} km`,
+          duration: `${Math.round(a.moving_time / 60)} min`,
+          pace: a.distance > 0 ? formatPace(a.moving_time / (a.distance / 1000)) : null,
+          elevation: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)}m` : '--',
+          avgHeartRate: a.average_heartrate ? Math.round(a.average_heartrate) : '--',
+          maxHeartRate: a.max_heartrate ? Math.round(a.max_heartrate) : '--',
+          sufferScore: a.suffer_score || '--'
+        }
+      };
     });
 
     // Salvar no banco (ignora se já existir pelo ID - vamos precisar do ID do strava para não duplicar, mas para teste simples vamos fazer upsert simples ou ignorar conflito)

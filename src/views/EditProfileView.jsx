@@ -74,6 +74,36 @@ const EditProfileView = ({ athlete, onSave, onCancel }) => {
           </div>
         </div>
 
+        <div style={{ padding: '1.25rem', background: 'var(--surface-accent)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+          <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+             Zonas de Frequência Cardíaca
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={labelStyle}>Método de Cálculo</label>
+              <select style={{ ...inputStyle, background: 'var(--surface)', cursor: 'pointer' }} value={temp.hrMethod || 'max'} onChange={(e) => upd('hrMethod', e.target.value)}>
+                <option value="max">% FC Máxima</option>
+                <option value="rfc">% FC Reserva (Karvonen)</option>
+                <option value="lthr">% Limiar de Lactato (LTHR)</option>
+              </select>
+            </div>
+            
+            {temp.hrMethod === 'rfc' && (
+              <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={labelStyle}>FC de Repouso (bpm)</label>
+                <input type="number" style={{ ...inputStyle, background: 'var(--surface)' }} placeholder="Ex: 55" value={temp.restingHr} onChange={(e) => upd('restingHr', e.target.value)} />
+              </div>
+            )}
+
+            {temp.hrMethod === 'lthr' && (
+              <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={labelStyle}>FC Limiar (LTHR)</label>
+                <input type="number" style={{ ...inputStyle, background: 'var(--surface)' }} placeholder="Ex: 172" value={temp.lthr} onChange={(e) => upd('lthr', e.target.value)} />
+              </div>
+            )}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <label style={labelStyle}>⚖️ Peso (kg)</label>
           <input type="number" style={inputStyle} placeholder="ex: 70" value={temp.weight} onChange={(e) => upd('weight', e.target.value)} />

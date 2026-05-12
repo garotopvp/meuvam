@@ -36,6 +36,8 @@ let categories=rawCats, groups=rawGroups;
 let athletes=JSON.parse(localStorage.getItem('vdot_athletes'))||[];
 let historyPlans=JSON.parse(localStorage.getItem('vdot_history'))||[];
 let activeCategory=null, athleteSort={key:'name',asc:true};
+let _currentStravaActivities = [];
+let _currentGarminActivities = [];
 
 // ─── SAVE ───
 function saveState(k=['cats','groups','athletes','history']){
@@ -47,7 +49,7 @@ function saveState(k=['cats','groups','athletes','history']){
 
 // ─── DOM ───
 const $=id=>document.getElementById(id);
-const allModals=['modal-group','modal-athlete','modal-history','modal-export','modal-assign','modal-duplicate','modal-strava'].map(id=>$(id)).filter(Boolean);
+const allModals=['modal-group','modal-athlete','modal-history','modal-export','modal-assign','modal-duplicate','modal-strava','modal-strava-graph','modal-garmin-details','modal-activity-detail'].map(id=>$(id)).filter(Boolean);
 const daysNames=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 const phaseLabels={warmup:'Aquecimento',main:'Principal',cooldown:'Desaquec.'};
 const VAM_ZONES=[{label:'Recuperação',pct:60,color:'#94a3b8'},{label:'Aeróbico Leve',pct:70,color:'#3b82f6'},{label:'Aeróbico',pct:80,color:'#10b981'},{label:'Limiar',pct:90,color:'#f59e0b'},{label:'VAM (Máximo)',pct:100,color:'#ef4444'}];
@@ -184,15 +186,6 @@ function renderDashboard(){
     rec.innerHTML=recent.map(h=>{const a=athletes.find(x=>x.id===h.athleteId);const d=new Date(h.id).toLocaleDateString('pt-BR');
         return`<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);"><div><div style="font-weight:600;font-size:14px;">${a?a.name:'Removido'}</div><div style="font-size:12px;color:var(--text-muted);">${h.calcData.categoryName} · ${h.calcData.groupName} · ${h.calcData.volume}km</div></div><div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:var(--text-muted);">${d}</span><button class="btn btn-secondary" onclick="viewExport(${h.id})" style="padding:5px 10px;font-size:12px;"><i class="ri-eye-line"></i> Ver</button></div></div>`;
     }).join('');
-
-    // Add Import Button if not enough groups
-    if (groups.length < 20) {
-        const importBtn = document.createElement('div');
-        importBtn.style.cssText = "margin-top:20px; padding:20px; background:var(--primary); border-radius:var(--radius); color:white; text-align:center; cursor:pointer; font-weight:800;";
-        importBtn.innerHTML = '<i class="ri-download-cloud-2-line"></i> IMPORTAR PLANILHAS BASE (1 A 4)';
-        importBtn.onclick = importBasePlans;
-        rec.appendChild(importBtn);
-    }
 }
 
 function importBasePlans() {
@@ -813,8 +806,71 @@ function renderAthletes(){
             </td></tr>`;}).join('');
 }
 
-function previewAthleteVAM(){const t=parseFloat($('athlete-test').value);const pv=$('athlete-vam-preview');if(!t||t<=0){pv.style.display='none';return;}const vam=180/t;pv.style.display='block';
-    $('athlete-vam-zones').innerHTML=VAM_ZONES.map(z=>{const spd=vam*(z.pct/100);return`<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="font-size:12px;color:#475569;">${z.label} (${z.pct}%)</span><span style="font-size:13px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;}).join('');
+function toggleHRFields() {
+    const method = $('athlete-hr-method').value;
+    $('col-resting-hr').style.display = method === 'rfc' ? 'block' : 'none';
+    $('col-lthr').style.display = method === 'lthr' ? 'block' : 'none';
+}
+
+function calculateHRZones(athlete) {
+    const method = athlete.hrMethod || 'max';
+    const maxHR = athlete.maxHr || 190;
+    const restingHR = athlete.restingHr || 60;
+    const lthr = athlete.lthr || 170;
+
+    const zones = { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 };
+
+    if (method === 'max') {
+        zones.z1 = maxHR * 0.71;
+        zones.z2 = maxHR * 0.78;
+        zones.z3 = maxHR * 0.85;
+        zones.z4 = maxHR * 0.93;
+    } else if (method === 'rfc') {
+        const reserve = maxHR - restingHR;
+        zones.z1 = (reserve * 0.60) + restingHR;
+        zones.z2 = (reserve * 0.70) + restingHR;
+        zones.z3 = (reserve * 0.80) + restingHR;
+        zones.z4 = (reserve * 0.90) + restingHR;
+    } else if (method === 'lthr') {
+        // Protocolo Joe Friel para LTHR
+        zones.z1 = lthr * 0.85;
+        zones.z2 = lthr * 0.89;
+        zones.z3 = lthr * 0.94;
+        zones.z4 = lthr * 0.99;
+    }
+
+    return zones;
+}
+
+function previewAthleteVAM(){
+    const t=parseFloat($('athlete-test').value);
+    const pv=$('athlete-vam-preview');
+    if(!t||t<=0){pv.style.display='none';} else {
+        const vam=180/t;pv.style.display='block';
+        $('athlete-vam-zones').innerHTML=VAM_ZONES.map(z=>{const spd=vam*(z.pct/100);return`<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="font-size:12px;color:#475569;">${z.label} (${z.pct}%)</span><span style="font-size:13px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;}).join('');
+    }
+
+    // Preview de Zonas de FC
+    const tempAthlete = {
+        testHr: parseInt($('athlete-test-hr').value),
+        hrMethod: $('athlete-hr-method').value,
+        restingHr: parseInt($('athlete-resting-hr').value),
+        lthr: parseInt($('athlete-lthr').value)
+    };
+    const hrZones = calculateHRZones(tempAthlete);
+    const hrHtml = `
+        <div style="margin-top:12px; padding-top:12px; border-top:1px dashed #bfdbfe;">
+            <div style="font-size:11px; font-weight:700; color:#2563eb; text-transform:uppercase; margin-bottom:8px;">Zonas de Frequência Cardíaca</div>
+            <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; text-align:center;">
+                <div style="font-size:10px;"><div style="background:#94a3b8; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z1<br><b><${Math.round(hrZones.z1)}</b></div>
+                <div style="font-size:10px;"><div style="background:#3b82f6; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z2<br><b><${Math.round(hrZones.z2)}</b></div>
+                <div style="font-size:10px;"><div style="background:#10b981; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z3<br><b><${Math.round(hrZones.z3)}</b></div>
+                <div style="font-size:10px;"><div style="background:#f59e0b; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z4<br><b><${Math.round(hrZones.z4)}</b></div>
+                <div style="font-size:10px;"><div style="background:#ef4444; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z5<br><b>>${Math.round(hrZones.z4)}</b></div>
+            </div>
+        </div>
+    `;
+    $('athlete-vam-zones').innerHTML += hrHtml;
 }
 
 function openAthleteModal(id=null){
@@ -825,7 +881,14 @@ function openAthleteModal(id=null){
     const clearBtn = $('btn-clear-workouts');
     if (clearBtn) clearBtn.style.display = id ? 'flex' : 'none';
     
-    $('athlete-name').value=a?a.name:'';$('athlete-phone').value=a?(a.phone||''):'';$('athlete-dob').value=a?(a.dob||''):'';$('athlete-test-hr').value=a?(a.testHr||''):'';$('athlete-test').value=a?(a.testTime||''):'';$('athlete-notes').value=a?(a.notes||''):'';sel.value=a?(a.groupId||''):'';
+    $('athlete-name').value=a?a.name:'';$('athlete-phone').value=a?(a.phone||''):'';$('athlete-dob').value=a?(a.dob||''):'';$('athlete-test-hr').value=a?(a.maxHr||''):'';$('athlete-test').value=a?(a.testTime||''):'';$('athlete-notes').value=a?(a.notes||''):'';sel.value=a?(a.groupId||''):'';
+    
+    // Novos campos de FC
+    $('athlete-hr-method').value = a?(a.hrMethod||'max'):'max';
+    $('athlete-resting-hr').value = a?(a.restingHr||''):'';
+    $('athlete-lthr').value = a?(a.lthr||''):'';
+    
+    toggleHRFields();
     calculateTheoreticalHR();previewAthleteVAM();modal.classList.add('show');
 }
 function calculateTheoreticalHR(){const dob=$('athlete-dob').value,el=$('athlete-theo-hr');if(!dob){el.value='';return;}const b=new Date(dob),now=new Date();let age=now.getFullYear()-b.getFullYear();const m=now.getMonth()-b.getMonth();if(m<0||(m===0&&now.getDate()<b.getDate()))age--;el.value=(age>0&&age<120)?`${220-age} bpm (${age} anos)`:'';}
@@ -834,8 +897,10 @@ function saveAthlete(){
           name=$('athlete-name').value.trim(),
           phone=$('athlete-phone').value,
           dob=$('athlete-dob').value,
-          testHr=parseInt($('athlete-test-hr').value)||null,
-          // Corrigir parsing de vírgula para ponto (padrão brasileiro)
+          maxHr=parseInt($('athlete-test-hr').value)||null,
+          hrMethod=$('athlete-hr-method').value,
+          restingHr=parseInt($('athlete-resting-hr').value)||null,
+          lthr=parseInt($('athlete-lthr').value)||null,
           testTime=parseFloat($('athlete-test').value.replace(',', '.'))||null,
           groupId=parseInt($('athlete-group').value)||null,
           notes=$('athlete-notes').value.trim();
@@ -843,9 +908,21 @@ function saveAthlete(){
     if(!name)return showToast('Nome obrigatório','error');
     if(id){
         const idx = athletes.findIndex(x=>x.id==id);
-        if(idx !== -1) Object.assign(athletes[idx],{name,phone,dob,testHr,testTime,groupId,notes});
+        if(idx !== -1) {
+            Object.assign(athletes[idx],{name,phone,dob,maxHr,hrMethod,restingHr,lthr,testTime,groupId,notes});
+            // Update Supabase if linked
+            if (athletes[idx].supabaseId) {
+                dbClient.from('profiles').update({ 
+                    max_hr: maxHr, 
+                    hr_method: hrMethod,
+                    resting_hr: restingHr,
+                    lthr: lthr,
+                    vam: testTime ? 180/testTime : null 
+                }).eq('id', athletes[idx].supabaseId).then();
+            }
+        }
     }
-    else{athletes.push({id:generateId(),name,phone,dob,testHr,testTime,groupId,notes});}
+    else{athletes.push({id:generateId(),name,phone,dob,maxHr,hrMethod,restingHr,lthr,testTime,groupId,notes});}
     saveState(['athletes']);closeModals();renderAthletes();renderDashboard();showToast(id?'Atualizado!':'Cadastrado!');
 }
 function editAthlete(id){openAthleteModal(id);}
@@ -1111,6 +1188,15 @@ async function syncAthletesFromSupabase(isManual = false) {
                 if (p.name && (!athletes[index].name || athletes[index].name.trim() === '')) {
                     athletes[index].name = p.name;
                 }
+                
+                // Sincronizar FC Máxima (max_hr)
+                if (p.max_hr && p.max_hr !== athletes[index].maxHr) {
+                    athletes[index].maxHr = p.max_hr;
+                }
+                athletes[index].hrMethod = p.hr_method || 'max';
+                athletes[index].restingHr = p.resting_hr || null;
+                athletes[index].lthr = p.lthr || null;
+
                 const oldVam = athletes[index].testTime;
                 if (supabaseVamTime && supabaseVamTime !== oldVam) {
                     athletes[index].testTime = supabaseVamTime;
@@ -1123,6 +1209,11 @@ async function syncAthletesFromSupabase(isManual = false) {
                     name: p.name || '',
                     email: p.email || '',
                     phone: '',
+                    testHr: p.max_hr || null, // Importar FC Máx
+                    maxHr: p.max_hr || null,
+                    hrMethod: p.hr_method || 'max',
+                    restingHr: p.resting_hr || null,
+                    lthr: p.lthr || null,
                     testTime: supabaseVamTime,
                     groupId: null,
                     notes: 'Importado do App'
@@ -1638,7 +1729,7 @@ async function renderStravaFeed() {
         // ✅ CORRIGIDO: Usar supabaseId (UUID do banco) na chamada à API
         const activityPromises = athletesWithAccount.map(async (athlete) => {
             try {
-                const response = await fetch(`/api/strava/activities?userId=${athlete.supabaseId}`);
+                const response = await fetch(`/api/strava/activities?userId=${athlete.supabaseId}&_t=${Date.now()}`);
                 if (!response.ok) return [];
                 const data = await response.json();
                 if (!Array.isArray(data)) return [];
@@ -1650,6 +1741,7 @@ async function renderStravaFeed() {
         
         const results = await Promise.all(activityPromises);
         const allActivities = results.flat().sort((a, b) => new Date(b.date) - new Date(a.date));
+        _currentStravaActivities = allActivities;
         
         loading.style.display = 'none';
         
@@ -1685,6 +1777,15 @@ async function renderStravaFeed() {
                     
                     <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.title}</h4>
                     
+                    ${act.polyline ? `
+                    <div style="position: relative; margin-bottom: 16px;">
+                        <div id="map-${act.strava_id}" style="height: 180px; width: 100%; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; position: relative; z-index: 1;"></div>
+                        <button onclick="openActivityDetail('${act.strava_id}')" style="position: absolute; top: 10px; right: 10px; z-index: 2; background: white; border: none; width: 32px; height: 32px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text);">
+                            <i class="ri-fullscreen-line"></i>
+                        </button>
+                    </div>
+                    ` : ''}
+
                     <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
                         <div>
                             <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
@@ -1700,51 +1801,21 @@ async function renderStravaFeed() {
                         </div>
                     </div>
                     
-                    <details style="margin-top: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg);">
-                        <summary style="padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; list-style: none;">
-                            <i class="ri-bar-chart-2-line" style="font-size: 16px; color: #fc4c02;"></i> Ver métricas detalhadas (FC, Elevação)
-                        </summary>
-                        <div style="padding: 0 16px 16px 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px;">
-                            <div>
-                                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">FC Média / Máx</div>
-                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.metrics.avgHeartRate} / ${act.metrics.maxHeartRate} bpm</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ganho de Elevação</div>
-                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.metrics.elevation}</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Esforço (Suffer Score)</div>
-                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.metrics.sufferScore}</div>
-                            </div>
-                        </div>
-                        <div style="padding: 0 16px 16px 16px; text-align: center; display: flex; flex-direction: column; gap: 8px;">
-                            <button onclick="openStravaGraph('${act.athleteId}', '${act.strava_id}')" style="background: #fc4c02; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                                <i class="ri-line-chart-line"></i> Ver Gráficos de Telemetria
-                            </button>
-                            ${act.garmin_id ? `
-                            <button onclick="openGarminDetails('${act.athleteId}', '${act.garmin_id}')" style="background: #000; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                                <i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin
-                            </button>
-                            ` : ''}
-                        </div>
-                    </details>
-                    
                     <div style="margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
-                        ${act.garmin_id ? `
-                        <a href="https://connect.garmin.com/modern/activity/${act.garmin_id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #000; color: #fff; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; transition: all 0.2s;">
-                            <i class="ri-compass-discover-line"></i> Ver no Garmin Connect
-                        </a>
-                        ` : ''}
-                        ${act.strava_id ? `
-                        <a href="https://www.strava.com/activities/${act.strava_id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; border: 1px solid #fc4c0230; transition: all 0.2s;">
-                            <i class="ri-external-link-line"></i> Ver no Strava
-                        </a>
-                        ` : ''}
+                        <button onclick="openActivityDetail('${act.strava_id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #fc4c02; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s;">
+                            <i class="ri-line-chart-line"></i> Abrir Análise
+                        </button>
                     </div>
                 </div>
             `;
         }).join('');
+
+        // Inicializar os mapas após renderizar o HTML
+        allActivities.forEach(act => {
+            if (act.polyline) {
+                initActivityMap(act.strava_id, act.polyline);
+            }
+        });
         
     } catch (err) {
         console.error('Erro no feed global:', err);
@@ -1852,6 +1923,7 @@ async function renderGarminFeed() {
                     <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.name}</h4>
                     
                     <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
+
                         <div>
                             <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
                             <div style="font-size: 18px; font-weight: 900; color: #000;">${act.distance} km</div>
@@ -1904,7 +1976,7 @@ function checkDOMIntegrity() {
 }
 window.addEventListener('load', checkDOMIntegrity);
 
-let stravaChartInstance = null;
+let stravaChartInstances = [];
 
 async function openStravaGraph(athleteId, stravaId) {
     if (!stravaId || stravaId === 'undefined') {
@@ -1968,8 +2040,9 @@ async function openStravaGraph(athleteId, stravaId) {
                 backgroundColor: 'transparent',
                 yAxisID: 'yHR',
                 pointRadius: 0,
-                borderWidth: 2,
-                tension: 0.4
+                pointHoverRadius: 5,
+                borderWidth: 2.5,
+                tension: 0.3
             });
         }
 
@@ -1977,7 +2050,8 @@ async function openStravaGraph(athleteId, stravaId) {
         if (streams.velocity_smooth) {
             const paceData = streams.velocity_smooth.map(v => {
                 if (v <= 0) return null;
-                return (1000 / v) / 60; // Minutos decimais
+                const pace = (1000 / v) / 60;
+                return pace > 15 ? null : pace; // Ignorar picos irreais de lentidão
             });
             
             datasets.push({
@@ -1987,8 +2061,9 @@ async function openStravaGraph(athleteId, stravaId) {
                 backgroundColor: 'transparent',
                 yAxisID: 'yPace',
                 pointRadius: 0,
-                borderWidth: 2,
-                tension: 0.4
+                pointHoverRadius: 5,
+                borderWidth: 2.5,
+                tension: 0.3
             });
         }
         
@@ -2003,97 +2078,297 @@ async function openStravaGraph(athleteId, stravaId) {
                 backgroundColor: 'transparent',
                 yAxisID: 'yCadence',
                 pointRadius: 0,
-                borderWidth: 1,
-                tension: 0.4,
-                hidden: true // Ocultar por padrão para não poluir muito
+                pointHoverRadius: 5,
+                borderWidth: 2,
+                tension: 0.3,
+                hidden: false // Agora visível por padrão pois temos espaço empilhado
             });
         }
 
         $('strava-graph-loading').style.display = 'none';
         $('strava-graph-container').style.display = 'block';
 
-        if (stravaChartInstance) {
-            stravaChartInstance.destroy();
-        }
+        // Destruir instâncias anteriores
+        stravaChartInstances.forEach(chart => chart.destroy());
+        stravaChartInstances = [];
 
-        const ctx = document.getElementById('stravaChart').getContext('2d');
-        stravaChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: distanceKm,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Distância (km)' },
-                        ticks: { maxTicksLimit: 10 }
-                    },
-                    yElevation: {
-                        type: 'linear',
-                        display: !!streams.altitude,
-                        position: 'right',
-                        title: { display: true, text: 'Elevação' },
-                        grid: { display: false }
-                    },
-                    yHR: {
-                        type: 'linear',
-                        display: !!streams.heartrate,
-                        position: 'left',
-                        title: { display: true, text: 'FC' },
-                        suggestedMin: 60,
-                        suggestedMax: 200
-                    },
-                    yPace: {
-                        type: 'linear',
-                        display: !!streams.velocity_smooth,
-                        position: 'left',
-                        reverse: true,
-                        title: { display: true, text: 'Pace' },
-                        grid: { display: false },
-                        suggestedMin: 3, 
-                        suggestedMax: 10,
-                        ticks: {
-                            callback: function(value) {
-                                const m = Math.floor(value);
-                                const s = Math.round((value - m) * 60);
-                                return `${m}:${s.toString().padStart(2, '0')}`;
-                            }
+        // Plugin para Sincronização e Linha Vertical (Crosshair)
+        const syncPlugin = {
+            id: 'syncPlugin',
+            afterDraw: (chart) => {
+                if (chart.tooltip?._active?.length) {
+                    const x = chart.tooltip._active[0].element.x;
+                    const yAxis = chart.scales.y;
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(x, chart.scales.y.top);
+                    ctx.lineTo(x, chart.scales.y.bottom);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        };
+
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 2, // Tenta manter uma proporção mais agradável
+            interaction: { mode: 'index', intersect: false },
+            onHover: (event, chartElement, chart) => {
+                // Sincronizar hover entre todos os gráficos
+                const charts = stravaChartInstances;
+                if (!charts || charts.length <= 1) return;
+                
+                const activePoint = chart.getElementsAtEventForMode(event, 'index', { intersect: false }, true);
+                if (activePoint.length > 0) {
+                    const index = activePoint[0].index;
+                    charts.forEach(c => {
+                        if (c !== chart) {
+                            c.setActiveElements([{ datasetIndex: 0, index: index }]);
+                            c.tooltip.setActiveElements([{ datasetIndex: 0, index: index }], { x: 0, y: 0 });
+                            c.render();
                         }
-                    },
-                    yCadence: {
-                        type: 'linear',
-                        display: false, // Ocultar eixo
-                        position: 'right'
-                    }
+                    });
+                }
+            },
+            plugins: {
+                legend: { 
+                    position: 'top', 
+                    align: 'end',
+                    labels: { 
+                        boxWidth: 6, 
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        font: { size: 11, weight: '700', family: "'Inter', sans-serif" },
+                        color: '#94a3b8'
+                    } 
                 },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) label += ': ';
-                                if (context.dataset.yAxisID === 'yPace') {
-                                    const val = context.parsed.y;
-                                    const m = Math.floor(val);
-                                    const s = Math.round((val - m) * 60);
-                                    label += `${m}:${s.toString().padStart(2, '0')}`;
-                                } else {
-                                    label += Math.round(context.parsed.y);
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                    titleColor: '#1e293b',
+                    bodyColor: '#475569',
+                    borderColor: 'rgba(0,0,0,0.06)',
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false,
+                    titleFont: { size: 13, weight: '800', family: "'Inter', sans-serif" },
+                    bodyFont: { size: 12, weight: '600', family: "'Inter', sans-serif" },
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(0,0,0,0.1)',
+                    callbacks: {
+                        title: (context) => `Km ${context[0].label}`,
+                        label: (context) => {
+                            const val = context.parsed.y;
+                            const label = context.dataset.label;
+                            if (label.includes('Ritmo')) {
+                                const m = Math.floor(val);
+                                const s = Math.round((val - m) * 60);
+                                return `Ritmo: ${m}:${s.toString().padStart(2, '0')} min/km`;
+                            }
+                            if (label.includes('FC')) return `FC: ${Math.round(val)} bpm`;
+                            if (label.includes('Cadência')) return `Cadência: ${Math.round(val)} spm`;
+                            if (label.includes('Elevação')) return `Elevação: ${Math.round(val)}m`;
+                            return `${label}: ${val}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: { display: false },
+                    ticks: { 
+                        maxTicksLimit: 10,
+                        font: { size: 10, weight: '600' },
+                        color: '#94a3b8'
+                    },
+                    grid: { display: false }
+                },
+                y: {
+                    beginAtZero: false,
+                    grid: { color: 'rgba(0,0,0,0.03)', drawBorder: false },
+                    ticks: { 
+                        font: { size: 10, weight: '700' },
+                        color: '#64748b',
+                        padding: 8
+                    }
+                }
+            }
+        };
+
+        // 1. Gráfico de Pace
+        if (streams.velocity_smooth) {
+            const paceData = streams.velocity_smooth.map(v => {
+                if (v <= 0) return null;
+                const pace = (1000 / v) / 60;
+                return pace > 15 ? null : pace;
+            });
+            
+            const ctx = document.getElementById('chartPace').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: distanceKm,
+                    datasets: [{
+                        label: 'Ritmo (Pace min/km)',
+                        data: paceData,
+                        borderColor: '#007aff',
+                        backgroundColor: 'rgba(0, 122, 255, 0.08)',
+                        fill: true,
+                        pointRadius: 0,
+                        borderWidth: 2.5,
+                        tension: 0.4
+                    }]
+                },
+                plugins: [syncPlugin],
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            reverse: true,
+                            suggestedMin: 3.5,
+                            suggestedMax: 8,
+                            ticks: {
+                                ...commonOptions.scales.y.ticks,
+                                callback: value => {
+                                    if (value <= 0) return '';
+                                    const m = Math.floor(value);
+                                    const s = Math.round((value - m) * 60);
+                                    return `${m}:${s.toString().padStart(2, '0')}`;
                                 }
-                                return label;
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+            stravaChartInstances.push(chart);
+        }
+
+        // 2. Gráfico de Frequência Cardíaca
+        if (streams.heartrate) {
+            const ctx = document.getElementById('chartHR').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: distanceKm,
+                    datasets: [{
+                        label: 'FC (bpm)',
+                        data: streams.heartrate,
+                        borderColor: '#ff2d55',
+                        backgroundColor: 'rgba(255, 45, 85, 0.05)',
+                        fill: true,
+                        pointRadius: 0,
+                        borderWidth: 2.5,
+                        tension: 0.4,
+                        segment: {
+                            borderColor: ctx => {
+                                const val = ctx.p1.parsed.y;
+                                const athlete = athletes.find(a => a.supabaseId === athleteId);
+                                if (!athlete) return '#ff2d55';
+                                
+                                const zones = calculateHRZones(athlete);
+                                
+                                if (val < zones.z1) return '#94a3b8'; // Z1 (Cinza)
+                                if (val < zones.z2) return '#3b82f6'; // Z2 (Azul)
+                                if (val < zones.z3) return '#10b981'; // Z3 (Verde)
+                                if (val < zones.z4) return '#f59e0b'; // Z4 (Amarelo/Laranja)
+                                return '#ef4444'; // Z5 (Vermelho)
+                            }
+                        }
+                    }]
+                },
+                plugins: [syncPlugin],
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            suggestedMin: 80,
+                            suggestedMax: 190
+                        }
+                    }
+                }
+            });
+            stravaChartInstances.push(chart);
+        }
+
+        // 3. Gráfico de Cadência
+        if (streams.cadence) {
+            const spmData = streams.cadence.map(c => c * 2);
+            const ctx = document.getElementById('chartCadence').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: distanceKm,
+                    datasets: [{
+                        label: 'Cadência (spm)',
+                        data: spmData,
+                        borderColor: '#34c759',
+                        backgroundColor: 'rgba(52, 199, 89, 0.08)',
+                        fill: true,
+                        pointRadius: 0,
+                        borderWidth: 2.5,
+                        tension: 0.4
+                    }]
+                },
+                plugins: [syncPlugin],
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y
+                        }
+                    }
+                }
+            });
+            stravaChartInstances.push(chart);
+        }
+
+        // 4. Gráfico de Elevação
+        if (streams.altitude) {
+            const ctx = document.getElementById('chartElevation').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: distanceKm,
+                    datasets: [{
+                        label: 'Elevação (m)',
+                        data: streams.altitude,
+                        borderColor: '#64748b',
+                        backgroundColor: 'rgba(100, 116, 139, 0.12)',
+                        fill: true,
+                        pointRadius: 0,
+                        borderWidth: 1.5,
+                        tension: 0.4
+                    }]
+                },
+                plugins: [syncPlugin],
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        x: {
+                            ...commonOptions.scales.x,
+                            display: true,
+                            title: { display: true, text: 'Distância (km)', font: { weight: '700' } }
+                        },
+                        y: {
+                            ...commonOptions.scales.y
+                        }
+                    }
+                }
+            });
+            stravaChartInstances.push(chart);
+        }
 
     } catch (err) {
         console.error(err);
@@ -2180,7 +2455,6 @@ async function openGarminDetails(athleteId, garminId) {
 
         $('garmin-details-container').innerHTML = html;
         $('garmin-loading').style.display = 'none';
-
     } catch (err) {
         console.error(err);
         $('garmin-loading').style.display = 'none';
@@ -2188,4 +2462,741 @@ async function openGarminDetails(athleteId, garminId) {
         errDiv.style.display = 'block';
         errDiv.innerText = err.message || 'Erro ao extrair dados da Garmin.';
     }
+}
+
+// ─── MAP UTILS ───
+function decodePolyline(str, precision = 5) {
+    let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, latitude_change, longitude_change, factor = Math.pow(10, precision);
+    while (index < str.length) {
+        byte = null; shift = 0; result = 0;
+        do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+        latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1)); lat += latitude_change;
+        byte = null; shift = 0; result = 0;
+        do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+        longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1)); lng += longitude_change;
+        coordinates.push([lat / factor, lng / factor]);
+    }
+    return coordinates;
+}
+
+
+let detailMapInstance = null;
+let detailMapMarker = null;
+let detailMapCoords = [];
+let detailChartInstances = [];
+let _currentStreams = null;
+let _zoomChart = null;
+let _currentZoomType = null;
+let _currentAthleteId = null;
+let _chartXAxisMode = 'distance';
+let _currentActivityId = null;
+
+function initActivityMap(id, polyline) {
+    setTimeout(() => {
+        const container = $(`map-${id}`);
+        if (!container) {
+            console.warn(`Container de mapa map-${id} não encontrado.`);
+            return;
+        }
+        
+        // Limpar mapa anterior se houver
+        if (container._leaflet_id) {
+            // Se já inicializado, não faz nada ou reconstrói
+            return;
+        }
+
+        const map = L.map(container, { 
+            zoomControl: false, 
+            attributionControl: false, 
+            dragging: false, 
+            touchZoom: false, 
+            scrollWheelZoom: false,
+            doubleClickZoom: false
+        });
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        try {
+            const coords = decodePolyline(polyline);
+            const path = L.polyline(coords, { color: '#fc4c02', weight: 3, opacity: 0.8 }).addTo(map);
+            map.fitBounds(path.getBounds(), { padding: [5, 5] });
+        } catch (e) {
+            console.error('Erro ao processar polilinha:', e);
+        }
+    }, 100);
+}
+
+function openActivityDetail(id) {
+    const act = _currentStravaActivities.find(a => a.strava_id == id);
+    if (!act) return;
+
+    // Resetar estado anterior
+    if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
+    detailMapMarker = null;
+    detailMapCoords = [];
+    detailChartInstances.forEach(c => c.destroy());
+    detailChartInstances = [];
+    _currentStreams = null;
+    _currentAthleteId = act.athleteId;
+    _currentActivityId = act.strava_id; // Guardar ID atual
+
+    $('act-detail-title').textContent = act.title;
+    $('act-detail-athlete').textContent = act.athleteName;
+    $('act-detail-date').textContent = new Date(act.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+    $('act-detail-type').textContent = act.type;
+    $('act-detail-avatar').textContent = act.athleteName.charAt(0);
+    
+    // Metrics Grid
+    const metricsHtml = `
+        <div class="stat-card" style="background: var(--bg);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Distância</div>
+            <div style="font-size: 24px; font-weight: 900; color: #fc4c02;">${act.metrics.distance}</div>
+        </div>
+        <div class="stat-card" style="background: var(--bg);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Pace Médio</div>
+            <div style="font-size: 24px; font-weight: 900;">${act.metrics.pace}</div>
+        </div>
+        <div class="stat-card" style="background: var(--bg);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Tempo Total</div>
+            <div style="font-size: 24px; font-weight: 900;">${act.metrics.duration}</div>
+        </div>
+        <div class="stat-card" style="background: var(--bg);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Ganho de Elevação</div>
+            <div style="font-size: 24px; font-weight: 900;">${act.metrics.elevation}</div>
+        </div>
+    `;
+    $('act-detail-metrics').innerHTML = metricsHtml;
+
+    // Extra Info / Footer
+    const extraHtml = `
+        <div>
+            <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Frequência Cardíaca</div>
+            <div style="font-size: 16px; font-weight: 800;">Média: ${act.metrics.avgHeartRate} bpm / Máx: ${act.metrics.maxHeartRate} bpm</div>
+        </div>
+        <div>
+            <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Esforço (Suffer Score)</div>
+            <div style="font-size: 16px; font-weight: 800;">${act.metrics.sufferScore}</div>
+        </div>
+        <div style="grid-column: 1 / -1; display: flex; gap: 12px; margin-top: 12px;">
+            ${act.garmin_id ? `
+            <button onclick="openGarminDetails('${act.athleteId}', '${act.garmin_id}')" class="btn btn-secondary" style="flex: 1; background: #000; color: #fff;">
+                <i class="ri-compass-discover-line"></i> Dinâmicas Garmin
+            </button>
+            ` : ''}
+            <a href="https://www.strava.com/activities/${act.strava_id}" target="_blank" class="btn btn-secondary" style="flex: 1;">
+                <i class="ri-external-link-line"></i> Ver no Strava
+            </a>
+        </div>
+    `;
+    $('act-detail-extra').innerHTML = extraHtml;
+
+    $('modal-activity-detail').classList.add('show');
+    $('act-detail-charts').style.display = 'none';
+
+    // Renderizar Mapa e depois Gráficos
+    setTimeout(() => renderActivityTelemetry(act), 300);
+}
+
+function setChartXAxis(mode) {
+    if (_chartXAxisMode === mode) return;
+    _chartXAxisMode = mode;
+    
+    // Atualizar botões
+    $('btn-xaxis-distance').classList.toggle('active', mode === 'distance');
+    $('btn-xaxis-time').classList.toggle('active', mode === 'time');
+    
+    // Recarregar gráficos
+    const act = _currentStravaActivities.find(a => a.strava_id == _currentActivityId);
+    if (act) renderActivityTelemetry(act);
+}
+
+async function renderActivityTelemetry(act) {
+    // 1. Mapa (se ainda não renderizado ou precisa atualizar)
+    if (act.polyline && !detailMapInstance) {
+        detailMapCoords = decodePolyline(act.polyline);
+        detailMapInstance = L.map('act-detail-map', { zoomControl: true, attributionControl: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailMapInstance);
+        const path = L.polyline(detailMapCoords, { color: '#fc4c02', weight: 5, opacity: 0.9 }).addTo(detailMapInstance);
+        detailMapInstance.fitBounds(path.getBounds(), { padding: [30, 30] });
+        
+        detailMapMarker = L.circleMarker(detailMapCoords[0], {
+            radius: 8, fillColor: '#fc4c02', color: '#fff', weight: 3, opacity: 1, fillOpacity: 1
+        }).addTo(detailMapInstance);
+    }
+
+    // 2. Gráficos (Telemetria)
+    try {
+        if (!_currentStreams) {
+            const response = await fetch(`/api/strava/activity/${act.strava_id}/streams?userId=${act.athleteId}`);
+            if (!response.ok) return;
+            const rawStreams = await response.json();
+            
+            const streams = {};
+            if (Array.isArray(rawStreams)) {
+                rawStreams.forEach(s => { streams[s.type] = s.data; });
+            } else if (rawStreams && typeof rawStreams === 'object') {
+                for (const key in rawStreams) { if (rawStreams[key]?.data) streams[key] = rawStreams[key].data; }
+            }
+            _currentStreams = streams;
+        }
+
+        const streams = _currentStreams;
+        if (!streams.distance) return;
+
+        $('act-detail-charts').style.display = 'block';
+        
+        // Destruir instâncias anteriores
+        detailChartInstances.forEach(c => c.destroy());
+        detailChartInstances = [];
+
+        // Definir Labels do Eixo X (Distância ou Tempo)
+        let xLabels = [];
+        if (_chartXAxisMode === 'time' && streams.time) {
+            xLabels = streams.time.map(s => {
+                const m = Math.floor(s / 60);
+                const sec = s % 60;
+                return `${m}:${sec.toString().padStart(2, '0')}`;
+            });
+        } else {
+            xLabels = streams.distance.map(d => (d / 1000).toFixed(2));
+        }
+        
+        const syncWithMap = (index) => {
+            if (!detailMapMarker || !detailMapCoords.length) return;
+            const ratio = index / (xLabels.length - 1);
+            const coordIndex = Math.floor(ratio * (detailMapCoords.length - 1));
+            const targetCoord = detailMapCoords[coordIndex];
+            if (targetCoord) detailMapMarker.setLatLng(targetCoord);
+        };
+
+        // Plugin de Crosshair (Linha Vertical)
+        const crosshairPlugin = {
+            id: 'crosshair',
+            afterDraw: (chart) => {
+                if (chart.tooltip?._active?.length) {
+                    const x = chart.tooltip._active[0].element.x;
+                    const yAxis = chart.scales.y;
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(x, yAxis.top);
+                    ctx.lineTo(x, yAxis.bottom);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(252, 76, 2, 0.4)';
+                    ctx.setLineDash([3, 3]);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        };
+
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            onHover: (event, chartElement, chart) => {
+                const activePoint = chart.getElementsAtEventForMode(event, 'index', { intersect: false }, true);
+                if (activePoint.length > 0) {
+                    const index = activePoint[0].index;
+                    syncWithMap(index);
+                    detailChartInstances.forEach(c => {
+                        if (c !== chart) {
+                            c.setActiveElements([{ datasetIndex: 0, index: index }]);
+                            c.tooltip.setActiveElements([{ datasetIndex: 0, index: index }], { x: 0, y: 0 });
+                            c.render();
+                        }
+                    });
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                    titleColor: '#1e293b',
+                    bodyColor: '#475569',
+                    borderColor: 'rgba(0,0,0,0.06)',
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false,
+                    titleFont: { size: 12, weight: '800' },
+                    bodyFont: { size: 13, weight: '700' },
+                    callbacks: {
+                        title: (context) => _chartXAxisMode === 'time' ? `Tempo: ${context[0].label}` : `Km ${context[0].label}`,
+                        label: (context) => {
+                            const val = context.parsed.y;
+                            const label = context.dataset.label;
+                            if (label.includes('Ritmo')) {
+                                const m = Math.floor(val); const s = Math.round((val - m) * 60);
+                                return `Ritmo: ${m}:${s.toString().padStart(2, '0')} /km`;
+                            }
+                            if (label.includes('FC')) return `FC: ${Math.round(val)} bpm`;
+                            return `${label}: ${Math.round(val)}m`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { 
+                    display: false,
+                    grid: { display: false }
+                },
+                y: { 
+                    grid: { color: 'rgba(0,0,0,0.03)', drawBorder: false }, 
+                    ticks: { 
+                        font: { size: 10, weight: '700', family: "'Inter', sans-serif" }, 
+                        color: '#94a3b8',
+                        padding: 8
+                    } 
+                }
+            }
+        };
+
+        // --- 1. PACE CHART ---
+        if (streams.velocity_smooth) {
+            const paceData = streams.velocity_smooth.map(v => {
+                if (v <= 0) return null;
+                const pace = (1000 / v) / 60;
+                return pace > 15 ? null : pace;
+            });
+            
+            // Média de ritmo
+            const validPace = paceData.filter(p => p !== null);
+            const avgPace = validPace.reduce((a, b) => a + b, 0) / validPace.length;
+            const am = Math.floor(avgPace); const as = Math.round((avgPace - am) * 60);
+            $('avg-pace-tag').textContent = `Média: ${am}:${as.toString().padStart(2, '0')} /km`;
+
+            const ctx = $('detailChartPace').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 180);
+            gradient.addColorStop(0, 'rgba(0, 122, 255, 0.2)');
+            gradient.addColorStop(1, 'rgba(0, 122, 255, 0.02)');
+
+            const athlete = athletes.find(a => a.supabaseId === act.athleteId);
+
+            detailChartInstances.push(new Chart(ctx, {
+                type: 'line',
+                data: { 
+                    labels: xLabels, 
+                    datasets: [{ 
+                        label: 'Ritmo', 
+                        data: paceData, 
+                        borderColor: '#007aff', 
+                        backgroundColor: gradient, 
+                        fill: true, 
+                        pointRadius: 0, 
+                        borderWidth: 2.5, 
+                        tension: 0.4,
+                        segment: {
+                            borderColor: ctx => {
+                                if (!athlete || !athlete.testTime) return '#007aff';
+                                const paceVal = ctx.p1.parsed.y;
+                                if (!paceVal) return '#007aff';
+                                const speedKmh = 60 / paceVal;
+                                const vamKmh = 180 / athlete.testTime;
+                                const pct = (speedKmh / vamKmh) * 100;
+                                if (pct < 65) return '#94a3b8';
+                                if (pct < 75) return '#3b82f6';
+                                if (pct < 85) return '#10b981';
+                                if (pct < 95) return '#f59e0b';
+                                return '#ef4444';
+                            }
+                        }
+                    }] 
+                },
+                plugins: [crosshairPlugin],
+                options: { 
+                    ...commonOptions, 
+                    scales: { 
+                        ...commonOptions.scales, 
+                        y: { 
+                            ...commonOptions.scales.y, 
+                            reverse: true, 
+                            suggestedMin: 3.5, 
+                            suggestedMax: 14,
+                            ticks: {
+                                ...commonOptions.scales.y.ticks,
+                                callback: value => {
+                                    if (value <= 0) return '';
+                                    const m = Math.floor(value); const s = Math.round((value - m) * 60);
+                                    return `${m}:${s.toString().padStart(2, '0')}`;
+                                }
+                            }
+                        } 
+                    } 
+                }
+            }));
+        }
+
+        // --- 2. HR CHART ---
+        if (streams.heartrate) {
+            const avgHR = streams.heartrate.reduce((a, b) => a + b, 0) / streams.heartrate.length;
+            $('avg-hr-tag').textContent = `Média: ${Math.round(avgHR)} bpm`;
+
+            const ctx = $('detailChartHR').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 150);
+            gradient.addColorStop(0, 'rgba(255, 45, 85, 0.15)');
+            gradient.addColorStop(1, 'rgba(255, 45, 85, 0.01)');
+
+            detailChartInstances.push(new Chart(ctx, {
+                type: 'line',
+                data: { 
+                    labels: xLabels, 
+                    datasets: [{ 
+                        label: 'FC', 
+                        data: streams.heartrate, 
+                        borderColor: '#ff2d55', 
+                        backgroundColor: gradient, 
+                        fill: true, 
+                        pointRadius: 0, 
+                        borderWidth: 2, 
+                        tension: 0.4,
+                        segment: {
+                            borderColor: context => {
+                                const val = context.p1.parsed.y;
+                                const athlete = athletes.find(a => a.supabaseId === act.athleteId);
+                                if (!athlete) return '#ff2d55';
+                                const zones = calculateHRZones(athlete);
+                                if (val < zones.z1) return '#94a3b8';
+                                if (val < zones.z2) return '#3b82f6';
+                                if (val < zones.z3) return '#10b981';
+                                if (val < zones.z4) return '#f59e0b';
+                                return '#ef4444';
+                            }
+                        }
+                    }] 
+                },
+                plugins: [crosshairPlugin],
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, suggestedMin: 80, suggestedMax: 190 } } }
+            }));
+        }
+
+        // --- 3. ELEVATION CHART ---
+        if (streams.altitude) {
+            const minAlt = Math.min(...streams.altitude);
+            const maxAlt = Math.max(...streams.altitude);
+            const gain = maxAlt - minAlt;
+            $('avg-elev-tag').textContent = `Ganho: ${Math.round(gain)} m`;
+
+            const ctx = $('detailChartElevation').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 120);
+            gradient.addColorStop(0, 'rgba(100, 116, 139, 0.2)');
+            gradient.addColorStop(1, 'rgba(100, 116, 139, 0.02)');
+
+            detailChartInstances.push(new Chart(ctx, {
+                type: 'line',
+                data: { labels: xLabels, datasets: [{ label: 'Elevação', data: streams.altitude, borderColor: '#64748b', backgroundColor: gradient, fill: true, pointRadius: 0, borderWidth: 1.5, tension: 0.4 }] },
+                plugins: [crosshairPlugin],
+                options: { 
+                    ...commonOptions, 
+                    scales: { 
+                        ...commonOptions.scales, 
+                        x: { ...commonOptions.scales.x, display: true, ticks: { maxTicksLimit: 8, font: { weight: '600' }, color: '#94a3b8' } },
+                        y: { ...commonOptions.scales.y, suggestedMin: minAlt - 5, suggestedMax: maxAlt + 5 }
+                    } 
+                }
+            }));
+        }
+    } catch (e) { console.error('Erro ao renderizar telemetria:', e); }
+}
+
+
+// ─── ZOOM E OVERLAY ───
+
+function openZoomModal(type) {
+    _currentZoomType = type;
+    $('modal-zoom-chart').classList.add('show');
+    $('zoom-overlay-select').value = ''; // Reset overlay
+    renderZoomChart(type);
+}
+
+function closeZoomModal() {
+    $('modal-zoom-chart').classList.remove('show');
+    if (_zoomChart) { _zoomChart.destroy(); _zoomChart = null; }
+}
+
+function renderZoomChart(primaryType, overlayType = null) {
+    if (_zoomChart) _zoomChart.destroy();
+    if (!_currentStreams) return;
+
+    const xAxisType = $('zoom-xaxis-select').value;
+    const canvas = $('zoomCanvas');
+    
+    let labels = [];
+    if (xAxisType === 'time' && _currentStreams.time) {
+        labels = _currentStreams.time.map(s => {
+            const m = Math.floor(s / 60);
+            const sec = s % 60;
+            return `${m}:${sec.toString().padStart(2, '0')}`;
+        });
+    } else {
+        labels = _currentStreams.distance.map(d => (d/1000).toFixed(2));
+    }
+
+    const datasets = [];
+    const yAxes = {
+        y: {
+            position: 'left',
+            grid: { color: 'rgba(0,0,0,0.05)' },
+            ticks: { font: { weight: '700' }, padding: 10 }
+        }
+    };
+
+    // Ajustar escala primária conforme o tipo
+    if (primaryType === 'heartrate') {
+        yAxes.y.suggestedMin = 80;
+        yAxes.y.suggestedMax = 190;
+    } else if (primaryType === 'pace') {
+        yAxes.y.suggestedMin = 3.5;
+        yAxes.y.suggestedMax = 14;
+    } else if (primaryType === 'altitude') {
+        const alt = _currentStreams.altitude || [0];
+        const minA = Math.min(...alt);
+        const maxA = Math.max(...alt);
+        yAxes.y.suggestedMin = minA - 5;
+        yAxes.y.suggestedMax = maxA + 5;
+    }
+
+    // Configuração do Dataset Primário
+    const hrMode = $('zoom-hr-mode').value;
+    const configPrimary = getDatasetConfig(primaryType, _currentStreams, hrMode);
+    datasets.push({
+        ...configPrimary,
+        yAxisID: 'y',
+        fill: false,
+        pointRadius: 0,
+        borderWidth: 3,
+        order: 1 // Sempre por cima
+    });
+    
+    if (primaryType === 'pace') {
+        yAxes.y.reverse = true;
+        yAxes.y.ticks.callback = value => {
+            if (value <= 0) return '';
+            const m = Math.floor(value);
+            const s = Math.round((value - m) * 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+    }
+
+    // Configuração do Dataset de Sobreposição (Overlay)
+    if (overlayType && overlayType !== primaryType) {
+        const hrMode = $('zoom-hr-mode').value;
+        const configOverlay = getDatasetConfig(overlayType, _currentStreams, hrMode);
+        
+        const hexToRgba = (hex, alpha) => {
+            let r = 0, g = 0, b = 0;
+            if (hex.length === 4) {
+                r = parseInt(hex[1] + hex[1], 16);
+                g = parseInt(hex[2] + hex[2], 16);
+                b = parseInt(hex[3] + hex[3], 16);
+            } else if (hex.length === 7) {
+                r = parseInt(hex.substring(1, 3), 16);
+                g = parseInt(hex.substring(3, 5), 16);
+                b = parseInt(hex.substring(5, 7), 16);
+            }
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+
+        datasets.push({
+            ...configOverlay,
+            label: `[Sobreposto] ${configOverlay.label}`,
+            borderColor: hexToRgba(configOverlay.borderColor, 0.3), // 30% de opacidade
+            backgroundColor: 'transparent',
+            yAxisID: 'y1',
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            order: 2 // Por baixo
+        });
+
+        yAxes.y1 = {
+            position: 'right',
+            grid: { display: false },
+            ticks: { 
+                font: { weight: '600' }, 
+                color: configOverlay.borderColor,
+                callback: (value) => {
+                    if (overlayType === 'pace') {
+                        if (value <= 0) return '';
+                        const m = Math.floor(value);
+                        const s = Math.round((value - m) * 60);
+                        return `${m}:${s.toString().padStart(2, '0')}`;
+                    }
+                    return value;
+                }
+            },
+            title: { display: true, text: configOverlay.label, color: configOverlay.borderColor }
+        };
+
+        // Ajustar escala da sobreposição
+        if (overlayType === 'pace') {
+            yAxes.y1.reverse = true;
+            yAxes.y1.suggestedMin = 3.5;
+            yAxes.y1.suggestedMax = 14;
+        } else if (overlayType === 'heartrate') {
+            yAxes.y1.suggestedMin = 80;
+            yAxes.y1.suggestedMax = 190;
+        } else if (overlayType === 'altitude') {
+            const alt = _currentStreams.altitude || [0];
+            yAxes.y1.suggestedMin = Math.min(...alt) - 5;
+            yAxes.y1.suggestedMax = Math.max(...alt) + 5;
+        }
+    }
+
+    const isPace = primaryType === 'pace';
+    
+    _zoomChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 2.2, // Proporção equilibrada para desktop
+            animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top', align: 'start', labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 12, weight: '600' } } },
+                tooltip: {
+                    enabled: true,
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    titleColor: '#000',
+                    bodyColor: '#333',
+                    borderColor: '#ddd',
+                    borderWidth: 1,
+                    padding: 10,
+                    bodyFont: { weight: '600' },
+                    callbacks: {
+                        title: (c) => {
+                            const label = c[0].label;
+                            return xAxisType === 'time' ? `Tempo: ${label}` : `Distância: ${label} km`;
+                        },
+                        label: (context) => {
+                            const val = context.parsed.y;
+                            const label = context.dataset.label;
+                            if (label.toLowerCase().includes('ritmo')) {
+                                const m = Math.floor(val); const s = Math.round((val-m)*60);
+                                return `Pace: ${m}:${s.toString().padStart(2,'0')} /km`;
+                            }
+                            return `${label}: ${Math.round(val)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { 
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 10, color: '#999', font: { size: 10 } },
+                    title: { display: true, text: xAxisType === 'time' ? 'Tempo (mm:ss)' : 'Distância (km)', font: { size: 11, weight: '600' } }
+                },
+                ...yAxes
+            },
+            hover: { mode: 'index', intersect: false }
+        },
+        plugins: [{
+            id: 'verticalLine',
+            afterDraw: (chart) => {
+                if (chart.tooltip?._active?.length) {
+                    const x = chart.tooltip._active[0].element.x;
+                    const yAxis = chart.scales.y;
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(x, yAxis.top);
+                    ctx.lineTo(x, yAxis.bottom);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = '#333';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        }]
+    });
+}
+
+function getDatasetConfig(type, streams, mode = 'zones') {
+    switch(type) {
+        case 'pace':
+            const paceConfig = {
+                label: 'Ritmo',
+                data: streams.velocity_smooth.map(v => {
+                    if (v <= 0) return null;
+                    const pace = (1000 / v) / 60;
+                    return pace > 15 ? null : pace;
+                }),
+                borderColor: '#00aaff',
+                backgroundColor: 'rgba(0, 170, 255, 0.05)',
+                fill: true
+            };
+
+            if (mode === 'zones' && _currentAthleteId) {
+                const athlete = athletes.find(a => a.supabaseId === _currentAthleteId);
+                if (athlete && athlete.testTime) {
+                    const vamKmh = 180 / athlete.testTime;
+                    paceConfig.segment = {
+                        borderColor: ctx => {
+                            const paceVal = ctx.p1.parsed.y;
+                            if (!paceVal) return '#00aaff';
+                            const speedKmh = 60 / paceVal;
+                            const pctVam = (speedKmh / vamKmh) * 100;
+                            
+                            if (pctVam < 65) return '#94a3b8'; // Z1
+                            if (pctVam < 75) return '#3b82f6'; // Z2
+                            if (pctVam < 85) return '#10b981'; // Z3
+                            if (pctVam < 95) return '#f59e0b'; // Z4
+                            return '#ef4444'; // Z5
+                        }
+                    };
+                }
+            }
+            return paceConfig;
+        case 'heartrate':
+            const config = {
+                label: 'Frequência Cardíaca',
+                data: streams.heartrate,
+                borderColor: '#ff4d4d',
+                backgroundColor: 'rgba(255, 77, 77, 0.05)',
+                fill: true
+            };
+            
+            if (mode === 'zones' && _currentAthleteId) {
+                const athlete = athletes.find(a => a.supabaseId === _currentAthleteId);
+                if (athlete) {
+                    const zones = calculateHRZones(athlete);
+                    config.segment = {
+                        borderColor: ctx => {
+                            const val = ctx.p1.parsed.y;
+                            if (val < zones.z1) return '#94a3b8'; // Z1
+                            if (val < zones.z2) return '#3b82f6'; // Z2
+                            if (val < zones.z3) return '#10b981'; // Z3
+                            if (val < zones.z4) return '#f59e0b'; // Z4
+                            return '#ef4444'; // Z5
+                        }
+                    };
+                }
+            }
+            return config;
+        case 'altitude':
+            return {
+                label: 'Elevação',
+                data: streams.altitude,
+                borderColor: '#808080',
+                backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                fill: true
+            };
+    }
+}
+
+function applyZoomOverlay() {
+    const overlay = $('zoom-overlay-select').value;
+    renderZoomChart(_currentZoomType, overlay);
+}
+
+function applyZoomXAxis() {
+    const overlay = $('zoom-overlay-select').value;
+    renderZoomChart(_currentZoomType, overlay);
 }

@@ -5,7 +5,9 @@ import {
   ChevronRight, 
   Settings, 
   Zap,
-  User 
+  User,
+  Moon,
+  Sun
 } from 'lucide-react';
 import ConnectivitySection from '../components/ConnectivitySection';
 
@@ -16,13 +18,28 @@ const ProfileStatCard = ({ label, value, unit }) => (
   </div>
 );
 
-const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete }) => {
+const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete, theme, setTheme }) => {
   return (
     <div className="animate-slide-up">
       <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Meu Perfil</h1>
-        <button style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-          <Settings size={22} />
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.5px' }}>Meu Perfil</h1>
+        <button 
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          style={{ 
+            background: 'var(--surface-accent)', 
+            border: 'none', 
+            color: 'var(--text-primary)', 
+            cursor: 'pointer',
+            width: '44px',
+            height: '44px',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'var(--transition-smooth)'
+          }}
+        >
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
         </button>
       </header>
 

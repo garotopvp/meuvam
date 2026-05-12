@@ -3,10 +3,23 @@ import { TrendingUp, Award, Calendar, Plus, Trash2, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from 'recharts';
+
 const EvolutionView = ({ session }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [selectedChartType, setSelectedChartType] = useState('VAM');
   const [newTest, setNewTest] = useState({
     test_type: 'VAM',
     result: '',
@@ -26,7 +39,7 @@ const EvolutionView = ({ session }) => {
       .from('test_history')
       .select('*')
       .eq('athlete_id', session.user.id)
-      .order('date', { ascending: false });
+      .order('date', { ascending: true }); // Ordenado para o gráfico
 
     if (!error) setHistory(data || []);
     setLoading(false);
@@ -56,53 +69,146 @@ const EvolutionView = ({ session }) => {
   };
 
   const getBestResult = (type) => {
-    const tests = history.filter(h => h.test_type === type);
+    const tests = history.filter(h => h.test_type === type).sort((a, b) => new Date(b.date) - new Date(a.date));
     if (tests.length === 0) return null;
-    // Simplificado: assume que o resultado mais recente é o melhor ou apenas mostra o último
     return tests[0];
   };
 
+  // Prepara dados para o gráfico
+  const chartData = useMemo(() => {
+    return history
+      .filter(h => h.test_type === selectedChartType)
+      .map(h => {
+        // Tenta converter resultado para número para o gráfico
+        let numericValue = 0;
+        if (h.result.includes(':')) {
+          const [m, s] = h.result.split(':').map(Number);
+          numericValue = m + (s / 60);
+        } else {
+          numericValue = parseFloat(h.result) || 0;
+        }
+        
+        return {
+          date: new Date(h.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          valor: numericValue,
+          original: h.result
+        };
+      });
+  }, [history, selectedChartType]);
+
   return (
     <div className="animate-slide-up">
-      <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Evolução</h1>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Acompanhe suas marcas e testes</p>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.5px' }}>Evolução</h1>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Suas marcas e conquistas</p>
         </div>
         <button 
           onClick={() => setShowAdd(true)}
           style={{ 
-            background: 'var(--primary-color)', 
+            background: 'var(--primary-gradient)', 
             color: 'white', 
             border: 'none', 
-            width: '44px', 
-            height: '44px', 
-            borderRadius: '14px', 
+            width: '48px', 
+            height: '48px', 
+            borderRadius: '16px', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0, 122, 255, 0.3)'
+            boxShadow: 'var(--shadow-active)'
           }}
         >
-          <Plus size={24} />
+          <Plus size={26} />
         </button>
       </header>
+
+      {/* Chart Section */}
+      <div className="card" style={{ marginBottom: '2.5rem', padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Progresso</h3>
+          <select 
+            value={selectedChartType} 
+            onChange={(e) => setSelectedChartType(e.target.value)}
+            style={{ 
+              padding: '6px 12px', 
+              borderRadius: '10px', 
+              border: '1px solid var(--border-color)', 
+              background: 'var(--surface-accent)',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              outline: 'none'
+            }}
+          >
+            {testTypes.filter(t => t !== 'Outro').map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ width: '100%', height: 200 }}>
+          {chartData.length > 1 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary-color)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--primary-color)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" />
+                <XAxis 
+                  dataKey="date" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} 
+                  dy={10}
+                />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '12px', 
+                    border: 'none', 
+                    boxShadow: 'var(--shadow-premium)',
+                    fontSize: '0.8rem',
+                    fontWeight: 700
+                  }}
+                  formatter={(value, name, props) => [props.payload.original, 'Resultado']}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="valor" 
+                  stroke="var(--primary-color)" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 500 }}>
+              Adicione pelo menos 2 registros de {selectedChartType} para ver o gráfico.
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* PRs Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2.5rem' }}>
         {['VAM', '5km', '10km', '21km'].map(type => {
           const best = getBestResult(type);
           return (
-            <div key={type} className="card" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-                {type === 'VAM' ? <Zap size={14} color="var(--primary-color)" /> : <Award size={14} color="var(--warning)" />}
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase' }}>{type}</span>
+            <div key={type} className="card" style={{ padding: '1.5rem', border: 'none', background: 'var(--surface-accent)', boxShadow: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                  {type === 'VAM' ? <Zap size={14} color="var(--primary-color)" /> : <Award size={14} color="var(--warning)" />}
+                </div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>{type}</span>
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
                 {best ? best.result : '--'}
               </div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '6px', fontWeight: 600 }}>
                 {best ? new Date(best.date).toLocaleDateString('pt-BR') : 'Sem registro'}
               </div>
             </div>
