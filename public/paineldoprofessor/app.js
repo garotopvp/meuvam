@@ -2907,6 +2907,25 @@ function openZoomModal(type) {
     _currentZoomType = type;
     $('modal-zoom-chart').classList.add('show');
     $('zoom-overlay-select').value = ''; // Reset overlay
+    
+    // Ajustar opções de visualização conforme o tipo
+    const hrModeSelect = $('zoom-hr-mode');
+    if (type === 'pace') {
+        hrModeSelect.parentElement.style.display = 'flex';
+        hrModeSelect.innerHTML = `
+            <option value="zones">Zonas de Ritmo (VAM)</option>
+            <option value="classic">Clássico (Azul)</option>
+        `;
+    } else if (type === 'heartrate') {
+        hrModeSelect.parentElement.style.display = 'flex';
+        hrModeSelect.innerHTML = `
+            <option value="zones">Zonas de Intensidade (FC)</option>
+            <option value="classic">Clássico (Vermelho)</option>
+        `;
+    } else {
+        hrModeSelect.parentElement.style.display = 'none';
+    }
+
     renderZoomChart(type);
 }
 
@@ -3132,6 +3151,11 @@ function getDatasetConfig(type, streams, mode = 'zones') {
                 backgroundColor: 'rgba(0, 170, 255, 0.05)',
                 fill: true
             };
+
+            if (mode === 'classic') {
+                paceConfig.borderColor = '#00aaff';
+                return paceConfig;
+            }
 
             if (mode === 'zones' && _currentAthleteId) {
                 const athlete = athletes.find(a => a.supabaseId === _currentAthleteId);
