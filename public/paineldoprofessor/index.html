@@ -694,7 +694,10 @@
                             <div class="premium-chart-container">
                                 <div class="chart-label-wrap">
                                     <div class="chart-title"><i class="ri-speed-up-line" style="color:#007aff;"></i> Ritmo</div>
-                                    <div id="avg-pace-tag" class="chart-avg-tag">Média: --</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <div id="avg-pace-tag" class="chart-avg-tag">Média: --</div>
+                                        <button class="chart-zoom-btn" onclick="openZoomModal('pace')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
+                                    </div>
                                 </div>
                                 <div class="chart-wrapper" style="height: 180px; position: relative;">
                                     <canvas id="detailChartPace"></canvas>
@@ -705,7 +708,10 @@
                             <div class="premium-chart-container">
                                 <div class="chart-label-wrap">
                                     <div class="chart-title"><i class="ri-pulse-line" style="color:#ff2d55;"></i> Frequência Cardíaca</div>
-                                    <div id="avg-hr-tag" class="chart-avg-tag">Média: --</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <div id="avg-hr-tag" class="chart-avg-tag">Média: --</div>
+                                        <button class="chart-zoom-btn" onclick="openZoomModal('heartrate')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
+                                    </div>
                                 </div>
                                 <div class="chart-wrapper" style="height: 150px; position: relative;">
                                     <canvas id="detailChartHR"></canvas>
@@ -716,7 +722,10 @@
                             <div class="premium-chart-container">
                                 <div class="chart-label-wrap">
                                     <div class="chart-title"><i class="ri-landscape-line" style="color:#64748b;"></i> Elevação</div>
-                                    <div id="avg-elev-tag" class="chart-avg-tag">-- m</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <div id="avg-elev-tag" class="chart-avg-tag">-- m</div>
+                                        <button class="chart-zoom-btn" onclick="openZoomModal('altitude')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
+                                    </div>
                                 </div>
                                 <div class="chart-wrapper" style="height: 120px; position: relative;">
                                     <canvas id="detailChartElevation"></canvas>
