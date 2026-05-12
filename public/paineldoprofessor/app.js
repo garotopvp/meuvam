@@ -3057,7 +3057,7 @@ function renderZoomChart(primaryType, overlayType = null) {
             animation: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: true, position: 'top', align: 'start', labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 12, weight: '600' } } },
+                legend: { display: true, position: 'top', align: 'center', labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 12, weight: '600' } } },
                 tooltip: {
                     enabled: true,
                     mode: 'index',
