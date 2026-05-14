@@ -12,9 +12,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (supabaseClient) {
         const { data } = await supabaseClient.auth.getSession();
         const path = window.location.pathname;
-        const isIndex = path.includes("/paineldoprofessor") && !path.includes("login") && !path.includes("register");
+        const isIndex = path.includes("/professor") && !path.includes("login") && !path.includes("register");
         
         if (data.session) {
+            // Cachear ID do professor para uso no chat flutuante sem chamadas async
+            window._profId = data.session.user.id;
             // Segurança: Verificar se é professor
             const { data: profile, error: profileError } = await supabaseClient
                 .from('profiles')
@@ -27,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 if (isIndex) {
                     // Se o usuário já está logado como aluno, perguntamos se ele quer sair para entrar como professor
-                    // Isso evita o loop infinito de redirecionamento entre / e /paineldoprofessor
+                    // Isso evita o loop infinito de redirecionamento entre / e /professor
                     if (confirm("Esta conta está registrada como Aluno. Deseja sair para entrar com uma conta de Professor?")) {
                         await supabaseClient.auth.signOut();
                         window.location.href = "login.html?role_error=true";
@@ -39,8 +41,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            if (path.includes("login") || path.includes("register") || path.includes("/professor")) {
-                window.location.href = "/paineldoprofessor/";
+            if (path.includes("login") || path.includes("register")) {
+                window.location.href = "/professor/";
             }
         } else {
             if (isIndex && !localStorage.getItem('vdot_offline')) {
@@ -74,7 +76,7 @@ async function login() {
     const btn = document.getElementById('login-btn');
 
     if (!supabaseConfigured) {
-        alert("O Banco de Dados ainda nÃ£o foi configurado. Clique em Continuar Offline.");
+        alert("O Banco de Dados ainda não foi configurado. Clique em Continuar Offline.");
         return;
     }
 
@@ -139,7 +141,7 @@ async function login() {
             }
 
             localStorage.removeItem('vdot_offline');
-            window.location.href = "/paineldoprofessor/";
+            window.location.href = "/professor/";
         }
     } catch(err) {
         alert("Erro de conexão: " + err.message);
@@ -201,7 +203,7 @@ async function register() {
                 btn.disabled = false;
             } else {
                 localStorage.removeItem('vdot_offline');
-                window.location.href = "/paineldoprofessor/";
+                window.location.href = "/professor/";
             }
         }
     } catch(err) {
@@ -222,7 +224,7 @@ async function recoverPassword() {
     
     if (confirm(`Deseja enviar um e-mail de recuperação para ${email}?`)) {
         const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/paineldoprofessor/login.html',
+            redirectTo: window.location.origin + '/professor/login.html',
         });
         if (error) {
             alert("Erro ao enviar: " + error.message);
@@ -238,6 +240,6 @@ async function logout() {
             await supabaseClient.auth.signOut();
         }
         localStorage.removeItem('vdot_offline');
-        window.location.href = "/paineldoprofessor/login.html";
+        window.location.href = "/professor/login.html";
     }
 }

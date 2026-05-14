@@ -302,17 +302,7 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
         {/* Hero Section */}
         <div style={{ marginBottom: '2.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <span style={{ 
-              background: 'rgba(0, 122, 255, 0.1)', 
-              color: 'var(--primary-color)', 
-              padding: '6px 14px', 
-              borderRadius: '100px', 
-              fontSize: '0.75rem', 
-              fontWeight: 800,
-              textTransform: 'uppercase'
-            }}>
-              {workout.type}
-            </span>
+            {/* Removed workout.type badge per user request */}
             {workout.status === 'completed' && (
               <span style={{ 
                 background: 'rgba(52, 199, 89, 0.1)', 
@@ -948,8 +938,10 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
         </div>
       </div>
 
-      {/* Garmin Sync Panel */}
-      <GarminSyncPanel workouts={workouts} userId={userId} garminSync={garminSync} athlete={athlete} />
+      {/* Garmin Sync Panel (Only show if connected in profile) */}
+      {athlete?.integrations?.garmin?.connected && (
+        <GarminSyncPanel workouts={workouts} userId={userId} garminSync={garminSync} athlete={athlete} />
+      )}
 
       {/* Horizontal Day Scroller */}
       <div 
@@ -1058,9 +1050,7 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
                 
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--primary-color)', textTransform: 'uppercase' }}>
-                      {workout.type}
-                    </span>
+                    {/* Removed workout.type per user request */}
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{workout.metrics?.distance || '--'}</span>
                   </div>
                   <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{workout.title}</h4>

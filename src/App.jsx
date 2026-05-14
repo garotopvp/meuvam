@@ -22,7 +22,6 @@ import PortalSelection from './views/PortalSelection';
 
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
-import ProfessorDashboard from './views/ProfessorDashboard';
 
 // Data
 import { athleteData } from './data/mockData';
@@ -288,7 +287,9 @@ const AppContent = () => {
 
       if (profileData) {
         if (profileData.role === 'professor') {
-          setAthleteRaw({ ...profileData, role: 'professor' });
+          if (!window.location.pathname.includes('/paineldoprofessor')) {
+            window.location.href = '/paineldoprofessor/index.html?v=' + Date.now();
+          }
           return;
         }
         
@@ -395,7 +396,6 @@ const AppContent = () => {
           />
         )
       } />
-
       <Route path="/aluno/*" element={
         !session ? (
             <AuthView onBack={() => navigate('/')} />
@@ -404,8 +404,6 @@ const AppContent = () => {
                 <Loader2 className="animate-spin" color="var(--primary-color)" size={32} />
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Carregando seu perfil...</p>
             </div>
-        ) : athlete.role === 'professor' ? (
-            <Navigate to="/professor" replace />
         ) : (
             <>
                 <UrlCleanup onConnected={fetchProfile} />
@@ -445,15 +443,7 @@ const AppContent = () => {
         )
       } />
 
-      <Route path="/professor/*" element={
-        !session ? (
-          <AuthView onBack={() => navigate('/')} />
-        ) : athlete?.role !== 'professor' ? (
-          <Navigate to="/aluno" replace />
-        ) : (
-          <ProfessorDashboard session={session} onLogout={() => supabase.auth.signOut()} />
-        )
-      } />
+      <Route path="/professor/*" element={<Navigate to={`/paineldoprofessor/index.html?v=${Date.now()}`} replace />} />
 
 
       <Route path="*" element={<Navigate to="/" replace />} />

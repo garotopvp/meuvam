@@ -59,7 +59,7 @@ const HistoryCalendar = ({ trainingHistory }) => {
         ))}
       </div>
       <div style={{ display: 'flex', gap: '12px', marginTop: '12px', justifyContent: 'center' }}>
-        <Legend color="#34C759" label="Rodagem" />
+        {/* Removed Rodagem legend per user request */}
         <Legend color="#007AFF" label="Intervalado" />
         <Legend color="#FF9500" label="Longo" />
       </div>

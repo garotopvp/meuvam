@@ -10,7 +10,7 @@
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <!-- html2canvas REMOVIDO -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <base href="/paineldoprofessor/">
+    <base href="/professor/">
     <link rel="stylesheet" href="style.css?v=3.1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -36,7 +36,7 @@
                 <a href="#" class="nav-item active" data-view="dashboard"><i class="ri-dashboard-line"></i> Resumo</a>
                 <a href="#" class="nav-item" data-view="groups"><i class="ri-folder-open-line"></i> Pastas de Treino</a>
                 <a href="#" class="nav-item" data-view="athletes"><i class="ri-group-line"></i> Atletas</a>
-                <a href="#" class="nav-item" data-view="chat"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
+                <a href="#" class="nav-item" data-view="chat" style="display:none;"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
                 <a href="#" class="nav-item" data-view="staff"><i class="ri-shield-user-line"></i> Equipe</a>
                 <a href="#" class="nav-item" data-view="strava-feed"><i class="ri-pulse-line" style="color: #fc4c02;"></i> Feed Strava</a>
                 <a href="#" class="nav-item" data-view="garmin-feed"><i class="ri-compass-discover-line" style="color: #000;"></i> Feed Garmin</a>
@@ -109,9 +109,17 @@
                     </div>
                 </div>
 
-                <div style="margin-top:32px;">
-                    <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Últimos Treinos Gerados</h2>
-                    <div id="dashboard-recent" class="table-wrapper"></div>
+                <div style="margin-top:32px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Volume Semanal: Planejado vs Realizado</h2>
+                        <div class="stat-card" style="height:300px; padding:20px;">
+                            <canvas id="chart-planned-vs-realized"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Últimos Treinos Gerados</h2>
+                        <div id="dashboard-recent" class="table-wrapper" style="height:300px; overflow-y:auto;"></div>
+                    </div>
                 </div>
 
                 <div class="dashboard-shortcuts">
@@ -192,7 +200,7 @@
                         <h1>Feed de Atividades</h1>
                         <p>Acompanhe em tempo real os treinos realizados por todos os seus alunos via Strava.</p>
                     </div>
-                    <button class="btn btn-secondary" onclick="renderStravaFeed()"><i class="ri-refresh-line"></i> Atualizar</button>
+                    <button class="btn btn-secondary" onclick="renderStravaFeed(true)"><i class="ri-refresh-line"></i> Atualizar</button>
                 </div>
 
                 <div id="strava-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
@@ -210,7 +218,7 @@
                         <h1>Feed Garmin Connect</h1>
                         <p>Acompanhe em tempo real os treinos realizados pelos seus alunos via conexão direta Garmin.</p>
                     </div>
-                    <button class="btn btn-secondary" onclick="renderGarminFeed()"><i class="ri-refresh-line"></i> Atualizar Garmin</button>
+                    <button class="btn btn-secondary" onclick="renderGarminFeed(true)"><i class="ri-refresh-line"></i> Atualizar Garmin</button>
                 </div>
 
                 <div id="garmin-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
@@ -668,8 +676,7 @@
                                 <div id="act-detail-date" style="font-size: 13px; color: var(--text-muted);">Data da atividade</div>
                             </div>
                         </div>
-                        <div id="act-detail-type" style="background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 100px; font-size: 13px; font-weight: 800; text-transform: uppercase;">
-                            Corrida
+                        <div id="act-detail-type" style="display: none; background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 100px; font-size: 13px; font-weight: 800; text-transform: uppercase;">
                         </div>
                     </div>
 
@@ -753,7 +760,38 @@
 
     <div class="toast" id="toast"><span id="toast-msg">Sucesso!</span></div>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+    <!-- Floating Chat Widget -->
+    <div id="chat-balloon" class="chat-balloon" onclick="toggleFloatingChat()">
+        <i class="ri-message-3-line"></i>
+        <span id="chat-notif-count" class="badge" style="display:none;">0</span>
+    </div>
+
+    <div id="floating-chat" class="floating-chat-window">
+        <div class="floating-chat-header" style="height:50px; background:#1d4ed8;">
+            <h4 style="margin:0; font-size:14px;">Chat</h4>
+            <div class="chat-header-actions" style="display:flex; gap:15px; align-items:center;">
+                <button onclick="syncAthletesFromSupabase(true)" style="background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-refresh-line"></i> Sync</button>
+                <button id="btn-expand-chat" onclick="expandChat()" style="background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-fullscreen-line"></i> Expandir</button>
+                <button onclick="toggleFloatingChat()" style="background:rgba(255,255,255,0.2); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-close-line"></i> Fechar</button>
+            </div>
+        </div>
+        <div class="floating-chat-body">
+            <div id="floating-chat-users"></div>
+            <div class="floating-chat-content">
+                <div id="floating-chat-header-name" style="padding:10px 15px; background:white; border-bottom:1px solid var(--border); font-size:12px; font-weight:700; color:var(--text);">
+                    Selecione um atleta
+                </div>
+                <div id="floating-chat-messages" class="floating-chat-messages"></div>
+                <div class="floating-chat-input">
+                    <input type="text" id="floating-chat-input-text" placeholder="Escreva uma mensagem..." onkeydown="if(event.key==='Enter') sendFloatingMessage()">
+                    <button onclick="sendFloatingMessage()"><i class="ri-send-plane-fill"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="auth.js?v=3.1"></script>
-    <script src="app.js?v=3.1"></script>
+    <script src="app.js?v=3.6"></script>
 </body>
 </html>

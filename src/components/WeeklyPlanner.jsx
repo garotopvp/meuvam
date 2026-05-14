@@ -156,8 +156,6 @@ const WeeklyPlanner = ({ athleteId }) => {
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', gap: '8px' }}>
                       <span>{workout.metrics?.distance || '--'}</span>
-                      <span>•</span>
-                      <span>{workout.type || 'Corrida'}</span>
                     </div>
                     
                     {workout.status === 'completed' && (

@@ -1,5 +1,34 @@
 import React, { useEffect, useRef } from 'react';
 
+// Helper: Decodificador de Polyline do Google (usado pelo Strava)
+const decodePolyline = (encoded) => {
+  if (!encoded) return [];
+  let poly = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+    poly.push([lat * 1e-5, lng * 1e-5]);
+  }
+  return poly;
+};
+
 const ActivityMap = ({ routeData, isHeatmap = false }) => {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -24,8 +53,14 @@ const ActivityMap = ({ routeData, isHeatmap = false }) => {
       if (!mapRef.current || mapInstance.current) return;
 
       const L = window.L;
-      // Coordenadas padrão (São Paulo) se não houver rota
-      const center = routeData?.[0] || [-23.5505, -46.6333];
+      let coords = routeData;
+
+      // Se for uma string (Encoded Polyline do Strava), decodificar
+      if (typeof routeData === 'string' && routeData.length > 0) {
+        coords = decodePolyline(routeData);
+      }
+
+      const center = coords?.[0] || [-23.5505, -46.6333];
       
       mapInstance.current = L.map(mapRef.current, {
         zoomControl: false,
@@ -36,8 +71,8 @@ const ActivityMap = ({ routeData, isHeatmap = false }) => {
         maxZoom: 19
       }).addTo(mapInstance.current);
 
-      if (routeData && routeData.length > 0) {
-        const polyline = L.polyline(routeData, {
+      if (coords && coords.length > 0) {
+        const polyline = L.polyline(coords, {
           color: 'var(--primary-color)',
           weight: 4,
           opacity: 0.8,
@@ -48,7 +83,7 @@ const ActivityMap = ({ routeData, isHeatmap = false }) => {
 
         if (isHeatmap) {
           // Mock de heatmap usando círculos coloridos ao longo da rota
-          routeData.forEach((point, i) => {
+          coords.forEach((point, i) => {
             if (i % 5 === 0) {
               const intensity = Math.random(); // Mock de intensidade
               L.circle(point, {

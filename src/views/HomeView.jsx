@@ -259,7 +259,7 @@ const HomeView = ({ athlete, workouts, deferredPrompt, onInstall }) => {
               textTransform: 'uppercase',
               letterSpacing: '0.5px'
             }}>
-              {isToday ? 'Treino de Hoje' : 'Próximo Treino'}: {displayWorkout.type}
+              {isToday ? 'Treino de Hoje' : 'Próximo Treino'}
             </div>
             <div style={{ background: 'rgba(255, 149, 0, 0.1)', padding: '10px', borderRadius: '50%' }}>
               <Zap size={20} color="var(--warning)" fill={displayWorkout.status === 'completed' ? "var(--warning)" : "none"} style={{ opacity: 0.9 }} />

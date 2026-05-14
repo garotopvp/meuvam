@@ -181,8 +181,39 @@ router.get('/activities', async (req, res) => {
       };
     });
 
-    // Salvar no banco (ignora se já existir pelo ID - vamos precisar do ID do strava para não duplicar, mas para teste simples vamos fazer upsert simples ou ignorar conflito)
-    // Para simplificar, o frontend fará a chamada e o frontend salvará. Então vamos só devolver os dados!
+    // ─── CACHE FOR COMMUNITY FEED ──────────────────────────────────────────
+    try {
+      const supabase = getSupabase();
+      const { data: profile } = await supabase.from('profiles').select('name, avatar_url').eq('id', userId).single();
+      
+      const communityActs = formattedWorkouts.map(act => {
+        const metrics = act.metrics || {};
+        return {
+          id: `strava_${act.strava_id}`,
+          athlete_id: userId,
+          athlete_name: profile?.name || 'Atleta',
+          athlete_avatar: profile?.avatar_url || '',
+          platform: 'strava',
+          title: act.title,
+          description: act.description || '',
+          type: act.type,
+          distance: metrics.distance || '--',
+          duration: metrics.duration || '--',
+          pace: metrics.pace || '--',
+          polyline: act.polyline,
+          activity_date: act.date
+        };
+      });
+
+      if (communityActs.length > 0) {
+        const { error: upsertErr } = await supabase.from('community_activities').upsert(communityActs, { onConflict: 'id' });
+        if (upsertErr) console.error('[Strava Cache] Upsert error:', upsertErr.message);
+      }
+    } catch (cacheErr) {
+      console.error('[Strava Cache] Erro ao salvar atividades na comunidade:', cacheErr.message);
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     res.json(formattedWorkouts);
   } catch (err) {
     console.error(err);
@@ -213,6 +244,51 @@ router.get('/activity/:id/streams', async (req, res) => {
   } catch (err) {
     console.error('Erro Strava streams:', err.message);
     res.status(500).json({ error: 'Erro ao buscar dados do gráfico' });
+  }
+});
+
+// 5.6. SINGLE ACTIVITY DETAILS
+router.get('/activity/:id', async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+  if (!userId || !id) return res.status(400).json({ error: 'userId e id obrigatórios' });
+
+  const token = await getValidToken(userId);
+  if (!token) return res.status(401).json({ error: 'Strava não conectado' });
+
+  try {
+    const response = await fetch(
+      `https://www.strava.com/api/v3/activities/${id}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    if (!response.ok) throw new Error('Falha ao buscar detalhes da atividade');
+    
+    const a = await response.json();
+    
+    const formatted = {
+      strava_id: a.id,
+      athlete_id: userId,
+      date: a.start_date_local,
+      type: a.type,
+      title: a.name,
+      description: a.description,
+      polyline: a.map ? a.map.summary_polyline : null,
+      metrics: {
+        distance: `${(a.distance / 1000).toFixed(2)} km`,
+        duration: `${Math.round(a.moving_time / 60)} min`,
+        pace: a.distance > 0 ? formatPace(a.moving_time / (a.distance / 1000)) : null,
+        elevation: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)}m` : '--',
+        avgHeartRate: a.average_heartrate ? Math.round(a.average_heartrate) : '--',
+        maxHeartRate: a.max_heartrate ? Math.round(a.max_heartrate) : '--',
+        sufferScore: a.suffer_score || '--'
+      }
+    };
+    
+    res.json(formatted);
+  } catch (err) {
+    console.error('Erro Strava activity details:', err.message);
+    res.status(500).json({ error: 'Erro ao buscar detalhes da atividade' });
   }
 });
 

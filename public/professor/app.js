@@ -39,6 +39,19 @@ let activeCategory=null, athleteSort={key:'name',asc:true};
 let _currentStravaActivities = [];
 let _currentGarminActivities = [];
 
+// ─── CACHEAR ID DO PROFESSOR ───
+// Necessário para o chat funcionar sem chamadas async
+(async () => {
+    try {
+        if (!window._profId) {
+            const { data } = await dbClient.auth.getSession();
+            if (data?.session?.user?.id) {
+                window._profId = data.session.user.id;
+            }
+        }
+    } catch(e) { /* silencioso */ }
+})();
+
 // ─── SAVE ───
 function saveState(k=['cats','groups','athletes','history']){
     if(k.includes('cats'))localStorage.setItem('vdot_cats',JSON.stringify(categories));
@@ -70,6 +83,23 @@ function movingAverage(data, windowSize = 5) {
         result.push(count > 0 ? sum / count : null);
     }
     return result;
+}
+
+async function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 12000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(resource, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error;
+    }
 }
 function vamToPace(k){if(!k||k<=0)return'Livre';return formatPace(60/k)+'/km';}
 function closeModals(){allModals.forEach(m=>m.classList.remove('show'));}
@@ -115,7 +145,20 @@ function toggleSidebar(){
 }
 
 // ─── NAVIGATION ───
-function navigate(viewId,cat){
+const ROUTES = {
+    'dashboard': 'resumo',
+    'groups': 'pastas',
+    'athletes': 'atletas',
+    'staff': 'equipe',
+    'strava-feed': 'feed',
+    'garmin-feed': 'garmin',
+    'calculator': 'calculadoras',
+    'chat': 'chat'
+};
+
+const REVERSE_ROUTES = Object.fromEntries(Object.entries(ROUTES).map(([k, v]) => [v, k]));
+
+function navigate(viewId, cat, skipPush = false) {
     console.log('Navegando para:', viewId);
     try {
         if(viewId!=='groups')activeCategory=null;
@@ -135,6 +178,16 @@ function navigate(viewId,cat){
         
         localStorage.setItem('vdot_lastView',viewId);
         localStorage.setItem('vdot_lastCat',activeCategory||'');
+
+        // Update URL
+        if (!skipPush) {
+            const path = ROUTES[viewId] || '';
+            const baseUrl = '/professor';
+            const newUrl = baseUrl + (path ? '/' + path : '/');
+            if (window.location.pathname !== newUrl) {
+                history.pushState({ viewId, cat }, '', newUrl);
+            }
+        }
         
         if(viewId==='dashboard') renderDashboard();
         if(viewId==='groups') renderGroups();
@@ -147,9 +200,9 @@ function navigate(viewId,cat){
             setTimeout(() => syncAthletesFromSupabase(), 100);
         }
         if(viewId==='staff') renderStaff();
-        if(viewId==='strava-feed') renderStravaFeed();
+        if(viewId==='strava-feed') renderStravaFeed(false);
         if(viewId==='garmin-feed') {
-            renderGarminFeed();
+            renderGarminFeed(false);
             setTimeout(() => syncAthletesFromSupabase(), 100);
         }
         if(viewId==='calculator') renderCalculator();
@@ -161,8 +214,35 @@ function navigate(viewId,cat){
         console.error('Falha na navegação:', err);
     }
 }
-document.querySelectorAll('.nav-item').forEach(item=>{item.addEventListener('click',e=>{e.preventDefault();navigate(e.currentTarget.dataset.view);});});
-(function restoreNav(){const v=localStorage.getItem('vdot_lastView')||'dashboard';const c=localStorage.getItem('vdot_lastCat')||'';if(c&&v==='groups')activeCategory=c;navigate(v);})();
+
+document.querySelectorAll('.nav-item').forEach(item=>{
+    item.addEventListener('click',e=>{
+        e.preventDefault();
+        navigate(e.currentTarget.dataset.view);
+    });
+});
+
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.viewId) {
+        navigate(e.state.viewId, e.state.cat, true);
+    } else {
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        const lastPart = parts[parts.length - 1];
+        const viewId = REVERSE_ROUTES[lastPart] || 'dashboard';
+        navigate(viewId, null, true);
+    }
+});
+
+(function restoreNav(){
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const lastPart = parts[parts.length - 1];
+    const urlViewId = REVERSE_ROUTES[lastPart];
+    
+    const v = urlViewId || localStorage.getItem('vdot_lastView') || 'dashboard';
+    const c = localStorage.getItem('vdot_lastCat') || '';
+    if(c && v==='groups') activeCategory=c;
+    navigate(v, null, true);
+})();
 
 // ═══════════════════════════════════════
 //  DASHBOARD
@@ -180,6 +260,9 @@ function renderDashboard(){
     $('stat-history-sub').textContent=tc>0?`${tc} hoje`:'Nenhum hoje';
     $('stat-cats').textContent=categories.length;
     $('stat-cats-sub').textContent=categories.slice(0,3).join(', ')+(categories.length>3?'...':'');
+
+    // Sugestão 2: Gráfico Planejado vs Realizado
+    renderPlannedVsRealizedChart();
 
     // Notifications
     const notifs=[];
@@ -418,6 +501,17 @@ function openGroupModal(catOrId, isEdit = false) {
             ]
         }));
     }
+    
+    const floatingHeader = `
+        <div class="floating-chat-header" onclick="toggleFloatingChat()">
+            <h4><i class="ri-message-3-fill"></i> Mensagens</h4>
+            <div class="chat-header-actions" onclick="event.stopPropagation()">
+                <i class="ri-refresh-line" onclick="syncAthletesFromSupabase(true)" title="Sincronizar"></i>
+                <i class="ri-expand-diagonal-line" onclick="expandChat()" title="Expandir"></i>
+                <i class="ri-close-line" onclick="toggleFloatingChat()" title="Fechar"></i>
+            </div>
+        </div>
+    `;
 
     _selectedDayIdx = 0;
     _expandedStepIdx = null;
@@ -781,7 +875,11 @@ function sortAthletes(key){if(athleteSort.key===key)athleteSort.asc=!athleteSort
 
 function renderAthletes(){
     const q=($('athlete-search')?.value||'').toLowerCase();
-    let filtered=athletes.filter(a=>a.name.toLowerCase().includes(q));
+    let filtered=athletes.filter(a => {
+        const matchesSearch = a.name.toLowerCase().includes(q);
+        const isNotProfessor = a.role !== 'professor';
+        return matchesSearch && isNotProfessor;
+    });
     // Sort
     filtered.sort((a,b)=>{
         let va,vb;
@@ -798,12 +896,14 @@ function renderAthletes(){
         const vam=a.testTime?(180/a.testTime).toFixed(1)+' km/h':'-';
         const noteSnip=a.notes?`<span style="font-size:11px;color:var(--text-muted);max-width:120px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${a.notes.replace(/"/g,'&quot;')}">${a.notes}</span>`:'<span style="font-size:11px;color:var(--border-strong);">—</span>';
         const displayName = a.name && a.name.trim() !== '' ? a.name : `<span style="color:var(--text-muted);font-style:italic;">Sem nome (${a.email || 'Novo'})</span>`;
-        
         return`<tr>
             <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <strong onclick="editAthlete('${a.id}')" style="cursor:pointer;color:var(--primary-color);text-decoration:underline;text-underline-offset:3px;">${displayName}</strong>
-                    ${a.supabaseId ? `<span class="badge" style="background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; font-size:10px; padding:2px 6px;"><i class="ri-checkbox-circle-line"></i> Vinculado</span>` : ''}
+                    <div style="width:32px; height:32px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; background:#f1f5f9; border:1px solid #e2e8f0;">
+                        ${a.avatar_url ? `<img src="${a.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<span style="font-size:12px;font-weight:700;color:var(--primary);">${a.name.charAt(0).toUpperCase()}</span>`}
+                    </div>
+                    <strong onclick="editAthlete('${a.id}')" style="cursor:pointer;color:var(--primary-color);text-decoration:none;">${displayName}</strong>
+                    ${(a.lastActivityDate && (new Date() - new Date(a.lastActivityDate)) > 5 * 24 * 60 * 60 * 1000) ? `<span title="Inativo há mais de 5 dias" style="color:#ef4444; font-size:16px;"><i class="ri-error-warning-fill"></i></span>` : ''}
                 </div>
                 ${a.phone?`<div style="font-size:11px;color:var(--text-muted);">${a.phone}</div>`:''}
             </td>
@@ -975,7 +1075,7 @@ async function openStravaActivities(athleteId) {
     $('modal-strava').classList.add('show');
 
     try {
-        // Usar a URL absoluta se estiver no painel do professor (que está em /paineldoprofessor/)
+        // Usar a URL absoluta se estiver no painel do professor (que está em /professor/)
         const response = await fetch(`/api/strava/activities?userId=${athleteId}`);
         const activities = await response.json();
         
@@ -1210,6 +1310,7 @@ async function syncAthletesFromSupabase(isManual = false) {
                 athletes[index].hrMethod = p.hr_method || 'max';
                 athletes[index].restingHr = p.resting_hr || null;
                 athletes[index].lthr = p.lthr || null;
+                athletes[index].role = p.role; // Atualizar papel
 
                 const oldVam = athletes[index].testTime;
                 if (supabaseVamTime && supabaseVamTime !== oldVam) {
@@ -1222,6 +1323,7 @@ async function syncAthletesFromSupabase(isManual = false) {
                     supabaseId: p.id,
                     name: p.name || '',
                     email: p.email || '',
+                    role: p.role, // Salvar o papel para filtrar na listagem
                     phone: '',
                     testHr: p.max_hr || null, // Importar FC Máx
                     maxHr: p.max_hr || null,
@@ -1356,158 +1458,196 @@ function exportAthletesCSV() {
 // ═══════════════════════════════════════
 let currentChatAthleteId = null;
 let chatSubscription = null;
-let currentUserId = null;
-let onlineUsers = new Set();
+// ─── FLOATING CHAT ───
+let _floatingChatSubscription = null;
 
-// Iniciar monitoramento de presença
-function initPresence() {
-    const channel = dbClient.channel('online-users');
-    
-    channel
-        .on('presence', { event: 'sync' }, () => {
-            const newState = channel.presenceState();
-            onlineUsers = new Set(Object.keys(newState));
-            updateOnlineUI();
-        })
-        .subscribe();
+function toggleFloatingChat() {
+    const chat = $('floating-chat');
+    const isVisible = chat.style.display === 'flex';
+    chat.style.display = isVisible ? 'none' : 'flex';
+    if (!isVisible) {
+        $('chat-notif-count').style.display = 'none';
+        $('chat-notif-count').textContent = '0';
+        // Sempre busca do Supabase ao abrir para garantir lista atualizada
+        loadChatAthletesDirectly();
+    }
 }
-initPresence();
 
-function updateOnlineUI() {
-    // Atualizar bolinhas verdes na lista lateral
-    document.querySelectorAll('.chat-user-item').forEach(el => {
-        const id = el.dataset.id;
-        const statusEl = el.querySelector('.chat-user-status-dot');
-        if (statusEl) {
-            const isOnline = onlineUsers.has(id);
-            statusEl.style.background = isOnline ? '#10b981' : '#cbd5e1';
+async function loadChatAthletesDirectly() {
+    const list = $('floating-chat-users');
+    if (!list) return;
+    
+    list.innerHTML = '<div style="padding:20px; text-align:center; font-size:11px; color:#666;"><div class="loader" style="width:20px;height:20px;margin:0 auto 8px;"></div>Carregando atletas...</div>';
+    
+    try {
+        const { data: profiles, error } = await dbClient
+            .from('profiles')
+            .select('id, name, email, role, avatar_url');
+        
+        if (error) throw error;
+        
+        if (!profiles || profiles.length === 0) {
+            list.innerHTML = '<div style="padding:15px; text-align:center; font-size:11px; color:#666;">Nenhum perfil no banco.</div>';
+            return;
         }
-    });
 
-    // Atualizar status no cabeçalho do chat aberto
-    const headerStatus = $('chat-header-status');
-    if (headerStatus && currentChatAthleteId) {
-        const isOnline = onlineUsers.has(currentChatAthleteId);
-        headerStatus.textContent = isOnline ? 'Online' : 'Offline';
-        headerStatus.style.color = isOnline ? '#10b981' : '#94a3b8';
+        // Mostra todos exceto professores
+        const chatAthletes = profiles.filter(p => p.role !== 'professor');
+        
+        if (chatAthletes.length === 0) {
+            list.innerHTML = '<div style="padding:15px; text-align:center; font-size:11px; color:#666;">Nenhum atleta encontrado.</div>';
+            return;
+        }
+        
+        list.innerHTML = chatAthletes.map(p => {
+            const name = p.name || p.email || 'Atleta';
+            const initial = name.charAt(0).toUpperCase();
+            const isActive = currentChatAthleteId === p.id;
+            const avatarHtml = p.avatar_url 
+                ? `<img src="${p.avatar_url}" style="width:34px; height:34px; border-radius:50%; object-fit:cover;">`
+                : `<div style="width:34px; height:34px; min-width:34px; background:#1d4ed8; color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">${initial}</div>`;
+
+            return `
+                <div onclick="selectFloatingChatAthlete('${p.id}', '${name.replace(/'/g, "\\\'")}')" 
+                     style="padding:10px 12px; border-bottom:1px solid #e2e8f0; cursor:pointer; display:flex; align-items:center; gap:10px; background:${isActive ? '#dbeafe' : 'white'}; transition:background 0.15s;"
+                     onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='${isActive ? '#dbeafe' : 'white'}'">
+                    <div style="width:34px; height:34px; min-width:34px; display:flex; align-items:center; justify-content:center;">
+                        ${avatarHtml}
+                    </div>
+                    <span style="font-size:12px; font-weight:600; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
+                </div>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error('Erro chat:', err);
+        list.innerHTML = `<div style="padding:15px; text-align:center; font-size:11px; color:#dc2626;">Erro: ${err.message}</div>`;
     }
 }
 
-async function getMyId() {
-    if (currentUserId) return currentUserId;
-    const { data } = await dbClient.auth.getSession();
-    if (data.session) {
-        currentUserId = data.session.user.id;
-        return currentUserId;
-    }
-    return null;
-}
-
-async function renderChat() {
-    const list = $('chat-users-list');
-    const athletesWithSupabase = athletes.filter(a => a.supabaseId);
+function expandChat() {
+    const chat = $('floating-chat');
+    chat.classList.toggle('expanded');
     
-    if (!athletesWithSupabase.length) {
-        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Nenhum aluno com conta no App encontrado.</div>';
-        return;
+    const btn = $('btn-expand-chat');
+    if (btn) {
+        if (chat.classList.contains('expanded')) {
+            btn.innerHTML = '<i class="ri-fullscreen-exit-line"></i> Minimizar';
+        } else {
+            btn.innerHTML = '<i class="ri-fullscreen-line"></i> Expandir';
+        }
     }
+    
+    loadChatAthletesDirectly();
+}
 
-    list.innerHTML = athletesWithSupabase.map(a => {
-        const isOnline = onlineUsers.has(a.supabaseId);
-        return `
-            <div class="chat-user-item ${currentChatAthleteId === a.supabaseId ? 'active' : ''}" data-id="${a.supabaseId}" onclick="selectChatAthlete('${a.supabaseId}', '${a.name}')">
-                <div class="user-avatar" style="position:relative;">
-                    ${a.name.charAt(0).toUpperCase()}
-                    <div class="chat-user-status-dot" style="position:absolute;bottom:0;right:0;width:10px;height:10px;border-radius:50%;background:${isOnline ? '#10b981' : '#cbd5e1'};border:2px solid white;"></div>
+async function renderFloatingChatUsers() {
+    loadChatAthletesDirectly();
+}
+
+async function selectFloatingChatAthlete(id, name) {
+    currentChatAthleteId = id;
+    $('floating-chat-header-name').textContent = `Conversando com ${name}`;
+    
+    // Marcar ativo na lista
+    renderFloatingChatUsers();
+    
+    // Carregar mensagens
+    loadFloatingMessages(id);
+    
+    // Iniciar realtime
+    subscribeToFloatingChat(id);
+}
+
+async function loadFloatingMessages(athleteId) {
+    const container = $('floating-chat-messages');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="display:flex;justify-content:center;padding:20px;"><div class="loader" style="width:24px;height:24px;"></div></div>';
+    
+    try {
+        console.log('Fetching messages for athlete:', athleteId);
+        const { data, error } = await dbClient
+            .from('messages')
+            .select('*')
+            .eq('athlete_id', athleteId)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div style="padding:20px; text-align:center; color:#666; font-size:12px;">Nenhuma mensagem encontrada. Comece a conversa!</div>';
+            return;
+        }
+
+        renderFloatingMessages(data);
+    } catch (err) {
+        console.error('Erro ao carregar mensagens:', err);
+        container.innerHTML = `<div style="padding:20px; text-align:center; color:#dc2626; font-size:12px;">Erro ao carregar mensagens: ${err.message}</div>`;
+    }
+}
+
+function formatMessageDate(dateStr) {
+    const d = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (d.toDateString() === today.toDateString()) return 'Hoje';
+    if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
+    
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+}
+
+function renderFloatingMessages(data) {
+    const container = $('floating-chat-messages');
+    if (!container) return;
+    
+    console.log('Renderizando mensagens:', data.length);
+    
+    const myId = window._profId || '';
+    let lastDate = null;
+    let html = '';
+
+    data.forEach((m, idx) => {
+        if (!m.created_at) return;
+        
+        const dateObj = new Date(m.created_at);
+        const dateStr = dateObj.toLocaleDateString('pt-BR'); // Ex: 12/05/2026
+        
+        if (dateStr !== lastDate) {
+            const label = formatMessageDate(m.created_at);
+            html += `
+                <div style="width:100%; display:flex; align-items:center; margin:20px 0 10px;">
+                    <div style="flex:1; height:1px; background:#e2e8f0;"></div>
+                    <span style="background:#e2e8f0; padding:4px 12px; border-radius:20px; font-size:11px; color:#475569; font-weight:800; margin:0 10px; white-space:nowrap;">
+                        ${label}
+                    </span>
+                    <div style="flex:1; height:1px; background:#e2e8f0;"></div>
                 </div>
-                <div class="chat-user-info">
-                    <div class="chat-user-name">${a.name}</div>
-                    <div class="chat-user-last">Clique para conversar</div>
-                </div>
+            `;
+            lastDate = dateStr;
+        }
+        
+        const isMe = myId && m.sender_id === myId;
+        const time = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        
+        html += `
+            <div style="padding:8px 12px; border-radius:12px; max-width:85%; font-size:13px; align-self:${isMe ? 'flex-end' : 'flex-start'}; background:${isMe ? '#2563eb' : 'white'}; color:${isMe ? 'white' : '#1e293b'}; border:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.05); margin-bottom:4px; display:flex; flex-direction:column;">
+                <div style="word-break:break-word; line-height:1.4;">${m.content}</div>
+                <div style="font-size:9px; opacity:0.7; text-align:right; margin-top:3px; font-weight:500;">${time}</div>
             </div>
         `;
-    }).join('');
-
-    // Restaurar chat se houver um salvo
-    const lastId = localStorage.getItem('vdot_lastChatId');
-    const lastName = localStorage.getItem('vdot_lastChatName');
-    if (lastId && !currentChatAthleteId) {
-        selectChatAthlete(lastId, lastName);
-    }
-}
-
-async function selectChatAthlete(supabaseId, name) {
-    currentChatAthleteId = supabaseId;
-    localStorage.setItem('vdot_lastChatId', supabaseId);
-    localStorage.setItem('vdot_lastChatName', name);
-    
-    $('chat-current-user-name').textContent = name;
-    
-    // Garantir que o status do cabeçalho existe e atualizar
-    let statusEl = $('chat-header-status');
-    if (!statusEl) {
-        statusEl = document.createElement('span');
-        statusEl.id = 'chat-header-status';
-        statusEl.style.fontSize = '12px';
-        statusEl.style.fontWeight = '600';
-        $('chat-current-user-name').parentNode.appendChild(statusEl);
-    }
-    
-    const isOnline = onlineUsers.has(supabaseId);
-    statusEl.textContent = isOnline ? 'Online' : 'Offline';
-    statusEl.style.color = isOnline ? '#10b981' : '#94a3b8';
-
-    $('chat-welcome').style.display = 'none';
-    $('chat-window').style.display = 'flex';
-    
-    // Marcar como ativo na lista
-    document.querySelectorAll('.chat-user-item').forEach(el => {
-        el.classList.toggle('active', el.dataset.id === supabaseId);
     });
 
-    loadChatMessages(supabaseId);
-    subscribeToChat(supabaseId);
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
 }
 
-async function loadChatMessages(athleteId) {
-    const chatMsgs = $('chat-messages');
-    chatMsgs.innerHTML = '<div style="display:flex;justify-content:center;padding:20px;"><div class="loader"></div></div>';
-    
-    const { data, error } = await dbClient
-        .from('messages')
-        .select('*')
-        .eq('athlete_id', athleteId)
-        .order('created_at', { ascending: true });
+function subscribeToFloatingChat(athleteId) {
+    if (_floatingChatSubscription) dbClient.removeChannel(_floatingChatSubscription);
 
-    if (error) {
-        chatMsgs.innerHTML = '<div style="padding:20px;color:var(--danger);">Erro ao carregar mensagens.</div>';
-        return;
-    }
-
-    renderMessages(data);
-}
-
-async function renderMessages(data) {
-    const chatMsgs = $('chat-messages');
-    const myId = await getMyId();
-    
-    chatMsgs.innerHTML = data.map(msg => {
-        const isMe = msg.sender_id === myId;
-        const time = new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        return `
-            <div class="message ${isMe ? 'sent' : 'received'}" data-id="${msg.id || msg.uuid}">
-                ${msg.content}
-                <span class="message-time">${time}</span>
-            </div>
-        `;
-    }).join('');
-    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-}
-
-async function subscribeToChat(athleteId) {
-    if (chatSubscription) dbClient.removeChannel(chatSubscription);
-
-    chatSubscription = dbClient
+    _floatingChatSubscription = dbClient
         .channel(`chat:${athleteId}`)
         .on('postgres_changes', { 
             event: 'INSERT', 
@@ -1515,55 +1655,67 @@ async function subscribeToChat(athleteId) {
             table: 'messages',
             filter: `athlete_id=eq.${athleteId}`
         }, (payload) => {
-            // Adicionar mensagem na tela se for o chat atual
             if (currentChatAthleteId === athleteId) {
-                appendMessage(payload.new);
+                appendFloatingMessage(payload.new);
             }
         })
         .subscribe();
 }
 
-async function appendMessage(msg) {
-    const chatMsgs = $('chat-messages');
-    const myId = await getMyId();
-    const isMe = msg.sender_id === myId;
-    const time = new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function appendFloatingMessage(msg) {
+    const container = $('floating-chat-messages');
+    if (!container) return;
+    
+    const dateObj = new Date(msg.created_at);
+    const dateStr = dateObj.toDateString();
+    
+    // Verificar se o último elemento de data é diferente deste
+    const dateLabels = container.querySelectorAll('span[style*="text-transform:uppercase"]');
+    const lastDateLabel = dateLabels.length > 0 ? dateLabels[dateLabels.length - 1].textContent : '';
+    const currentDayLabel = formatMessageDate(msg.created_at);
+    
+    if (currentDayLabel !== lastDateLabel) {
+        const dateDiv = document.createElement('div');
+        dateDiv.style.cssText = 'width:100%; display:flex; justify-content:center; margin:15px 0 10px; position:relative;';
+        dateDiv.innerHTML = `<span style="background:#f1f5f9; padding:3px 12px; border-radius:12px; font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; border:1px solid #e2e8f0;">${currentDayLabel}</span>`;
+        container.appendChild(dateDiv);
+    }
+    
+    const myId = window._profId || '';
+    const isMe = myId && msg.sender_id === myId;
+    const time = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
     const div = document.createElement('div');
-    div.className = `message ${isMe ? 'sent' : 'received'}`;
-    div.innerHTML = `${msg.content}<span class="message-time">${time}</span>`;
-    chatMsgs.appendChild(div);
-    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    div.style.cssText = `padding:8px 12px; border-radius:12px; max-width:85%; font-size:13px; align-self:${isMe ? 'flex-end' : 'flex-start'}; background:${isMe ? '#2563eb' : 'white'}; color:${isMe ? 'white' : '#1e293b'}; border:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.05); margin-bottom:4px; display:flex; flex-direction:column;`;
+    div.innerHTML = `<div style="word-break:break-word;">${msg.content}</div><div style="font-size:9px; opacity:0.6; text-align:right; margin-top:2px;">${time}</div>`;
+    
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
 }
 
-async function sendProfessorMessage() {
-    const input = $('chat-input');
+async function sendFloatingMessage() {
+    const input = $('floating-chat-input-text');
     const content = input.value.trim();
     if (!content || !currentChatAthleteId) return;
 
-    const { data: sessionData } = await dbClient.auth.getSession();
-    if (!sessionData.session) return showToast('Você precisa estar logado para enviar mensagens.', 'error');
+    const myId = window._profId;
+    if (!myId) return showToast('Sessão expirada. Recarregue a página.', 'error');
 
-    const newMessage = {
-        athlete_id: currentChatAthleteId,
-        sender_id: sessionData.session.user.id,
-        content: content
-    };
+    // Limpar input
+    input.value = '';
 
-    const { error } = await dbClient.from('messages').insert([newMessage]);
+    const { error } = await dbClient
+        .from('messages')
+        .insert({
+            athlete_id: currentChatAthleteId,
+            sender_id: myId,
+            content: content
+        });
 
     if (error) {
-        showToast('Erro ao enviar mensagem.', 'error');
-    } else {
-        input.value = '';
+        showToast('Erro ao enviar: ' + error.message, 'error');
     }
 }
-
-// Escutar Enter no input de chat
-document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && document.activeElement.id === 'chat-input') {
-        sendProfessorMessage();
-    }
-});
 
 async function renderStaff() {
     const list = $('staff-list');
@@ -1600,10 +1752,50 @@ async function renderStaff() {
     }
 }
 
-// ═══════════════════════════════════════
-//  PWA
-// ═══════════════════════════════════════
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+function makeDraggable(el, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    handle.onmousedown = dragMouseDown;
+
+    function dragMouseDown(e) {
+        e = e || window.event;
+        // Se clicar em um botão dentro do header, não arrasta
+        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'I') return;
+        
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+        
+        // Remove transform de centralização para permitir movimento livre
+        el.style.transform = 'none';
+        el.style.top = el.offsetTop + 'px';
+        el.style.left = el.offsetLeft + 'px';
+        el.style.margin = '0';
+    }
+
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        el.style.top = (el.offsetTop - pos2) + "px";
+        el.style.left = (el.offsetLeft - pos1) + "px";
+    }
+
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const chat = $('floating-chat');
+    const header = chat ? chat.querySelector('.floating-chat-header') : null;
+    if (chat && header) makeDraggable(chat, header);
+});
 
 // ─── AUDIO RECORDING & TRANSCRIPTION LOGIC ───
 let mediaRecorder;
@@ -1715,46 +1907,47 @@ function deleteRecordedAudio() {
     $('audio-record-btn').style.borderColor = '#ccc';
 }
 
-async function renderStravaFeed() {
+async function renderStravaFeed(force = false) {
     const list = $('strava-global-list');
     const loading = $('strava-global-loading');
     
     if (!list || !loading) return;
     
+    // Se não tivermos atletas carregados ainda, tenta carregar primeiro
+    if (athletes.length === 0) {
+        await syncAthletesFromSupabase();
+    }
+    
+    // Se não for forçado e já tivermos dados, apenas renderiza o que temos
+    if (!force && _currentStravaActivities.length > 0) {
+        list.innerHTML = _currentStravaActivities.map(act => renderStravaActivityCard(act)).join('');
+        // Re-inicializar mapas
+        _currentStravaActivities.forEach(act => {
+            if (act.polyline) initActivityMap(act.strava_id, act.polyline);
+        });
+        return;
+    }
+
     list.innerHTML = '';
     loading.style.display = 'block';
     
     try {
-        // ✅ CORRIGIDO: Filtrar apenas atletas com supabaseId (conta real no app)
-        const athletesWithAccount = athletes.filter(a => a.supabaseId);
+        let myId = window._profId;
         
-        if (athletesWithAccount.length === 0) {
-            loading.style.display = 'none';
-            list.innerHTML = `
-                <div style="padding:60px; text-align:center; color:var(--text-muted); background:var(--panel); border:2px dashed var(--border); border-radius:16px;">
-                    <i class="ri-information-line" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.3;"></i>
-                    <strong>Nenhum aluno com conta conectada</strong>
-                    <p style="font-size:13px; margin-top:4px;">Sincronize os alunos primeiro clicando em "Sincronizar Alunos" na seção Atletas.</p>
-                </div>
-            `;
-            return;
-        }
-        
-        // ✅ CORRIGIDO: Usar supabaseId (UUID do banco) na chamada à API
-        const activityPromises = athletesWithAccount.map(async (athlete) => {
-            try {
-                const response = await fetch(`/api/strava/activities?userId=${athlete.supabaseId}&_t=${Date.now()}`);
-                if (!response.ok) return [];
-                const data = await response.json();
-                if (!Array.isArray(data)) return [];
-                return data.map(act => ({ ...act, athleteName: athlete.name, athleteId: athlete.supabaseId }));
-            } catch (err) {
-                return [];
+        // Se ainda não temos o ID do professor, tenta buscar da sessão ativamente
+        if (!myId && typeof dbClient !== 'undefined') {
+            const { data } = await dbClient.auth.getSession();
+            if (data?.session?.user?.id) {
+                myId = data.session.user.id;
+                window._profId = myId;
             }
-        });
+        }
+
+        const response = await fetchWithTimeout(`/api/community/feed?userId=${myId || ''}&limit=50&_t=${Date.now()}`, { timeout: 15000 });
         
-        const results = await Promise.all(activityPromises);
-        const allActivities = results.flat().sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (!response.ok) throw new Error('Erro ao buscar feed da comunidade');
+        
+        const allActivities = await response.json();
         _currentStravaActivities = allActivities;
         
         loading.style.display = 'none';
@@ -1770,59 +1963,7 @@ async function renderStravaFeed() {
             return;
         }
         
-        list.innerHTML = allActivities.map(act => {
-            const date = new Date(act.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-            return `
-                <div class="stat-card" style="padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 0; box-shadow: var(--shadow);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 10px; background: var(--primary)10; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1px solid var(--primary)20;">
-                                ${act.athleteName.charAt(0)}
-                            </div>
-                            <div>
-                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.athleteName}</div>
-                                <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${date}</div>
-                            </div>
-                        </div>
-                        <div style="background: #fc4c0215; color: #fc4c02; padding: 6px 12px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #fc4c0220;">
-                            ${act.type}
-                        </div>
-                    </div>
-                    
-                    <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.title}</h4>
-                    
-                    ${act.polyline ? `
-                    <div style="position: relative; margin-bottom: 16px;">
-                        <div id="map-${act.strava_id}" style="height: 180px; width: 100%; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; position: relative; z-index: 1;"></div>
-                        <button onclick="openActivityDetail('${act.strava_id}')" style="position: absolute; top: 10px; right: 10px; z-index: 2; background: white; border: none; width: 32px; height: 32px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text);">
-                            <i class="ri-fullscreen-line"></i>
-                        </button>
-                    </div>
-                    ` : ''}
-
-                    <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
-                        <div>
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
-                            <div style="font-size: 18px; font-weight: 900; color: #fc4c02;">${act.metrics.distance}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Pace</div>
-                            <div style="font-size: 18px; font-weight: 900;">${act.metrics.pace}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Tempo</div>
-                            <div style="font-size: 18px; font-weight: 900;">${act.metrics.duration}</div>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
-                        <button onclick="openActivityDetail('${act.strava_id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #fc4c02; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s;">
-                            <i class="ri-line-chart-line"></i> Abrir Análise
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        list.innerHTML = allActivities.map(act => renderStravaActivityCard(act)).join('');
 
         // Inicializar os mapas após renderizar o HTML
         allActivities.forEach(act => {
@@ -1838,10 +1979,21 @@ async function renderStravaFeed() {
     }
 }
 
-async function renderGarminFeed() {
+async function renderGarminFeed(force = false) {
     const list = $('garmin-global-list');
     const loading = $('garmin-global-loading');
     
+    if (!list || !loading) return;
+    
+    if (athletes.length === 0) {
+        await syncAthletesFromSupabase();
+    }
+
+    if (!force && _currentGarminActivities.length > 0) {
+        list.innerHTML = _currentGarminActivities.map(act => renderGarminActivityCard(act)).join('');
+        return;
+    }
+
     list.innerHTML = '';
     loading.style.display = 'block';
 
@@ -1861,38 +2013,52 @@ async function renderGarminFeed() {
 
         let allActivities = [];
         let errorAthletes = [];
+        let completed = 0;
+        const total = athletesWithGarmin.length;
 
-        // Buscar atividades de todos os atletas em paralelo de forma segura
-        const results = await Promise.allSettled(athletesWithGarmin.map(async (athlete) => {
-            try {
-                // Anti-cache para garantir que a lista de atividades seja atualizada
-                const res = await fetch(`/api/garmin/activities?userId=${athlete.supabaseId}&limit=10&_t=${Date.now()}`);
-                if (!res.ok) {
-                    errorAthletes.push(athlete.name);
+        const updateProgress = () => {
+            loading.innerHTML = `
+                <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #000;"></i>
+                Sincronizando Garmin Connect (${completed}/${total} atletas)...
+            `;
+        };
+        updateProgress();
+
+        // Processar em lotes
+        const batchSize = 4;
+        for (let i = 0; i < athletesWithGarmin.length; i += batchSize) {
+            const batch = athletesWithGarmin.slice(i, i + batchSize);
+            const batchPromises = batch.map(async (athlete) => {
+                try {
+                    const res = await fetchWithTimeout(`/api/garmin/activities?userId=${athlete.supabaseId}&limit=10&_t=${Date.now()}`, { timeout: 15000 });
+                    completed++;
+                    updateProgress();
+                    if (!res.ok) {
+                        errorAthletes.push(athlete.name);
+                        return [];
+                    }
+                    const acts = await res.json();
+                    if (!Array.isArray(acts)) return [];
+                    return acts.map(a => ({ ...a, athleteName: athlete.name, athleteId: athlete.supabaseId }));
+                } catch (e) {
+                    completed++;
+                    updateProgress();
+                    console.warn(`Erro/Timeout Garmin ${athlete.name}`);
                     return [];
                 }
-                const acts = await res.json();
-                if (!Array.isArray(acts)) return [];
-                
-                return acts.map(a => ({
-                    ...a,
-                    athleteName: athlete.name,
-                    athleteId: athlete.supabaseId
-                }));
-            } catch (e) {
-                console.warn(`Erro ao buscar Garmin do atleta ${athlete.name}:`, e);
-                return [];
-            }
-        }));
-
-        // Unir todos os resultados em uma única lista
-        allActivities = results
-            .filter(r => r.status === 'fulfilled')
-            .flatMap(r => r.value);
+            });
+            const results = await Promise.all(batchPromises);
+            allActivities = allActivities.concat(results.flat());
+        }
 
         allActivities.sort((a, b) => new Date(b.date) - new Date(a.date));
+        _currentGarminActivities = allActivities;
 
         loading.style.display = 'none';
+        loading.innerHTML = `
+            <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #000;"></i>
+            Sincronizando atividades do Garmin Connect...
+        `;
 
         let errorHtml = '';
         if (errorAthletes.length > 0) {
@@ -1915,63 +2081,354 @@ async function renderGarminFeed() {
             return;
         }
         
-        list.innerHTML = errorHtml + allActivities.map(act => {
-            const date = new Date(act.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-            return `
-                <div class="stat-card" style="padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 0; box-shadow: var(--shadow);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 10px; background: var(--primary)10; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1px solid var(--primary)20;">
-                                ${act.athleteName.charAt(0)}
-                            </div>
-                            <div>
-                                <div style="font-size: 15px; font-weight: 800; color: var(--text);">${act.athleteName}</div>
-                                <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${date}</div>
-                            </div>
-                        </div>
-                        <div style="background: #00000015; color: #000; padding: 6px 12px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #00000020;">
-                            ${act.type === 'running' ? 'Corrida' : act.type}
-                        </div>
-                    </div>
-                    
-                    <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.name}</h4>
-                    
-                    <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
-
-                        <div>
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
-                            <div style="font-size: 18px; font-weight: 900; color: #000;">${act.distance} km</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Pace</div>
-                            <div style="font-size: 18px; font-weight: 900;">${act.pace || '--'}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Tempo</div>
-                            <div style="font-size: 18px; font-weight: 900;">${act.duration} min</div>
-                        </div>
-                    </div>
-                    
-                    <div style="padding: 16px 0 0 0; text-align: center; display: flex; flex-direction: column; gap: 8px;">
-                        <button onclick="openGarminDetails('${act.athleteId}', '${act.id}')" style="background: #000; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                            <i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin
-                        </button>
-                    </div>
-                    
-                    <div style="margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
-                        <a href="https://connect.garmin.com/modern/activity/${act.id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #00000015; color: #000; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; border: 1px solid #00000030; transition: all 0.2s;">
-                            <i class="ri-external-link-line"></i> Ver no site do Garmin
-                        </a>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        list.innerHTML = errorHtml + allActivities.map(act => renderGarminActivityCard(act)).join('');
         
     } catch (err) {
         console.error('Erro no feed Garmin:', err);
         loading.style.display = 'none';
         showToast('Erro ao sincronizar feed Garmin', 'error');
     }
+}
+
+function formatFeedDate(dateStr) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInMs = now - date;
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    if (diffInDays === 0) {
+        const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+        if (diffInHours === 0) return 'Agora mesmo';
+        return `Hoje às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    if (diffInDays === 1) return `Ontem às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+}
+
+function renderStravaActivityCard(act) {
+    const dateLabel = formatFeedDate(act.date);
+    const athleteName = act.athlete_name || act.athleteName || (act.profiles && act.profiles.name) || 'Atleta';
+    const avatarUrl = act.athlete_avatar || (act.profiles && act.profiles.avatar_url);
+    const initial = athleteName.charAt(0).toUpperCase();
+    
+    const likesCount = act.likesCount || 0;
+    const userLiked = act.userLiked || false;
+    const comments = act.comments || [];
+    
+    return `
+        <div class="stat-card" style="padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 0; box-shadow: var(--shadow);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    ${avatarUrl ? 
+                        `<img src="${avatarUrl}" style="width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--border);">` :
+                        `<div style="width: 40px; height: 40px; border-radius: 10px; background: var(--primary)10; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1px solid var(--primary)20;">
+                            ${initial}
+                        </div>`
+                    }
+                    <div>
+                        <div style="font-size: 15px; font-weight: 800; color: var(--text);">${athleteName}</div>
+                        <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${dateLabel}</div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.title || 'Atividade'}</h4>
+            
+            ${act.polyline ? `
+            <div style="position: relative; margin-bottom: 16px;">
+                <div id="map-${act.strava_id}" style="height: 180px; width: 100%; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; position: relative; z-index: 1;"></div>
+                <button onclick="openActivityDetail('${act.strava_id}')" style="position: absolute; top: 10px; right: 10px; z-index: 2; background: white; border: none; width: 32px; height: 32px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text);">
+                    <i class="ri-fullscreen-line"></i>
+                </button>
+            </div>
+            ` : ''}
+
+            <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
+                    <div style="font-size: 18px; font-weight: 900; color: #fc4c02;">${act.metrics?.distance || '--'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Pace</div>
+                    <div style="font-size: 18px; font-weight: 900;">${act.metrics?.pace || '--'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Tempo</div>
+                    <div style="font-size: 18px; font-weight: 900;">${act.metrics?.duration || '--'}</div>
+                </div>
+            </div>
+
+            <!-- Interações da Comunidade -->
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <button id="like-btn-${act.strava_id}" onclick="toggleActivityLike('${act.strava_id}')" style="display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: ${userLiked ? '#ef4444' : 'var(--text-muted)'}; transition: transform 0.2s; padding: 0;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                        <i id="like-icon-${act.strava_id}" class="${userLiked ? 'ri-heart-fill' : 'ri-heart-line'}" style="font-size: 20px;"></i>
+                        <span id="like-count-${act.strava_id}" style="font-size: 13px; font-weight: 700;">${likesCount}</span>
+                    </button>
+                    <button onclick="toggleActivityComments('${act.strava_id}')" style="display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 0;">
+                        <i class="ri-chat-3-line" style="font-size: 20px;"></i>
+                        <span id="comment-count-${act.strava_id}" style="font-size: 13px; font-weight: 700;">${comments.length}</span>
+                    </button>
+                    
+                    <div style="flex: 1;"></div>
+                    
+                    <button onclick="openActivityDetail('${act.strava_id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #fc4c02; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; border: none; cursor: pointer;">
+                        <i class="ri-line-chart-line"></i> Analisar
+                    </button>
+                </div>
+
+                <!-- Lista de Comentários (Oculta por padrão) -->
+                <div id="comments-section-${act.strava_id}" style="display: none; flex-direction: column; gap: 10px; background: var(--bg); padding: 12px; border-radius: 12px;">
+                    <div id="comments-list-${act.strava_id}" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+                        ${comments.map(c => `
+                            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                                <div style="width: 24px; height: 24px; min-width: 24px; border-radius: 6px; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800;">
+                                    ${c.user_name ? c.user_name.charAt(0).toUpperCase() : 'A'}
+                                </div>
+                                <div style="flex: 1; background: var(--panel); padding: 6px 10px; border-radius: 8px; font-size: 12px;">
+                                    <div style="font-weight: 800; color: var(--text); margin-bottom: 2px;">${c.user_name}</div>
+                                    <div style="color: var(--text-muted); line-height: 1.4;">${c.content}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <input type="text" id="comment-input-${act.strava_id}" placeholder="Escreva um comentário..." style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; outline: none;" onkeydown="if(event.key==='Enter') sendActivityComment('${act.strava_id}')">
+                        <button onclick="sendActivityComment('${act.strava_id}')" style="background: var(--primary); color: white; border: none; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                            <i class="ri-send-plane-fill"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function toggleActivityLike(activityId) {
+    let myId = window._profId;
+    
+    if (!myId && typeof dbClient !== 'undefined') {
+        const { data } = await dbClient.auth.getSession();
+        myId = data?.session?.user?.id;
+        if (myId) window._profId = myId;
+    }
+
+    if (!myId) return showToast('Sessão expirada. Recarregue.', 'error');
+    
+    const act = _currentStravaActivities.find(a => (a.strava_id || a.id) == activityId);
+    if (!act) return;
+
+    // Optimistic Update local state
+    const prevLiked = act.userLiked;
+    act.userLiked = !prevLiked;
+    act.likesCount = prevLiked ? Math.max(0, act.likesCount - 1) : act.likesCount + 1;
+    
+    // Targeted DOM Update to prevent full rerender (and map flickering)
+    updateActivitySocialUI(activityId, act);
+
+    try {
+        const res = await fetch('/api/community/likes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                activityId: String(activityId), 
+                userId: myId, 
+                userName: 'Professor'
+            })
+        });
+        
+        if (!res.ok) throw new Error();
+    } catch (err) {
+        // Rollback
+        act.userLiked = prevLiked;
+        act.likesCount = prevLiked ? act.likesCount : Math.max(0, act.likesCount - 1);
+        updateActivitySocialUI(activityId, act);
+        showToast('Erro ao processar like', 'error');
+    }
+}
+
+function updateActivitySocialUI(activityId, act) {
+    const likeBtn = $(`like-btn-${activityId}`);
+    const likeIcon = $(`like-icon-${activityId}`);
+    const likeCount = $(`like-count-${activityId}`);
+    const commentCount = $(`comment-count-${activityId}`);
+
+    if (likeBtn) likeBtn.style.color = act.userLiked ? '#ef4444' : 'var(--text-muted)';
+    if (likeIcon) likeIcon.className = act.userLiked ? 'ri-heart-fill' : 'ri-heart-line';
+    if (likeCount) likeCount.textContent = act.likesCount || 0;
+    if (commentCount) commentCount.textContent = (act.comments || []).length;
+}
+
+function toggleActivityComments(activityId) {
+    const el = $(`comments-section-${activityId}`);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+async function sendActivityComment(activityId) {
+    const input = $(`comment-input-${activityId}`);
+    const content = input.value.trim();
+    if (!content) return;
+
+    const myId = window._profId;
+    if (!myId) return showToast('Sessão expirada. Recarregue.', 'error');
+
+    input.value = '';
+    input.disabled = true;
+
+    try {
+        const res = await fetch('/api/community/comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                activityId: String(activityId),
+                userId: myId,
+                userName: 'Professor',
+                content: content
+            })
+        });
+        
+        if (!res.ok) throw new Error();
+        
+        const newComment = await res.json();
+        
+        // Update local state
+        const act = _currentStravaActivities.find(a => (a.strava_id || a.id) == activityId);
+        if (act) {
+            if (!act.comments) act.comments = [];
+            act.comments.push(newComment);
+            
+            // Targeted DOM Update
+            const list = $(`comments-list-${activityId}`);
+            if (list) {
+                const commentHtml = `
+                    <div style="display: flex; gap: 8px; align-items: flex-start;">
+                        <div style="width: 24px; height: 24px; min-width: 24px; border-radius: 6px; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800;">
+                            P
+                        </div>
+                        <div style="flex: 1; background: var(--panel); padding: 6px 10px; border-radius: 8px; font-size: 12px;">
+                            <div style="font-weight: 800; color: var(--text); margin-bottom: 2px;">Professor</div>
+                            <div style="color: var(--text-muted); line-height: 1.4;">${newComment.content}</div>
+                        </div>
+                    </div>
+                `;
+                list.insertAdjacentHTML('beforeend', commentHtml);
+                list.scrollTop = list.scrollHeight;
+            }
+            updateActivitySocialUI(activityId, act);
+        }
+        
+        input.disabled = false;
+        $(`comments-section-${activityId}`).style.display = 'flex';
+        
+    } catch (err) {
+        showToast('Erro ao enviar comentário', 'error');
+        input.disabled = false;
+        input.value = content;
+    }
+}
+
+function renderGarminActivityCard(act) {
+    const dateLabel = formatFeedDate(act.date);
+    const athleteName = act.athlete_name || act.athleteName || 'Atleta';
+    const avatarUrl = act.athlete_avatar;
+    const initial = athleteName.charAt(0).toUpperCase();
+    
+    // As atividades do Garmin no feed global podem vir do cache (community) ou direto da API
+    // Se vierem do community, terão strava_id (que é o ID da atividade no cache)
+    const activityId = act.strava_id || act.id;
+    const likesCount = act.likesCount || 0;
+    const userLiked = act.userLiked || false;
+    const comments = act.comments || [];
+
+    return `
+        <div class="stat-card" style="padding: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 0; box-shadow: var(--shadow);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    ${avatarUrl ? 
+                        `<img src="${avatarUrl}" style="width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--border);">` :
+                        `<div style="width: 40px; height: 40px; border-radius: 10px; background: var(--primary)10; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1px solid var(--primary)20;">
+                            ${initial}
+                        </div>`
+                    }
+                    <div>
+                        <div style="font-size: 15px; font-weight: 800; color: var(--text);">${athleteName}</div>
+                        <div style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${dateLabel}</div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <h4 style="font-size: 18px; font-weight: 900; margin-bottom: 16px; color: var(--text); letter-spacing: -0.5px;">${act.name || act.title || 'Atividade Garmin'}</h4>
+            
+            <div class="strava-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; padding: 16px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);">
+
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Distância</div>
+                    <div style="font-size: 18px; font-weight: 900; color: #000;">${act.distance || '--'} ${act.distance ? 'km' : ''}</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Pace</div>
+                    <div style="font-size: 18px; font-weight: 900;">${act.pace || '--'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Tempo</div>
+                    <div style="font-size: 18px; font-weight: 900;">${act.duration || '--'} ${act.duration ? 'min' : ''}</div>
+                </div>
+            </div>
+            
+            <!-- Interações da Comunidade -->
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <button id="like-btn-${activityId}" onclick="toggleActivityLike('${activityId}')" style="display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: ${userLiked ? '#ef4444' : 'var(--text-muted)'}; transition: transform 0.2s; padding: 0;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                        <i id="like-icon-${activityId}" class="${userLiked ? 'ri-heart-fill' : 'ri-heart-line'}" style="font-size: 20px;"></i>
+                        <span id="like-count-${activityId}" style="font-size: 13px; font-weight: 700;">${likesCount}</span>
+                    </button>
+                    <button onclick="toggleActivityComments('${activityId}')" style="display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 0;">
+                        <i class="ri-chat-3-line" style="font-size: 20px;"></i>
+                        <span id="comment-count-${activityId}" style="font-size: 13px; font-weight: 700;">${comments.length}</span>
+                    </button>
+                    
+                    <div style="flex: 1;"></div>
+                    
+                    <button onclick="openGarminDetails('${act.athlete_id || act.athleteId}', '${act.id}')" style="background: #000; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <i class="ri-compass-discover-line"></i> Dinâmicas
+                    </button>
+                </div>
+
+                <!-- Lista de Comentários -->
+                <div id="comments-section-${activityId}" style="display: none; flex-direction: column; gap: 10px; background: var(--bg); padding: 12px; border-radius: 12px;">
+                    <div id="comments-list-${activityId}" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+                        ${comments.map(c => `
+                            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                                <div style="width: 24px; height: 24px; min-width: 24px; border-radius: 6px; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800;">
+                                    ${c.user_name ? c.user_name.charAt(0).toUpperCase() : 'A'}
+                                </div>
+                                <div style="flex: 1; background: var(--panel); padding: 6px 10px; border-radius: 8px; font-size: 12px;">
+                                    <div style="font-weight: 800; color: var(--text); margin-bottom: 2px;">${c.user_name}</div>
+                                    <div style="color: var(--text-muted); line-height: 1.4;">${c.content}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <input type="text" id="comment-input-${activityId}" placeholder="Escreva um comentário..." style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; outline: none;" onkeydown="if(event.key==='Enter') sendActivityComment('${activityId}')">
+                        <button onclick="sendActivityComment('${activityId}')" style="background: var(--primary); color: white; border: none; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                            <i class="ri-send-plane-fill"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                <a href="https://connect.garmin.com/modern/activity/${act.id}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #00000015; color: #000; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; border: 1px solid #00000030; transition: all 0.2s;">
+                    <i class="ri-external-link-line"></i> Garmin
+                </a>
+            </div>
+        </div>
+    `;
 }
 
 function checkDOMIntegrity() {
@@ -2559,9 +3016,16 @@ function initActivityMap(id, polyline) {
 }
 
 function openActivityDetail(id) {
-    const act = _currentStravaActivities.find(a => a.strava_id == id);
-    if (!act) return;
+    const act = _currentStravaActivities.find(a => (a.strava_id || a.id) == id);
+    if (!act) {
+        showToast('Atividade não encontrada localmente', 'warning');
+        return;
+    }
 
+    // Unificar nomes de propriedades
+    const athleteId = act.athlete_id || act.athleteId;
+    const athleteName = act.athlete_name || act.athleteName || 'Atleta';
+    
     // Resetar estado anterior
     if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
     detailMapMarker = null;
@@ -2569,64 +3033,98 @@ function openActivityDetail(id) {
     detailChartInstances.forEach(c => c.destroy());
     detailChartInstances = [];
     _currentStreams = null;
-    _currentAthleteId = act.athleteId;
-    _currentActivityId = act.strava_id; // Guardar ID atual
+    _currentAthleteId = athleteId;
+    _currentActivityId = id;
 
-    $('act-detail-title').textContent = act.title;
-    $('act-detail-athlete').textContent = act.athleteName;
-    $('act-detail-date').textContent = new Date(act.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-    $('act-detail-type').textContent = act.type;
-    $('act-detail-avatar').textContent = act.athleteName.charAt(0);
+    $('act-detail-title').textContent = act.title || 'Atividade';
+    $('act-detail-athlete').textContent = athleteName;
+    $('act-detail-date').textContent = formatFeedDate(act.date || act.activity_date);
+    $('act-detail-type').style.display = 'none';
+    $('act-detail-avatar').textContent = athleteName.charAt(0);
     
-    // Metrics Grid
+    // Renderizar métricas iniciais (mesmo que parciais)
+    updateActivityDetailMetrics(act);
+
+    $('modal-activity-detail').classList.add('show');
+    $('act-detail-charts').style.display = 'none';
+
+    // Se as métricas estiverem incompletas (comum no feed da comunidade), buscar detalhes completos
+    const numericId = String(id).replace('strava_', '').replace('garmin_', '');
+    if (!act.metrics || !act.metrics.elevation || act.metrics.elevation === '--') {
+        fetchFullActivityDetails(athleteId, numericId);
+    }
+
+    // Renderizar Mapa e depois Gráficos
+    setTimeout(() => renderActivityTelemetry(act), 300);
+}
+
+function updateActivityDetailMetrics(act) {
+    const metrics = act.metrics || {};
     const metricsHtml = `
         <div class="stat-card" style="background: var(--bg);">
             <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Distância</div>
-            <div style="font-size: 24px; font-weight: 900; color: #fc4c02;">${act.metrics.distance}</div>
+            <div style="font-size: 24px; font-weight: 900; color: #fc4c02;">${metrics.distance || '--'}</div>
         </div>
         <div class="stat-card" style="background: var(--bg);">
             <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Pace Médio</div>
-            <div style="font-size: 24px; font-weight: 900;">${act.metrics.pace}</div>
+            <div style="font-size: 24px; font-weight: 900;">${metrics.pace || '--'}</div>
         </div>
         <div class="stat-card" style="background: var(--bg);">
             <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Tempo Total</div>
-            <div style="font-size: 24px; font-weight: 900;">${act.metrics.duration}</div>
+            <div style="font-size: 24px; font-weight: 900;">${metrics.duration || '--'}</div>
         </div>
         <div class="stat-card" style="background: var(--bg);">
             <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Ganho de Elevação</div>
-            <div style="font-size: 24px; font-weight: 900;">${act.metrics.elevation}</div>
+            <div style="font-size: 24px; font-weight: 900;">${metrics.elevation || '--'}</div>
         </div>
     `;
     $('act-detail-metrics').innerHTML = metricsHtml;
 
-    // Extra Info / Footer
     const extraHtml = `
         <div>
             <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Frequência Cardíaca</div>
-            <div style="font-size: 16px; font-weight: 800;">Média: ${act.metrics.avgHeartRate} bpm / Máx: ${act.metrics.maxHeartRate} bpm</div>
+            <div style="font-size: 16px; font-weight: 800;">Média: ${metrics.avgHeartRate || '--'} bpm / Máx: ${metrics.maxHeartRate || '--'} bpm</div>
         </div>
         <div>
             <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Esforço (Suffer Score)</div>
-            <div style="font-size: 16px; font-weight: 800;">${act.metrics.sufferScore}</div>
+            <div style="font-size: 16px; font-weight: 800;">${metrics.sufferScore || '--'}</div>
         </div>
         <div style="grid-column: 1 / -1; display: flex; gap: 12px; margin-top: 12px;">
             ${act.garmin_id ? `
-            <button onclick="openGarminDetails('${act.athleteId}', '${act.garmin_id}')" class="btn btn-secondary" style="flex: 1; background: #000; color: #fff;">
+            <button onclick="openGarminDetails('${act.athlete_id || act.athleteId}', '${act.garmin_id}')" class="btn btn-secondary" style="flex: 1; background: #000; color: #fff;">
                 <i class="ri-compass-discover-line"></i> Dinâmicas Garmin
             </button>
             ` : ''}
-            <a href="https://www.strava.com/activities/${act.strava_id}" target="_blank" class="btn btn-secondary" style="flex: 1;">
+            <a href="https://www.strava.com/activities/${act.strava_id || act.id}" target="_blank" class="btn btn-secondary" style="flex: 1;">
                 <i class="ri-external-link-line"></i> Ver no Strava
             </a>
         </div>
     `;
     $('act-detail-extra').innerHTML = extraHtml;
+}
 
-    $('modal-activity-detail').classList.add('show');
-    $('act-detail-charts').style.display = 'none';
+async function fetchFullActivityDetails(athleteId, activityId) {
+    // Garantir que temos apenas o número do ID
+    const numericId = String(activityId).replace('strava_', '').replace('garmin_', '');
+    try {
+        const response = await fetch(`/api/strava/activity/${numericId}?userId=${athleteId}`);
+        if (!response.ok) return;
+        const fullAct = await response.json();
+        
+        // Atualizar no estado local (procurar por strava_ID ou ID puro)
+        const index = _currentStravaActivities.findIndex(a => 
+            (a.strava_id || a.id) == numericId || 
+            (a.strava_id || a.id) == `strava_${numericId}`
+        );
 
-    // Renderizar Mapa e depois Gráficos
-    setTimeout(() => renderActivityTelemetry(act), 300);
+        if (index !== -1) {
+            _currentStravaActivities[index].metrics = fullAct.metrics;
+            // Se o modal ainda estiver aberto para esta atividade, atualizar UI
+            if (_currentActivityId == numericId || _currentActivityId == `strava_${numericId}`) {
+                updateActivityDetailMetrics(_currentStravaActivities[index]);
+            }
+        }
+    } catch (e) { console.error('Erro ao buscar detalhes completos:', e); }
 }
 
 function setChartXAxis(mode) {
@@ -2638,7 +3136,7 @@ function setChartXAxis(mode) {
     $('btn-xaxis-time').classList.toggle('active', mode === 'time');
     
     // Recarregar gráficos
-    const act = _currentStravaActivities.find(a => a.strava_id == _currentActivityId);
+    const act = _currentStravaActivities.find(a => (a.strava_id || a.id) == _currentActivityId);
     if (act) renderActivityTelemetry(act);
 }
 
@@ -2659,7 +3157,9 @@ async function renderActivityTelemetry(act) {
     // 2. Gráficos (Telemetria)
     try {
         if (!_currentStreams) {
-            const response = await fetch(`/api/strava/activity/${act.strava_id}/streams?userId=${act.athleteId}`);
+            const numericId = String(act.strava_id || act.id).replace('strava_', '').replace('garmin_', '');
+            const athleteId = act.athlete_id || act.athleteId;
+            const response = await fetch(`/api/strava/activity/${numericId}/streams?userId=${athleteId}`);
             if (!response.ok) return;
             const rawStreams = await response.json();
             
@@ -2790,7 +3290,7 @@ async function renderActivityTelemetry(act) {
             const paceData = streams.velocity_smooth.map(v => {
                 if (v <= 0) return null;
                 const pace = (1000 / v) / 60;
-                return pace > 14 ? null : pace;
+                return pace > 20 ? null : pace;
             });
             
             // Média de ritmo
@@ -2806,6 +3306,21 @@ async function renderActivityTelemetry(act) {
 
             const athlete = athletes.find(a => a.supabaseId === act.athleteId);
 
+            // Calcular limites dinâmicos para o eixo Y do Ritmo
+            const validPaces = paceData.filter(p => p !== null && p < 20);
+            let dynamicMin = 4;
+            let dynamicMax = 20;
+            
+            if (validPaces.length > 0) {
+                const fastest = Math.min(...validPaces);
+                const slowest = Math.max(...validPaces);
+                dynamicMin = Math.max(0, fastest - 0.5); // 30 segundos abaixo (mais rápido)
+                dynamicMax = slowest + 1.0;              // 1 minuto acima (mais lento)
+                
+                // Garantir um range mínimo de 2 minutos para não ficar muito "esticado"
+                if (dynamicMax - dynamicMin < 2) dynamicMax = dynamicMin + 2;
+            }
+
             detailChartInstances.push(new Chart(ctx, {
                 type: 'line',
                 data: { 
@@ -2819,6 +3334,7 @@ async function renderActivityTelemetry(act) {
                         pointRadius: 0, 
                         borderWidth: 1, 
                         tension: 0.4,
+                        spanGaps: true,
                         segment: {
                             borderColor: ctx => {
                                 if (!athlete || !athlete.testTime) return '#007aff';
@@ -2844,8 +3360,8 @@ async function renderActivityTelemetry(act) {
                         y: { 
                             ...commonOptions.scales.y, 
                             reverse: true, 
-                            min: 4, 
-                            max: 14,
+                            min: dynamicMin, 
+                            max: dynamicMax,
                             ticks: {
                                 ...commonOptions.scales.y.ticks,
                                 callback: value => {
@@ -3037,9 +3553,17 @@ function renderZoomChart(primaryType, overlayType = null) {
             axis.suggestedMin = 80;
             axis.suggestedMax = hrMax > 175 ? 200 : (hrMax > 155 ? 180 : 160);
         } else if (type === 'pace') {
+            const paceData = (_currentStreams.velocity_smooth || []).map(v => (v > 0 ? (1000 / v) / 60 : null)).filter(p => p !== null && p < 15);
+            let dynamicMin = 4;
+            let dynamicMax = 14;
+            if (paceData.length > 0) {
+                dynamicMin = Math.max(0, Math.min(...paceData) - 0.5);
+                dynamicMax = Math.max(...paceData) + 1.0;
+                if (dynamicMax - dynamicMin < 2) dynamicMax = dynamicMin + 2;
+            }
             axis.reverse = true;
-            axis.min = 4;
-            axis.max = 14;
+            axis.min = dynamicMin;
+            axis.max = dynamicMax;
             axis.ticks.callback = value => {
                 if (value <= 0) return '';
                 const m = Math.floor(value);
@@ -3173,11 +3697,12 @@ function getDatasetConfig(type, streams, mode = 'zones', isOverlay = false) {
                 data: (streams.velocity_smooth || []).map(v => {
                     if (v <= 0) return null;
                     const pace = (1000 / v) / 60;
-                    return pace > 14 ? null : pace;
+                    return pace > 20 ? null : pace;
                 }),
                 borderColor: '#007aff',
                 backgroundColor: 'rgba(0, 122, 255, 0.05)',
-                fill: false // Ritmo nunca é área no Garmin
+                fill: false, // Ritmo nunca é área no Garmin
+                spanGaps: true
             };
 
             if (!isOverlay && mode === 'zones' && athlete && athlete.testTime) {
@@ -3265,4 +3790,117 @@ function applyZoomOverlay() {
 function applyZoomXAxis() {
     const overlay = $('zoom-overlay-select').value;
     renderZoomChart(_currentZoomType, overlay);
+}
+
+// ─── SUGGESTION 1: CHAT NOTIFICATIONS ───
+async function checkUnreadMessages() {
+    if (!window._profId) return;
+    try {
+        const { data, error } = await dbClient
+            .from('messages')
+            .select('athlete_id, created_at, sender_id')
+            .neq('sender_id', window._profId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        
+        const unreadAthletes = new Set();
+        data.forEach(m => {
+            const lastSeen = localStorage.getItem(`chat_seen_${m.athlete_id}`) || 0;
+            if (new Date(m.created_at).getTime() > parseInt(lastSeen)) {
+                unreadAthletes.add(m.athlete_id);
+            }
+        });
+
+        const badge = $('chat-badge');
+        if (badge) {
+            if (unreadAthletes.size > 0) {
+                badge.textContent = unreadAthletes.size;
+                badge.style.display = 'flex';
+                // Também mostrar na nav-item do mobile
+                document.querySelector('[data-view="chat"] .badge-new')?.style.setProperty('display', 'flex');
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) { console.error('Error checking unreads:', e); }
+}
+setInterval(checkUnreadMessages, 30000); // Check every 30s
+setTimeout(checkUnreadMessages, 2000); // Initial check
+
+// Mark as read when selecting athlete
+const originalSelectAthlete = selectFloatingChatAthlete;
+selectFloatingChatAthlete = async function(id, name) {
+    localStorage.setItem(`chat_seen_${id}`, Date.now());
+    checkUnreadMessages();
+    return originalSelectAthlete(id, name);
+};
+
+// ─── SUGGESTION 2: PLANNED VS REALIZED CHART ───
+let _dashboardChart = null;
+async function renderPlannedVsRealizedChart() {
+    const canvas = $('chart-planned-vs-realized');
+    if (!canvas) return;
+
+    // Calcular Planejado (Volume das pastas vinculadas aos atletas)
+    let plannedTotal = 0;
+    athletes.forEach(a => {
+        if (a.groupId) {
+            const g = groups.find(x => x.id == a.groupId);
+            if (g) plannedTotal += (g.volume || 0);
+        }
+    });
+
+    // Calcular Realizado (Últimos 7 dias de todos os atletas)
+    let realizedTotal = 0;
+    try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const { data, error } = await dbClient
+            .from('activities')
+            .select('distance')
+            .gte('start_time', sevenDaysAgo.toISOString());
+            
+        if (!error && data) {
+            realizedTotal = data.reduce((acc, act) => acc + (parseFloat(act.distance) || 0), 0);
+        }
+    } catch (e) { console.error('Error fetching realized volume:', e); }
+
+    if (_dashboardChart) _dashboardChart.destroy();
+    
+    _dashboardChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: ['Volume da Equipe (Semanal)'],
+            datasets: [
+                {
+                    label: 'Planejado (km)',
+                    data: [plannedTotal],
+                    backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                    borderColor: '#2563eb',
+                    borderWidth: 2,
+                    borderRadius: 8
+                },
+                {
+                    label: 'Realizado (km)',
+                    data: [realizedTotal.toFixed(1)],
+                    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                    borderColor: '#10b981',
+                    borderWidth: 2,
+                    borderRadius: 8
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { font: { weight: 'bold' } } }
+            },
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'Quilômetros (km)' } }
+            }
+        }
+    });
 }
