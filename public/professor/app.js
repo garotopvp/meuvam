@@ -102,7 +102,14 @@ async function fetchWithTimeout(resource, options = {}) {
     }
 }
 function vamToPace(k){if(!k||k<=0)return'Livre';return formatPace(60/k)+'/km';}
-function closeModals(){allModals.forEach(m=>m.classList.remove('show'));}
+function closeModals(){
+    allModals.forEach(m=>m.classList.remove('show'));
+    // Se fechar manual (X ou Esc) e estiver na URL de atividade, volta para a view anterior
+    if (window.location.pathname.includes('/atividade/')) {
+        const lastView = localStorage.getItem('vdot_lastView') || 'dashboard';
+        navigate(lastView, null, false);
+    }
+}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
 
 let _toastTimer=null,_undoFn=null;
@@ -153,7 +160,8 @@ const ROUTES = {
     'strava-feed': 'feed',
     'garmin-feed': 'garmin',
     'calculator': 'calculadoras',
-    'chat': 'chat'
+    'chat': 'chat',
+    'activity': 'atividade'
 };
 
 const REVERSE_ROUTES = Object.fromEntries(Object.entries(ROUTES).map(([k, v]) => [v, k]));
@@ -163,6 +171,9 @@ function navigate(viewId, cat, skipPush = false) {
     try {
         if(viewId!=='groups')activeCategory=null;
         if(viewId==='groups'&&cat!==undefined)activeCategory=cat;
+        
+        // Fechar modais ao navegar para uma view principal
+        if (viewId !== 'activity') closeModals();
         
         const section = $(`view-${viewId}`);
         if (!section) {
@@ -224,24 +235,41 @@ document.querySelectorAll('.nav-item').forEach(item=>{
 
 window.addEventListener('popstate', (e) => {
     if (e.state && e.state.viewId) {
-        navigate(e.state.viewId, e.state.cat, true);
+        if (e.state.viewId === 'activity') {
+            openActivityDetail(e.state.id, true);
+        } else {
+            navigate(e.state.viewId, e.state.cat, true);
+        }
     } else {
         const parts = window.location.pathname.split('/').filter(Boolean);
         const lastPart = parts[parts.length - 1];
-        const viewId = REVERSE_ROUTES[lastPart] || 'dashboard';
-        navigate(viewId, null, true);
+        const isActivity = window.location.pathname.includes('/atividade/');
+        
+        if (isActivity) {
+            openActivityDetail(lastPart, true);
+        } else {
+            const viewId = REVERSE_ROUTES[lastPart] || 'dashboard';
+            navigate(viewId, null, true);
+        }
     }
 });
 
 (function restoreNav(){
     const parts = window.location.pathname.split('/').filter(Boolean);
     const lastPart = parts[parts.length - 1];
-    const urlViewId = REVERSE_ROUTES[lastPart];
     
-    const v = urlViewId || localStorage.getItem('vdot_lastView') || 'dashboard';
-    const c = localStorage.getItem('vdot_lastCat') || '';
-    if(c && v==='groups') activeCategory=c;
-    navigate(v, null, true);
+    if (window.location.pathname.includes('/atividade/')) {
+        // Se entrar via link direto de atividade, primeiro carrega o dashboard
+        // e depois tenta abrir a atividade (depois de um tempo para carregar dados)
+        navigate('dashboard', null, true);
+        setTimeout(() => openActivityDetail(lastPart, true), 1000);
+    } else {
+        const urlViewId = REVERSE_ROUTES[lastPart];
+        const v = urlViewId || localStorage.getItem('vdot_lastView') || 'dashboard';
+        const c = localStorage.getItem('vdot_lastCat') || '';
+        if(c && v==='groups') activeCategory=c;
+        navigate(v, null, true);
+    }
 })();
 
 // ═══════════════════════════════════════
@@ -3015,11 +3043,17 @@ function initActivityMap(id, polyline) {
     }, 100);
 }
 
-function openActivityDetail(id) {
+function openActivityDetail(id, skipPush = false) {
     const act = _currentStravaActivities.find(a => (a.strava_id || a.id) == id);
     if (!act) {
+        // Se não encontrar no feed atual, pode ser um link direto. 
+        // Em um app real, buscaríamos da API aqui.
         showToast('Atividade não encontrada localmente', 'warning');
         return;
+    }
+
+    if (!skipPush) {
+        history.pushState({ viewId: 'activity', id }, '', '/professor/atividade/' + id);
     }
 
     // Unificar nomes de propriedades

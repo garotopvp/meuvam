@@ -35,8 +35,8 @@
                 const parts = path.split('/').filter(Boolean);
                 const lastPart = parts[parts.length - 1];
                 
-                const views = ['resumo', 'pastas', 'atletas', 'equipe', 'feed', 'garmin', 'calculadoras', 'chat'];
-                if (cleanHash === lastPart || views.includes(cleanHash)) {
+                const views = ['resumo', 'pastas', 'atletas', 'equipe', 'feed', 'garmin', 'calculadoras', 'chat', 'atividade'];
+                if (cleanHash === lastPart || views.includes(cleanHash) || path.includes('/atividade/')) {
                     history.replaceState(null, '', path + search);
                 }
             }
