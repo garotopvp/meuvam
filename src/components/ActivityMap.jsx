@@ -29,7 +29,7 @@ const decodePolyline = (encoded) => {
   return poly;
 };
 
-const ActivityMap = ({ routeData, isHeatmap = false }) => {
+const ActivityMap = ({ routeData, isHeatmap = false, style }) => {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
 
@@ -55,46 +55,49 @@ const ActivityMap = ({ routeData, isHeatmap = false }) => {
       const L = window.L;
       let coords = routeData;
 
-      // Se for uma string (Encoded Polyline do Strava), decodificar
       if (typeof routeData === 'string' && routeData.length > 0) {
         coords = decodePolyline(routeData);
       }
 
-      const center = coords?.[0] || [-23.5505, -46.6333];
+      if (!coords || coords.length === 0) return;
+
+      const center = coords[0];
       
       mapInstance.current = L.map(mapRef.current, {
         zoomControl: false,
-        attributionControl: false
+        attributionControl: false,
+        dragging: !style?.pointerEvents, // Se tiver pointerEvents none, desativa drag
+        touchZoom: !style?.pointerEvents,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
       }).setView(center, 14);
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 19
       }).addTo(mapInstance.current);
 
-      if (coords && coords.length > 0) {
-        const polyline = L.polyline(coords, {
-          color: 'var(--primary-color)',
-          weight: 4,
-          opacity: 0.8,
-          lineJoin: 'round'
-        }).addTo(mapInstance.current);
+      const polyline = L.polyline(coords, {
+        color: '#fc4c02', // Strava Orange
+        weight: 4,
+        opacity: 0.9,
+        lineJoin: 'round',
+        lineCap: 'round'
+      }).addTo(mapInstance.current);
 
-        mapInstance.current.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+      mapInstance.current.fitBounds(polyline.getBounds(), { padding: [30, 30] });
 
-        if (isHeatmap) {
-          // Mock de heatmap usando círculos coloridos ao longo da rota
-          coords.forEach((point, i) => {
-            if (i % 5 === 0) {
-              const intensity = Math.random(); // Mock de intensidade
-              L.circle(point, {
-                radius: 30,
-                fillColor: intensity > 0.7 ? '#ff3b30' : intensity > 0.4 ? '#ff9500' : '#34c759',
-                fillOpacity: 0.4,
-                stroke: false
-              }).addTo(mapInstance.current);
-            }
-          });
-        }
+      if (isHeatmap) {
+        coords.forEach((point, i) => {
+          if (i % 8 === 0) {
+            const intensity = Math.random();
+            L.circle(point, {
+              radius: 25,
+              fillColor: intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f59e0b' : '#22c55e',
+              fillOpacity: 0.3,
+              stroke: false
+            }).addTo(mapInstance.current);
+          }
+        });
       }
     }
 
@@ -114,8 +117,9 @@ const ActivityMap = ({ routeData, isHeatmap = false }) => {
         height: '200px', 
         borderRadius: '20px', 
         overflow: 'hidden',
-        border: '1px solid var(--border-color)',
-        zIndex: 1
+        border: '1px solid #e2e8f0',
+        zIndex: 1,
+        ...style
       }} 
     />
   );

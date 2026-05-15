@@ -18,11 +18,17 @@ const AuthView = ({ onBack }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === 'true' || window.location.pathname.includes('/cadastro')) {
+      setIsLogin(false);
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResettingPassword(true);
@@ -58,6 +64,9 @@ const AuthView = ({ onBack }) => {
 
     try {
       if (isResettingPassword) {
+        if (password !== confirmPassword) {
+          throw new Error('As senhas não coincidem.');
+        }
         const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         setError('Senha atualizada com sucesso! Você já está logado.');
@@ -74,6 +83,9 @@ const AuthView = ({ onBack }) => {
         }
 
       } else {
+        if (password !== confirmPassword) {
+          throw new Error('As senhas não coincidem.');
+        }
         const { data, error } = await supabase.auth.signUp({ 
           email, 
           password,
@@ -128,7 +140,7 @@ const AuthView = ({ onBack }) => {
         onClick={onBack}
         style={{ 
           position: 'absolute', 
-          top: '1.5rem', 
+          top: 'calc(1.5rem + var(--safe-area-top))', 
           left: '1.5rem', 
           background: '#fff', 
           border: '1px solid #e2e8f0', 
@@ -244,6 +256,19 @@ const AuthView = ({ onBack }) => {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
+
+          {(!isLogin || isResettingPassword) && (
+            <div style={{ position: 'relative' }}>
+              <Lock size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input 
+                className="auth-input"
+                type={showPassword ? "text" : "password"} 
+                placeholder="Confirme a senha" required 
+                value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                style={{ paddingLeft: '48px', paddingRight: '48px' }}
+              />
+            </div>
+          )}
 
           {isLogin && !isResettingPassword && (
             <div style={{ textAlign: 'right', marginTop: '-4px', marginBottom: '8px' }}>

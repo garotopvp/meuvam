@@ -314,34 +314,8 @@ router.get('/activities', async (req, res) => {
       trainingEffect: a.aerobicTrainingEffect || null,
       anaerobicTrainingEffect: a.anaerobicTrainingEffect || null
     }));
-    // ─── CACHE FOR COMMUNITY FEED ──────────────────────────────────────────
-    try {
-      const userId = req.query.userId;
-      const { data: profile } = await supabase.from('profiles').select('name, avatar_url').eq('id', userId).single();
-      
-      const communityActs = formatted.map(act => ({
-        id: `garmin_${act.id}`,
-        athlete_id: userId,
-        athlete_name: profile?.name || 'Atleta',
-        athlete_avatar: profile?.avatar_url || '',
-        platform: 'garmin',
-        title: act.name,
-        description: '',
-        type: act.type,
-        distance: act.distance ? act.distance + ' km' : '--',
-        duration: act.duration ? act.duration + ' min' : '--',
-        pace: act.pace || '--',
-        polyline: '', 
-        activity_date: act.date
-      }));
-
-      if (communityActs.length > 0) {
-        const { error: upsertErr } = await supabase.from('community_activities').upsert(communityActs, { onConflict: 'id' });
-        if (upsertErr) console.error('[Garmin Cache] Upsert error:', upsertErr.message);
-      }
-    } catch (cacheErr) {
-      console.error('[Garmin Cache] Erro ao salvar atividades na comunidade:', cacheErr.message);
-    }
+    // ───────────────────────────────────────────────────────────────────────
+    // REMOVED: Garmin activities no longer populate the community feed
     // ───────────────────────────────────────────────────────────────────────
 
     res.json(formatted);

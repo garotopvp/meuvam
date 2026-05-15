@@ -37,9 +37,11 @@ const EditProfileView = ({ athlete, onSave, onCancel }) => {
 
   return (
     <div className="animate-slide-up" style={{ paddingBottom: '2rem' }}>
-      <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header style={{ marginTop: '1.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Editar Perfil</h2>
-        <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+        {athlete.name && athlete.name !== 'Atleta' && athlete.birthDate && athlete.objective && athlete.objective !== 'Definir Objetivo' && (
+          <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+        )}
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -153,6 +155,10 @@ const EditProfileView = ({ athlete, onSave, onCancel }) => {
             }
             if (!temp.birthDate) {
               setFormError('A data de nascimento é obrigatória.');
+              return;
+            }
+            if (!temp.objective) {
+              setFormError('O objetivo é obrigatório.');
               return;
             }
             setFormError('');

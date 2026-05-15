@@ -36,19 +36,33 @@ const PhotoEditorModal = ({ image, onClose, onSave }) => {
     const ctx = canvas.getContext('2d');
     const img = imgRef.current;
 
+    if (!img || !img.complete) return;
+
     canvas.width = 400;
     canvas.height = 400;
 
-    const displaySize = 250;
-    const ratio = img.naturalWidth / (displaySize * scale);
-    
-    const sourceX = (-position.x * ratio);
-    const sourceY = (-position.y * ratio);
-    const sourceWidth = img.naturalWidth / scale;
-    const sourceHeight = img.naturalHeight / scale;
+    // Preencher fundo com branco (evita fundo preto em PNGs transparentes)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, 400, 400);
 
-    ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, 400, 400);
-    onSave(canvas.toDataURL('image/jpeg', 0.9));
+    const displaySize = 250;
+    
+    // Usamos Math.floor para evitar números decimais que podem bugar o drawImage
+    const sourceWidth = Math.floor(displaySize / scale);
+    const sourceHeight = Math.floor(displaySize / scale);
+    const sourceX = Math.floor((-position.x) / scale);
+    const sourceY = Math.floor((-position.y) / scale);
+
+    try {
+      ctx.drawImage(
+        img, 
+        sourceX, sourceY, sourceWidth, sourceHeight, 
+        0, 0, 400, 400
+      );
+      onSave(canvas.toDataURL('image/jpeg', 0.9));
+    } catch (err) {
+      console.error('Erro ao processar imagem:', err);
+    }
   };
 
   return (
@@ -64,15 +78,15 @@ const PhotoEditorModal = ({ image, onClose, onSave }) => {
         </button>
       </div>
 
-      <div style={{ position: 'relative', width: '250px', height: '250px', overflow: 'hidden', borderRadius: '80px', background: '#222' }}
+      <div style={{ position: 'relative', width: '250px', height: '250px', overflow: 'hidden', borderRadius: '125px', background: '#222' }}
            onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
            onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleMouseUp}>
-        <img ref={imgRef} src={image} alt="To crop" style={{
+        <img ref={imgRef} src={image} alt="To crop" crossOrigin="anonymous" style={{
           position: 'absolute', transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
           transformOrigin: '0 0', cursor: isDragging ? 'grabbing' : 'grab',
           userSelect: 'none', WebkitUserDrag: 'none'
         }} />
-        <div style={{ position: 'absolute', inset: 0, boxShadow: '0 0 0 1000px rgba(0,0,0,0.5)', pointerEvents: 'none', borderRadius: '80px', border: '2px solid var(--primary-color)' }}></div>
+        <div style={{ position: 'absolute', inset: 0, boxShadow: '0 0 0 1000px rgba(0,0,0,0.5)', pointerEvents: 'none', borderRadius: '125px', border: '2px solid var(--primary-color)' }}></div>
       </div>
 
       <div style={{ width: '100%', maxWidth: '300px', marginTop: '30px' }}>

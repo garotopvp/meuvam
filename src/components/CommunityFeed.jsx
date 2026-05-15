@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, MessageCircle, X, Send, Trash2, Zap, Clock, MapPin, User, ChevronDown, ChevronUp, Loader2, Share2, MoreHorizontal } from 'lucide-react';
+import { Heart, MessageCircle, X, Send, Trash2, Zap, Clock, MapPin, User, ChevronDown, ChevronUp, Loader2, Share2, MoreHorizontal, Trophy, TrendingUp } from 'lucide-react';
 import ActivityMap from './ActivityMap';
+import ActivityDetailModal from './ActivityDetailModal';
 
 const CommunityFeed = ({ currentUser }) => {
   const [activities, setActivities] = useState([]);
@@ -16,9 +18,22 @@ const CommunityFeed = ({ currentUser }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
 
+  const [selectedActivity, setSelectedActivity] = useState(null);
+  const navigate = useNavigate();
+  const { activityId } = useParams();
+
   useEffect(() => {
     fetchCommunityFeed();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (activityId && activities.length > 0) {
+      const act = activities.find(a => String(a.id || a.strava_id) === activityId);
+      if (act) setSelectedActivity(act);
+    } else if (!activityId) {
+      setSelectedActivity(null);
+    }
+  }, [activityId, activities]);
 
   const fetchCommunityFeed = async () => {
     if (!currentUser?.id) return;
@@ -27,13 +42,16 @@ const CommunityFeed = ({ currentUser }) => {
       const res = await fetch(`/api/community/feed?userId=${currentUser.id}&limit=50&_t=${Date.now()}`);
       if (!res.ok) throw new Error('Falha ao buscar feed');
       const data = await res.json();
-      setActivities(data);
+      // Filtramos para remover atividades do Garmin, conforme solicitado
+      const filteredData = data.filter(act => act.platform !== 'garmin');
+      setActivities(filteredData);
 
       const likesData = {};
       const commentsData = {};
       data.forEach(act => {
-        likesData[act.strava_id] = { count: act.likesCount, userLiked: act.userLiked };
-        commentsData[act.strava_id] = act.comments || [];
+        const id = String(act.id || act.strava_id);
+        likesData[id] = { count: act.likesCount, userLiked: act.userLiked };
+        commentsData[id] = act.comments || [];
       });
       setLikesMap(likesData);
       setCommentsMap(commentsData);
@@ -84,7 +102,8 @@ const CommunityFeed = ({ currentUser }) => {
     return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const handleLike = async (activityId) => {
+  const handleLike = async (e, activityId) => {
+    e.stopPropagation();
     const actIdStr = String(activityId);
     if (!currentUser?.id || loadingLike[actIdStr]) return;
     setLoadingLike(prev => ({ ...prev, [actIdStr]: true }));
@@ -103,7 +122,8 @@ const CommunityFeed = ({ currentUser }) => {
     }
   };
 
-  const toggleComments = async (activityId) => {
+  const toggleComments = async (e, activityId) => {
+    e.stopPropagation();
     const isOpen = openComments.has(activityId);
     setOpenComments(prev => {
       const next = new Set(prev);
@@ -154,17 +174,16 @@ const CommunityFeed = ({ currentUser }) => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {[1, 2, 3].map(i => (
-          <div key={i} className="card" style={{ padding: '1.5rem', opacity: 0.6 }}>
+          <div key={i} style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '1rem', alignItems: 'center' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 14, background: 'var(--surface-accent)', animation: 'pulse 1.5s infinite' }} />
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-accent)', animation: 'pulse 1.5s infinite' }} />
               <div style={{ flex: 1 }}>
                 <div style={{ height: 14, width: '40%', background: 'var(--surface-accent)', borderRadius: 6, marginBottom: 8 }} />
                 <div style={{ height: 10, width: '25%', background: 'var(--surface-accent)', borderRadius: 6 }} />
               </div>
             </div>
-            <div style={{ height: 16, width: '70%', background: 'var(--surface-accent)', borderRadius: 6, marginBottom: 12 }} />
             <div style={{ height: 120, background: 'var(--surface-accent)', borderRadius: 12 }} />
           </div>
         ))}
@@ -173,34 +192,26 @@ const CommunityFeed = ({ currentUser }) => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: 'var(--border-color)' }}>
-      {/* Sync Header */}
-      <div style={{ padding: '1rem 1.5rem', background: 'var(--bg-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)' }}>
-        <h2 style={{ fontSize: '1.1rem', fontWeight: 900 }}>Comunidade</h2>
-        <motion.button
-          whileTap={{ scale: 0.95 }}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '2rem' }}>
+      {/* Community Header with Refresh */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', padding: '0 4px' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Feed Global</p>
+        <button
           onClick={handleManualSync}
           disabled={isSyncing}
           style={{
-            background: 'var(--surface-accent)', color: 'var(--primary-color)', border: 'none', padding: '6px 12px', borderRadius: '10px',
-            fontSize: '0.75rem', fontWeight: 800, cursor: isSyncing ? 'default' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: '6px'
+            background: 'none', border: 'none', color: 'var(--primary-color)', fontSize: '0.85rem', fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
           }}
         >
           {isSyncing ? <Loader2 className="animate-spin" size={14} /> : <Zap size={14} />}
-          {isSyncing ? `Sincronizando ${syncProgress}%` : 'Atualizar'}
-        </motion.button>
+          {isSyncing ? `Sincronizando ${syncProgress}%` : 'Atualizar Feed'}
+        </button>
       </div>
 
-      {activities.length === 0 ? (
-        <div style={{ padding: '4rem 2rem', textAlign: 'center', background: 'var(--bg-color)' }}>
-          <Zap size={48} style={{ marginBottom: '1rem', opacity: 0.2 }} />
-          <p style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>O feed está vazio</p>
-          <button onClick={handleManualSync} style={{ marginTop: '1rem', background: 'var(--primary-color)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 700 }}>Sincronizar Agora</button>
-        </div>
-      ) : (
-        activities.map((act) => {
-          const actId = String(act.strava_id);
+      <AnimatePresence>
+        {activities.map((act, index) => {
+          const actId = String(act.id || act.strava_id);
           const likes = likesMap[actId] || { count: 0, userLiked: false };
           const comments = commentsMap[actId] || [];
           const isCommentsOpen = openComments.has(actId);
@@ -208,168 +219,177 @@ const CommunityFeed = ({ currentUser }) => {
           return (
             <motion.div
               key={actId}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              onClick={() => navigate(`/aluno/feed/${actId}`)}
               style={{ 
-                background: 'var(--bg-color)', 
-                padding: '1.25rem 1rem',
-                borderBottom: '1px solid var(--border-color)'
+                background: '#fff', 
+                borderRadius: '28px',
+                border: '1px solid #e2e8f0',
+                padding: '1.5rem',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                cursor: 'pointer',
+                marginBottom: '12px'
               }}
             >
               {/* Profile Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'var(--surface-accent)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                    {act.profiles?.avatar_url ? (
-                      <img src={act.profiles.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary-color)' }}>
-                        {act.profiles?.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 800 }}>{act.profiles?.name}</h4>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                      {formatRelativeDate(act.date)} • {act.platform === 'strava' ? 'Strava' : 'Garmin Connect'}
-                    </p>
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                  {act.athlete_avatar ? (
+                    <img src={act.athlete_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: 'var(--primary-color)', fontSize: '1.2rem' }}>
+                      {act.athlete_name?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px' }}>{act.athlete_name}</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                    <span>{formatRelativeDate(act.date)}</span>
+                    <span>•</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: act.platform === 'strava' ? '#fc4c02' : '#007aff' }}>
+                      {act.platform === 'strava' ? <Zap size={10} fill="currentColor" /> : <Clock size={10} />}
+                      {act.platform === 'strava' ? 'Strava' : 'Garmin'}
+                    </span>
                   </div>
                 </div>
-                <MoreHorizontal size={20} color="var(--text-secondary)" />
+                <motion.button whileTap={{ scale: 0.8 }} style={{ background: 'none', border: 'none', padding: '8px' }}>
+                    <MoreHorizontal size={20} color="#cbd5e1" />
+                </motion.button>
               </div>
 
-              {/* Title & Description */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, marginBottom: '4px', letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
-                  {act.title}
-                </h3>
-                {act.description && (
-                  <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{act.description}</p>
-                )}
-              </div>
+              {/* Title */}
+              <h3 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '1.25rem', letterSpacing: '-0.7px', lineHeight: 1.2, color: '#1e293b' }}>
+                {act.title}
+              </h3>
 
-              {/* Metrics Grid (Strava Style) */}
+              {/* Metrics Grid Strava Style */}
               <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(3, 1fr)', 
-                gap: '1px', 
-                background: 'var(--border-color)',
+                gridTemplateColumns: 'repeat(4, 1fr)', 
                 marginBottom: '1.5rem',
-                borderTop: '1px solid var(--border-color)',
-                borderBottom: '1px solid var(--border-color)',
-                padding: '12px 0'
+                padding: '16px 0',
+                borderTop: '1px solid #f1f5f9',
+                borderBottom: '1px solid #f1f5f9'
               }}>
-                <div style={{ background: 'var(--bg-color)', padding: '4px 0' }}>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Distância</p>
-                  <p style={{ fontSize: '1.15rem', fontWeight: 800 }}>{act.metrics?.distance || '--'}</p>
+                <div>
+                  <p style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>Distância</p>
+                  <p style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>{act.metrics?.distance || act.distance || '--'}</p>
                 </div>
-                <div style={{ background: 'var(--bg-color)', padding: '4px 0', borderLeft: '1px solid var(--border-color)', paddingLeft: '15px' }}>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Ritmo</p>
-                  <p style={{ fontSize: '1.15rem', fontWeight: 800 }}>{act.metrics?.pace || '--'}<span style={{ fontSize: '0.75rem' }}>/km</span></p>
+                <div>
+                  <p style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>Ritmo</p>
+                  <p style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>{act.metrics?.pace || act.pace || '--'}<span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>/km</span></p>
                 </div>
-                <div style={{ background: 'var(--bg-color)', padding: '4px 0', borderLeft: '1px solid var(--border-color)', paddingLeft: '15px' }}>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Tempo</p>
-                  <p style={{ fontSize: '1.15rem', fontWeight: 800 }}>{act.metrics?.duration || '--'}</p>
+                <div>
+                  <p style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>Tempo</p>
+                  <p style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>{act.metrics?.duration || act.duration || '--'}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>Conquistas</p>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px', alignItems: 'center' }}>
+                     <Trophy size={16} color="#ff9500" fill="#ff9500" />
+                     <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#ff9500' }}>3</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Map / Visualization */}
-              <div style={{ borderRadius: '16px', overflow: 'hidden', background: 'var(--surface-accent)', marginBottom: '1.25rem', height: '220px', position: 'relative' }}>
+              {/* Map Image with Glassy Overlay */}
+              <div style={{ borderRadius: '24px', overflow: 'hidden', background: '#f8fafc', marginBottom: '1.5rem', height: '240px', position: 'relative', border: '1px solid #e2e8f0' }}>
                 <ActivityMap 
                   routeData={act.polyline} 
                   isStatic={true}
                   style={{ height: '100%', width: '100%' }}
                 />
-              </div>
-
-              {/* Engagement Stats */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  {likes.count > 0 && <span>{likes.count} kudos</span>}
-                  {likes.count > 0 && comments.length > 0 && <span> • </span>}
-                  {comments.length > 0 && <span>{comments.length} comentários</span>}
-                  {likes.count === 0 && comments.length === 0 && <span>Seja o primeiro a apoiar</span>}
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
-                    onClick={() => handleLike(actId)}
-                    style={{ 
-                      background: 'var(--surface-accent)', border: 'none', width: '40px', height: '40px', borderRadius: '12px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: likes.userLiked ? '#ef4444' : 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Heart size={20} fill={likes.userLiked ? 'currentColor' : 'none'} />
-                  </button>
-                  <button 
-                    onClick={() => toggleComments(actId)}
-                    style={{ 
-                      background: 'var(--surface-accent)', border: 'none', width: '40px', height: '40px', borderRadius: '12px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: isCommentsOpen ? 'var(--primary-color)' : 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <MessageCircle size={20} />
-                  </button>
+                <div style={{ 
+                    position: 'absolute', bottom: 12, right: 12, 
+                    background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)',
+                    padding: '6px 12px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 800, color: '#475569',
+                    border: '1px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: '6px'
+                }}>
+                    <TrendingUp size={12} /> Analisar Atividade
                 </div>
               </div>
 
-              {/* Top Comments (Preview) */}
-              {!isCommentsOpen && comments.length > 0 && (
-                <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {comments.slice(-2).map(c => (
-                    <div key={c.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800, flexShrink: 0 }}>{c.user_name}</span>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', flex: 1 }}>{c.content}</p>
-                    </div>
-                  ))}
-                  {comments.length > 2 && (
-                    <button onClick={() => toggleComments(actId)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 700, textAlign: 'left', padding: 0 }}>
-                      Ver todos os {comments.length} comentários
-                    </button>
-                  )}
+              {/* Engagement Bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                  {likes.count > 0 ? (
+                    <span style={{ color: '#1e293b', fontWeight: 800 }}>{likes.count} kudos</span>
+                  ) : 'Seja o primeiro a dar kudos!'}
+                  {comments.length > 0 && <span style={{ marginLeft: '10px' }}>• {comments.length} comentários</span>}
                 </div>
-              )}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <motion.button 
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={(e) => handleLike(e, actId)}
+                    style={{ 
+                      background: likes.userLiked ? 'rgba(255, 45, 85, 0.1)' : '#f1f5f9', border: 'none', width: '44px', height: '44px', borderRadius: '16px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: likes.userLiked ? '#ef4444' : '#64748b',
+                      cursor: 'pointer', transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <Heart size={22} fill={likes.userLiked ? 'currentColor' : 'none'} />
+                  </motion.button>
+                  <motion.button 
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={(e) => toggleComments(e, actId)}
+                    style={{ 
+                      background: isCommentsOpen ? 'rgba(0, 122, 255, 0.1)' : '#f1f5f9', border: 'none', width: '44px', height: '44px', borderRadius: '16px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: isCommentsOpen ? '#007aff' : '#64748b',
+                      cursor: 'pointer', transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <MessageCircle size={22} />
+                  </motion.button>
+                </div>
+              </div>
 
-              {/* Full Comments Section */}
+              {/* Comments Section */}
               <AnimatePresence>
                 {isCommentsOpen && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    style={{ overflow: 'hidden', marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ overflow: 'hidden', marginTop: '1.25rem', borderTop: '1px solid #f1f5f9', paddingTop: '1.25rem' }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                       {comments.map(c => (
-                        <div key={c.id} style={{ display: 'flex', gap: '10px' }}>
-                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-accent)', overflow: 'hidden' }}>
-                            {c.user_avatar ? <img src={c.user_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={16} />}
+                        <div key={c.id} style={{ display: 'flex', gap: '12px' }}>
+                          <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', flexShrink: 0 }}>
+                            {c.user_avatar ? <img src={c.user_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={18} color="#94a3b8" />}
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>{c.user_name}</span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{formatRelativeDate(c.created_at)}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b' }}>{c.user_name}</span>
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>{formatRelativeDate(c.created_at)}</span>
                             </div>
-                            <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{c.content}</p>
+                            <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.4 }}>{c.content}</p>
                           </div>
                         </div>
                       ))}
-                      
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '1rem' }}>
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '0.75rem' }}>
                         <input 
                           type="text" 
-                          placeholder="Adicionar comentário..." 
+                          placeholder="Escreva um comentário..." 
                           value={newComment[actId] || ''}
                           onChange={e => setNewComment(prev => ({ ...prev, [actId]: e.target.value }))}
-                          onKeyDown={e => e.key === 'Enter' && handleSendComment(actId)}
-                          style={{ flex: 1, padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--surface-accent)', fontSize: '0.9rem' }}
+                          style={{ flex: 1, padding: '12px 16px', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', outline: 'none' }}
                         />
-                        <button 
+                        <motion.button 
+                          whileTap={{ scale: 0.9 }}
                           onClick={() => handleSendComment(actId)}
                           disabled={!newComment[actId]?.trim() || sendingComment[actId]}
-                          style={{ background: 'var(--primary-color)', color: '#fff', border: 'none', padding: '0 15px', borderRadius: '12px', fontWeight: 700 }}
+                          style={{ background: 'var(--primary-color)', color: '#fff', border: 'none', padding: '0 16px', borderRadius: '16px', fontWeight: 800, cursor: 'pointer' }}
                         >
                           <Send size={18} />
-                        </button>
+                        </motion.button>
                       </div>
                     </div>
                   </motion.div>
@@ -377,7 +397,16 @@ const CommunityFeed = ({ currentUser }) => {
               </AnimatePresence>
             </motion.div>
           );
-        })
+        })}
+      </AnimatePresence>
+
+      {/* Detail Modal Component */}
+      {selectedActivity && (
+        <ActivityDetailModal 
+          activity={selectedActivity} 
+          onClose={() => navigate('/aluno/feed')} 
+          currentUser={currentUser}
+        />
       )}
     </div>
   );

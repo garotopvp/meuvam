@@ -281,7 +281,12 @@ router.get('/activity/:id', async (req, res) => {
         elevation: a.total_elevation_gain ? `${Math.round(a.total_elevation_gain)}m` : '--',
         avgHeartRate: a.average_heartrate ? Math.round(a.average_heartrate) : '--',
         maxHeartRate: a.max_heartrate ? Math.round(a.max_heartrate) : '--',
-        sufferScore: a.suffer_score || '--'
+        sufferScore: a.suffer_score || '--',
+        calories: a.calories || '--',
+        maxCadence: a.average_cadence ? Math.round(a.average_cadence * 1.1) : '--', // Estimativa de mx
+        splits: a.splits_metric || [],
+        laps: a.laps || [],
+        bestEfforts: a.best_efforts || []
       }
     };
     

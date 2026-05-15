@@ -56,6 +56,9 @@ body {
   overflow-x: hidden;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Garante que o fundo cubra toda a área, incluindo o notch */
+  min-height: 100vh;
+  padding-top: var(--safe-area-top);
 }
 
 #root {
@@ -162,6 +165,15 @@ body {
 
 .animate-slide-up {
   animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 
 /* Tab Active State */

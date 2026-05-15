@@ -5,10 +5,13 @@ import { Loader2 } from 'lucide-react';
 
 // Lib
 import { supabase } from './lib/supabase';
+import InstallView from './views/InstallView';
 
 // Components
 import BottomNav from './components/BottomNav';
 import PhotoEditorModal from './modals/PhotoEditorModal';
+import SmartInstallBanner from './components/SmartInstallBanner';
+import IOSInstallPrompt from './components/IOSInstallPrompt';
 
 // Views
 import HomeView from './views/HomeView';
@@ -160,8 +163,11 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
         >
           <Routes>
             <Route path="/" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
+            <Route path="/atividade/:activityId" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
             <Route path="/treinos" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
+            <Route path="/treinos/:workoutId" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
             <Route path="/feed" element={<FeedView athlete={athlete} />} />
+            <Route path="/feed/:activityId" element={<FeedView athlete={athlete} />} />
             <Route path="/coach" element={<ChatView session={session} />} />
             <Route path="/avisos" element={<NotificationsView />} />
             <Route path="/perfil" element={
@@ -195,10 +201,10 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
 };
 
 const AppContent = () => {
-  // Safeguard: Se o React for carregado acidentalmente em uma rota que deveria ser estática (paineldoprofessor),
-  // tentamos forçar o navegador a buscar o arquivo real.
-  if (window.location.pathname.includes('/paineldoprofessor')) {
-    window.location.replace('/paineldoprofessor/index.html?v=' + Date.now());
+  if (window.location.pathname.startsWith('/professor/')) {
+    // Se o React for carregado em uma rota de professor, apenas paramos a renderização
+    // para que o navegador busque o arquivo estático real se necessário, 
+    // ou simplesmente não mostre a interface de aluno.
     return null;
   }
 
@@ -287,8 +293,8 @@ const AppContent = () => {
 
       if (profileData) {
         if (profileData.role === 'professor') {
-          if (!window.location.pathname.includes('/paineldoprofessor')) {
-            window.location.href = '/paineldoprofessor/index.html?v=' + Date.now();
+          if (!window.location.pathname.startsWith('/professor')) {
+            window.location.href = '/professor/resumo';
           }
           return;
         }
@@ -301,9 +307,12 @@ const AppContent = () => {
         const athleteObj = mapSupabaseToAthlete(profileData, integrations || []);
         setAthleteRaw(athleteObj);
 
-        // Check for first login / incomplete profile
-        if ((!profileData.vam || profileData.vam === '--' || !profileData.birth_date) && window.location.pathname === '/aluno') {
-          navigate('/aluno/perfil/edit');
+        // Check for first login / incomplete profile (Name, Birth Date, Objective are mandatory)
+        const isProfileIncomplete = !profileData.name || profileData.name === 'Atleta' || !profileData.birth_date || !profileData.objective || profileData.objective === 'Definir Objetivo';
+        
+        if (isProfileIncomplete && window.location.pathname.startsWith('/aluno') && !window.location.pathname.includes('/perfil/edit')) {
+          console.log('[App] Perfil incompleto, redirecionando para preenchimento obrigatório.');
+          navigate('/aluno/perfil/edit', { replace: true });
         }
       } else {
         // Se não encontrar perfil (profileData é null), define um objeto básico
@@ -385,6 +394,8 @@ const AppContent = () => {
   }
 
   return (
+    <>
+    <SmartInstallBanner />
     <Routes>
       <Route path="/" element={
         session ? (
@@ -392,7 +403,7 @@ const AppContent = () => {
         ) : (
           <PortalSelection 
             onSelectAthlete={() => navigate('/aluno')} 
-            onSelectProfessor={() => navigate('/professor')} 
+            onSelectProfessor={() => window.location.href = '/professor/resumo'} 
           />
         )
       } />
@@ -429,6 +440,7 @@ const AppContent = () => {
                     theme={theme}
                     setTheme={setTheme}
                 />
+                <IOSInstallPrompt />
                 {photoToEdit && (
                     <PhotoEditorModal 
                         image={photoToEdit} 
@@ -443,11 +455,12 @@ const AppContent = () => {
         )
       } />
 
-      <Route path="/professor/*" element={<Navigate to={`/paineldoprofessor/index.html?v=${Date.now()}`} replace />} />
-
+      <Route path="/baixar" element={<InstallView />} />
+      <Route path="/instalar" element={<InstallView />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 };
 

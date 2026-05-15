@@ -7,9 +7,9 @@ const API = '/api';
 const platforms = [
   { key: 'strava', name: 'Strava', color: '#FC4C02', Logo: StravaLogo, authType: 'oauth' },
   { key: 'garmin', name: 'Garmin Connect', color: '#007CC3', Logo: GarminLogo, authType: 'credentials' },
-  { key: 'amazfit', name: 'Amazfit (Zepp)', color: '#FF4B2B', Logo: AmazfitLogo, authType: 'bridge' },
-  { key: 'polar', name: 'Polar Flow', color: '#D32F2F', Logo: PolarLogo, authType: 'credentials' },
-  { key: 'coros', name: 'COROS', color: '#2196F3', Logo: CorosLogo, authType: 'credentials' },
+  { key: 'amazfit', name: 'Amazfit (Zepp)', color: '#FF4B2B', Logo: AmazfitLogo, authType: 'bridge', isTesting: true },
+  { key: 'polar', name: 'Polar Flow', color: '#D32F2F', Logo: PolarLogo, authType: 'credentials', isTesting: true },
+  { key: 'coros', name: 'COROS', color: '#2196F3', Logo: CorosLogo, authType: 'credentials', isTesting: true },
 ];
 
 const ConnectivitySection = ({ athlete, setAthlete }) => {
@@ -210,13 +210,24 @@ const ConnectivitySection = ({ athlete, setAthlete }) => {
                 </div>
                 
                 {!isSoon && (
-                  <div style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: isConnected ? platform.color : '#d1d1d6',
-                    boxShadow: isConnected ? `0 0 8px ${platform.color}` : 'none'
-                  }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {platform.isTesting && (
+                      <span style={{ 
+                        fontSize: '0.55rem', fontWeight: 800, background: '#f59e0b', color: '#fff', 
+                        padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase',
+                        letterSpacing: '0.3px'
+                      }}>
+                        Teste
+                      </span>
+                    )}
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: isConnected ? platform.color : '#d1d1d6',
+                      boxShadow: isConnected ? `0 0 8px ${platform.color}` : 'none'
+                    }} />
+                  </div>
                 )}
               </div>
 

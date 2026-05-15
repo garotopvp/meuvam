@@ -15,6 +15,38 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Otimização de URL e Limpeza de Hash
+        (function() {
+            const path = window.location.pathname;
+            const hash = window.location.hash;
+            const search = window.location.search;
+            
+            // 1. Remove 'index.html' e limpa barras duplas
+            if (path.includes('index.html')) {
+                const newPath = path.replace('index.html', '').replace(/\/\/+/g, '/');
+                window.location.replace((newPath || '/professor/') + search + hash);
+                return;
+            }
+            
+            // 2. Corrige o problema de link duplicado (ex: /professor/pastas#/pastas)
+            if (hash) {
+                const cleanHash = hash.replace('#', '').split('?')[0];
+                const parts = path.split('/').filter(Boolean);
+                const lastPart = parts[parts.length - 1];
+                
+                const views = ['resumo', 'pastas', 'atletas', 'equipe', 'feed', 'garmin', 'calculadoras', 'chat'];
+                if (cleanHash === lastPart || views.includes(cleanHash)) {
+                    history.replaceState(null, '', path + search);
+                }
+            }
+
+            // 3. Normaliza a raiz para /resumo
+            if (path === '/professor' || path === '/professor/') {
+                history.replaceState(null, '', '/professor/resumo' + search);
+            }
+        })();
+    </script>
 </head>
 <body>
     <!-- Mobile toggle -->
@@ -109,17 +141,9 @@
                     </div>
                 </div>
 
-                <div style="margin-top:32px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <div>
-                        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Volume Semanal: Planejado vs Realizado</h2>
-                        <div class="stat-card" style="height:300px; padding:20px;">
-                            <canvas id="chart-planned-vs-realized"></canvas>
-                        </div>
-                    </div>
-                    <div>
-                        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Últimos Treinos Gerados</h2>
-                        <div id="dashboard-recent" class="table-wrapper" style="height:300px; overflow-y:auto;"></div>
-                    </div>
+                <div style="margin-top:32px;">
+                    <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Últimos Treinos Gerados</h2>
+                    <div id="dashboard-recent" class="table-wrapper" style="min-height:300px; overflow-y:auto;"></div>
                 </div>
 
                 <div class="dashboard-shortcuts">
@@ -433,7 +457,7 @@
                 </button>
                 <div class="garmin-icon"><i class="ri-run-line"></i></div>
                 <div class="garmin-title-wrap">
-                    <h2><span id="display-group-name">Treino de corrida</span> <i class="ri-pencil-line" style="font-size: 18px; cursor: pointer;" onclick="$('group-name').focus()"></i></h2>
+                    <h2><span id="display-group-name">Treino de corrida</span> <i class="ri-pencil-line" style="font-size: 18px; cursor: pointer;" onclick="$('display-group-name').style.display='none'; $('group-name').style.display='inline'; $('group-name').focus()"></i></h2>
                     <input type="text" id="group-name" style="border: none; background: transparent; font-size: 24px; display: none;" onblur="this.style.display='none'; $('display-group-name').style.display='inline'; $('display-group-name').textContent=this.value" onchange="$('display-group-name').textContent=this.value">
                 </div>
                 <div style="display: flex; gap: 12px;">

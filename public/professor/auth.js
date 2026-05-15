@@ -24,7 +24,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .eq('id', data.session.user.id)
                 .single();
 
-            if (profileError || !profile || profile.role !== 'professor') {
+            const userRole = profile?.role || data.session.user.user_metadata?.role;
+            if (profileError || !userRole || userRole !== 'professor') {
                 console.log("Acesso negado ao portal do professor: perfil não encontrado ou papel incorreto.");
                 
                 if (isIndex) {
@@ -42,7 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (path.includes("login") || path.includes("register")) {
-                window.location.href = "/professor/";
+                window.location.href = "/professor/resumo";
             }
         } else {
             if (isIndex && !localStorage.getItem('vdot_offline')) {
@@ -141,7 +142,7 @@ async function login() {
             }
 
             localStorage.removeItem('vdot_offline');
-            window.location.href = "/professor/";
+            window.location.href = "/professor/resumo";
         }
     } catch(err) {
         alert("Erro de conexão: " + err.message);
@@ -203,7 +204,7 @@ async function register() {
                 btn.disabled = false;
             } else {
                 localStorage.removeItem('vdot_offline');
-                window.location.href = "/professor/";
+                window.location.href = "/professor/resumo";
             }
         }
     } catch(err) {
