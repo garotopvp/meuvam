@@ -195,7 +195,7 @@ function navigate(viewId, cat, skipPush = false) {
             const path = ROUTES[viewId] || '';
             const baseUrl = '/professor';
             const newUrl = baseUrl + (path ? '/' + path : '/');
-            if (window.location.pathname !== newUrl) {
+            if (window.location.pathname !== newUrl || window.location.hash) {
                 history.pushState({ viewId, cat }, '', newUrl);
             }
         }
