@@ -102,14 +102,7 @@ async function fetchWithTimeout(resource, options = {}) {
     }
 }
 function vamToPace(k){if(!k||k<=0)return'Livre';return formatPace(60/k)+'/km';}
-function closeModals(){
-    allModals.forEach(m=>m.classList.remove('show'));
-    // Se fechar manual (X ou Esc) e estiver na URL de atividade, volta para a view anterior
-    if (window.location.pathname.includes('/atividade/')) {
-        const lastView = localStorage.getItem('vdot_lastView') || 'dashboard';
-        navigate(lastView, null, false);
-    }
-}
+function closeModals(){allModals.forEach(m=>m.classList.remove('show'));}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
 
 let _toastTimer=null,_undoFn=null;
@@ -236,7 +229,7 @@ document.querySelectorAll('.nav-item').forEach(item=>{
 window.addEventListener('popstate', (e) => {
     if (e.state && e.state.viewId) {
         if (e.state.viewId === 'activity') {
-            openActivityDetail(e.state.id, true);
+            if (typeof openActivityDetail === 'function') openActivityDetail(e.state.id, true);
         } else {
             navigate(e.state.viewId, e.state.cat, true);
         }
@@ -245,7 +238,7 @@ window.addEventListener('popstate', (e) => {
         const lastPart = parts[parts.length - 1];
         const isActivity = window.location.pathname.includes('/atividade/');
         
-        if (isActivity) {
+        if (isActivity && typeof openActivityDetail === 'function') {
             openActivityDetail(lastPart, true);
         } else {
             const viewId = REVERSE_ROUTES[lastPart] || 'dashboard';
@@ -259,10 +252,8 @@ window.addEventListener('popstate', (e) => {
     const lastPart = parts[parts.length - 1];
     
     if (window.location.pathname.includes('/atividade/')) {
-        // Se entrar via link direto de atividade, primeiro carrega o dashboard
-        // e depois tenta abrir a atividade (depois de um tempo para carregar dados)
         navigate('dashboard', null, true);
-        setTimeout(() => openActivityDetail(lastPart, true), 1000);
+        setTimeout(() => { if(typeof openActivityDetail === 'function') openActivityDetail(lastPart, true); }, 1000);
     } else {
         const urlViewId = REVERSE_ROUTES[lastPart];
         const v = urlViewId || localStorage.getItem('vdot_lastView') || 'dashboard';
@@ -474,20 +465,24 @@ function renderGroups(){
         const cards=cg.map(g=>{
             const rows=g.plan.map((d,i)=>{
                 if(!d.active)return'';
-                const phases = d.phases || [];
-                const ph=phases.filter(p=>p.volPct>0 || p.km).map(p=>{
-                    const label = phaseLabels[p.type] || p.title || p.type;
-                    const detail = p.km ? `${p.km}km @ ${p.pace || 'Livre'}` : `${p.volPct}%V / ${p.vamPct}%VAM`;
-                    return `<div class="plan-ph"><span><strong>${label}:</strong> ${detail}</span>${p.desc?`<span style="font-style:italic;color:#059669;">${p.desc}</span>`:''}</div>`;
+                const steps = d.steps || d.phases || [];
+                const ph=steps.map(p=>{
+                    const label = phaseLabels[p.type] || p.label || p.title || p.type;
+                    let detail = '';
+                    if (p.km) detail = `${p.km}km @ ${p.pace || 'Livre'}`;
+                    else if (p.volPct) detail = `${p.volPct}%V / ${p.vamPct}%VAM`;
+                    else if (p.duration) detail = `${p.duration.value}${p.duration.type === 'time' ? 'min' : 'km'}`;
+                    
+                    return `<div class="plan-ph"><span><strong>${label}:</strong> ${detail}</span>${(p.desc || p.notes)?`<span style="font-style:italic;color:#059669;">${p.desc || p.notes}</span>`:''}</div>`;
                 }).join('');
                 return`<div class="plan-row"><div class="plan-row-top"><div class="day">${daysNames[i]}</div></div>${ph}</div>`;
             }).join('');
             return`<div class="plan-card"><div class="plan-header"><div><h3>${g.name}</h3><span style="font-size:11px;color:var(--text-muted);">Vol: ${g.volume}km/sem</span></div><div style="display:flex;gap:2px;">
-                <button class="btn btn-tertiary" onclick="openAssignModal(${g.id})" title="Vincular Alunos"><i class="ri-user-add-line"></i></button>
-                <button class="btn btn-tertiary" onclick="openDuplicateModal(${g.id})" title="Duplicar p/ outra pasta"><i class="ri-folders-line"></i></button>
-                <button class="btn btn-tertiary" onclick="cloneGroup(${g.id})" title="Clonar"><i class="ri-file-copy-line"></i></button>
-                <button class="btn btn-tertiary" onclick="editGroup(${g.id})" title="Editar"><i class="ri-edit-line"></i></button>
-                <button class="btn btn-tertiary" onclick="deleteGroup(${g.id})" style="color:var(--danger);" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                <button class="btn btn-tertiary" onclick="openAssignModal('${g.id}')" title="Vincular Alunos"><i class="ri-user-add-line"></i></button>
+                <button class="btn btn-tertiary" onclick="openDuplicateModal('${g.id}')" title="Duplicar p/ outra pasta"><i class="ri-folders-line"></i></button>
+                <button class="btn btn-tertiary" onclick="cloneGroup('${g.id}')" title="Clonar"><i class="ri-file-copy-line"></i></button>
+                <button class="btn btn-tertiary" onclick="editGroup('${g.id}')" title="Editar"><i class="ri-edit-line"></i></button>
+                <button class="btn btn-tertiary" onclick="deleteGroup('${g.id}')" style="color:var(--danger);" title="Excluir"><i class="ri-delete-bin-line"></i></button>
             </div></div><div class="plan-body">${rows||'<div style="padding:16px 0;color:#999;font-size:12px;font-style:italic;">Não configurado.</div>'}</div></div>`;}).join('');
         const empty=!cg.length?'<div style="text-align:center;padding:64px 32px;color:var(--text-muted);grid-column:1/-1;"><i class="ri-calendar-line" style="font-size:48px;display:block;margin-bottom:16px;opacity:0.25;"></i><strong>Pasta vazia</strong><p style="font-size:13px;margin-top:6px;">Adicione um treino.</p></div>':'';
         list.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
@@ -3046,8 +3041,6 @@ function initActivityMap(id, polyline) {
 function openActivityDetail(id, skipPush = false) {
     const act = _currentStravaActivities.find(a => (a.strava_id || a.id) == id);
     if (!act) {
-        // Se não encontrar no feed atual, pode ser um link direto. 
-        // Em um app real, buscaríamos da API aqui.
         showToast('Atividade não encontrada localmente', 'warning');
         return;
     }
