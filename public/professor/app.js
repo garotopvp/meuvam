@@ -1073,8 +1073,8 @@ function openAssignModal(gId){currentAssignGroupId=gId;const g=groups.find(x=>x.
     else{list.innerHTML=athletes.map(a=>{const chk=a.groupId==gId?'checked':'';return`<label style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--panel);border:1px solid ${chk?'var(--primary)':'var(--border)'};border-radius:4px;cursor:pointer;"><input type="checkbox" class="assign-chk" value="${a.id}" ${chk} style="width:16px;height:16px;accent-color:var(--primary);"><span style="font-weight:500;">${a.name}</span></label>`;}).join('');}
     $('modal-assign').classList.add('show');
 }
-function saveAssign(){if(!currentAssignGroupId)return;const assigned=new Set([...document.querySelectorAll('.assign-chk:checked')].map(c=>parseInt(c.value)));
-    athletes.forEach(a=>{if(assigned.has(a.id))a.groupId=currentAssignGroupId;else if(a.groupId==currentAssignGroupId)a.groupId=null;});
+function saveAssign(){if(!currentAssignGroupId)return;const assigned=new Set([...document.querySelectorAll('.assign-chk:checked')].map(c=>String(c.value)));
+    athletes.forEach(a=>{if(assigned.has(String(a.id)))a.groupId=currentAssignGroupId;else if(a.groupId==currentAssignGroupId)a.groupId=null;});
     saveState(['athletes']);closeModals();renderAthletes();renderDashboard();showToast('Vinculado!');}
 
 // ═══════════════════════════════════════
@@ -1264,7 +1264,7 @@ function editAthlete(id){
     openAthleteModal(id);
 }
 function deleteAthlete(id){const a=athletes.find(x=>x.id==id);if(!confirm(`Excluir "${a?.name}"?`))return;
-    const backupA=JSON.parse(JSON.stringify(a));const backupH=historyPlans.filter(h=>h.athleteId===id).map(h=>JSON.parse(JSON.stringify(h)));
+    const backupA=JSON.parse(JSON.stringify(a));const backupH=historyPlans.filter(h=>h.athleteId==id).map(h=>JSON.parse(JSON.stringify(h)));
     athletes=athletes.filter(x=>x.id!=id);historyPlans=historyPlans.filter(h=>h.athleteId!=id);
     saveState(['athletes','history']);renderAthletes();renderDashboard();
     showToast('Atleta excluído.','default',()=>{athletes.push(backupA);historyPlans.push(...backupH);saveState(['athletes','history']);renderAthletes();renderDashboard();});
@@ -1276,7 +1276,7 @@ function deleteAthlete(id){const a=athletes.find(x=>x.id==id);if(!confirm(`Exclu
 let currentHistoryAthleteId=null;
 function openHistory(aId){currentHistoryAthleteId=aId;const a=athletes.find(x=>x.id==aId);$('hist-athlete-name').textContent=a.name;renderHistoryList(aId);$('modal-history').classList.add('show');}
 function renderHistoryList(aId){
-    const plans=historyPlans.filter(p=>p.athleteId===aId).sort((a,b)=>b.id-a.id);const list=$('history-list');
+    const plans=historyPlans.filter(p=>p.athleteId==aId).sort((a,b)=>b.id-a.id);const list=$('history-list');
     if(!plans.length){list.innerHTML='<div style="padding:32px;color:var(--text-muted);text-align:center;"><i class="ri-calendar-line" style="font-size:36px;display:block;margin-bottom:8px;opacity:0.3;"></i>Nenhum treino.</div>';return;}
     const toolbar=`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:var(--bg);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-muted);"><input type="checkbox" id="hist-select-all" onchange="toggleSelectAllHistory()" style="width:15px;height:15px;accent-color:var(--primary);">Selecionar todos (${plans.length})</label><button class="btn" id="hist-delete-selected" onclick="deleteSelectedHistory()" style="background:var(--danger);color:white;padding:6px 12px;font-size:12px;display:none;"><i class="ri-delete-bin-line"></i> Excluir</button></div>`;
     const rows=plans.map(p=>{const d=new Date(p.id).toLocaleDateString('pt-BR');return`<div class="history-item"><div style="display:flex;align-items:center;gap:12px;"><input type="checkbox" class="hist-chk" value="${p.id}" onchange="updateHistoryToolbar()" style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer;"><div><div class="hist-date">${d}</div><div class="hist-vol">${p.calcData.categoryName} / ${p.calcData.groupName} · ${p.calcData.volume}km</div></div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary" onclick="viewExport(${p.id})" style="padding:5px 10px;font-size:12px;"><i class="ri-image-line"></i> Ver</button><button class="btn btn-tertiary" onclick="deleteHistory(${p.id})" style="padding:5px 8px;color:var(--danger);font-size:12px;"><i class="ri-delete-bin-line"></i></button></div></div>`;}).join('');
@@ -1299,7 +1299,12 @@ async function openStravaActivities(athleteId) {
 
     try {
         // Usar a URL absoluta se estiver no painel do professor (que está em /professor/)
-        const response = await fetch(`/api/strava/activities?userId=${athleteId}`);
+        if (!a.supabaseId) {
+            $('strava-loading').style.display = 'none';
+            $('strava-list').innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);"><i class="ri-information-line" style="font-size:32px; display:block; margin-bottom:8px; opacity:0.5;"></i>Aluno manual (sem conta vinculada no App).</div>`;
+            return;
+        }
+        const response = await fetch(`/api/strava/activities?userId=${a.supabaseId}`);
         const activities = await response.json();
         
         $('strava-loading').style.display = 'none';
@@ -1598,7 +1603,7 @@ async function syncAthletesFromSupabase(isManual = false) {
 
 async function viewExport(hId){
     closeModals();currentExportHistId=hId;$('modal-export').classList.add('show');$('export-loading').style.display='flex';$('export-img-preview').style.display='none';
-    const hist=historyPlans.find(h=>h.id===hId);const calc=hist.calcData;const a=athletes.find(x=>x.id===hist.athleteId);currentExportPhone=a?(a.phone||''):'';
+    const hist=historyPlans.find(h=>h.id===hId);const calc=hist.calcData;const a=athletes.find(x=>x.id==hist.athleteId);currentExportPhone=a?(a.phone||''):'';
     // Show "send to another" button
     const btnAnother=$('btn-send-another');if(btnAnother)btnAnother.style.display='inline-flex';
 
