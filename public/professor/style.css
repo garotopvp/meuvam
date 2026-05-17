@@ -177,8 +177,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .vd-instruction { background: #f0fdf4; border-left: 3px solid #86efac; padding: 6px 10px; border-radius: 0 6px 6px 0; font-size: 12px; font-weight: 500; color: #166534; margin-top: 6px; }
 
 /* Toast */
-.toast { position: fixed; bottom: 24px; right: 24px; background: #111827; color: white; padding: 12px 24px; border-radius: var(--radius); font-size: 14px; box-shadow: var(--shadow); transform: translateY(100px); opacity: 0; transition: 0.3s; z-index: 1000; display: flex; align-items: center; gap: 12px; }
-.toast.show { transform: translateY(0); opacity: 1; }
+.toast { position: fixed; bottom: 24px; left: 50%; background: #111827; color: white; padding: 12px 24px; border-radius: var(--radius); font-size: 14px; box-shadow: var(--shadow); transform: translate(-50%, 100px); opacity: 0; transition: 0.3s; z-index: 1000; display: flex; align-items: center; gap: 12px; }
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
 .toast .toast-undo { background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 4px 10px; border-radius: 4px; font-family: var(--font); font-size: 12px; font-weight: 700; cursor: pointer; }
 .toast .toast-undo:hover { background: rgba(255,255,255,0.35); }
 
@@ -238,7 +238,36 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
     .chat-sidebar.mobile-show { display: flex; position: absolute; inset: 0; z-index: 10; }
 }
 
-/* ─── Chat Interface ─── */
+/* ─── BREADCRUMB ─── */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.breadcrumb a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.breadcrumb a:hover {
+    color: var(--primary);
+}
+.breadcrumb i {
+    font-size: 16px;
+    opacity: 0.6;
+}
+.breadcrumb span {
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* ─── NAVIGATION ─── */
 .chat-container { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 160px); min-height: 500px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); margin-top: 10px; }
 .chat-sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
 .chat-search { padding: 16px; border-bottom: 1px solid var(--border); }

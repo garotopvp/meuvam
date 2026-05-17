@@ -102,7 +102,15 @@ async function fetchWithTimeout(resource, options = {}) {
     }
 }
 function vamToPace(k){if(!k||k<=0)return'Livre';return formatPace(60/k)+'/km';}
-function closeModals(){allModals.forEach(m=>m.classList.remove('show'));}
+function closeModals(shouldNavigate = true){
+    allModals.forEach(m=>m.classList.remove('show'));
+    if (shouldNavigate) {
+        const v = localStorage.getItem('vdot_lastView') || 'dashboard';
+        const c = localStorage.getItem('vdot_lastCat') || '';
+        const s = localStorage.getItem('vdot_lastSubId') || null;
+        navigate(v, c, true, s);
+    }
+}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
 
 let _toastTimer=null,_undoFn=null;
@@ -159,14 +167,14 @@ const ROUTES = {
 
 const REVERSE_ROUTES = Object.fromEntries(Object.entries(ROUTES).map(([k, v]) => [v, k]));
 
-function navigate(viewId, cat, skipPush = false) {
+function navigate(viewId, cat, skipPush = false, subId = null) {
     console.log('Navegando para:', viewId);
     try {
         if(viewId!=='groups')activeCategory=null;
         if(viewId==='groups'&&cat!==undefined)activeCategory=cat;
         
-        // Fechar modais ao navegar para uma view principal
-        if (viewId !== 'activity') closeModals();
+        // Fechar modais ao navegar para uma view principal (evita recursão se já estiver pulando o push)
+        if (viewId !== 'activity' && !skipPush) closeModals(false);
         
         const section = $(`view-${viewId}`);
         if (!section) {
@@ -182,14 +190,32 @@ function navigate(viewId, cat, skipPush = false) {
         
         localStorage.setItem('vdot_lastView',viewId);
         localStorage.setItem('vdot_lastCat',activeCategory||'');
+        localStorage.setItem('vdot_lastSubId', subId || '');
 
         // Update URL
         if (!skipPush) {
             const path = ROUTES[viewId] || '';
             const baseUrl = '/professor';
-            const newUrl = baseUrl + (path ? '/' + path : '/');
-            if (window.location.pathname !== newUrl || window.location.hash) {
-                history.pushState({ viewId, cat }, '', newUrl);
+            let newUrl = baseUrl + (path ? '/' + path : '/');
+            
+            if (viewId === 'groups') {
+                if (cat) newUrl += '/' + encodeURIComponent(cat);
+                if (subId) {
+                    if (subId === 'new') newUrl += '/novo';
+                    else newUrl += '/editar/' + subId;
+                }
+            } else if (viewId === 'athletes' && subId) {
+                newUrl += '/editar/' + subId;
+            } else if (viewId === 'chat' && subId) {
+                newUrl += '/' + subId;
+            } else if (viewId === 'activity' && subId) {
+                newUrl = baseUrl + '/atividade/' + subId;
+            } else if (path && viewId !== 'groups') {
+                // Outras views simples
+            }
+
+            if (window.location.pathname !== newUrl) {
+                history.pushState({ viewId, cat, subId }, '', newUrl);
             }
         }
         
@@ -211,6 +237,8 @@ function navigate(viewId, cat, skipPush = false) {
         }
         if(viewId==='calculator') renderCalculator();
         
+        updateBreadcrumb(viewId, cat, subId);
+
         // Close mobile sidebar
         $('sidebar')?.classList.remove('open');
         $('sidebar-overlay')?.classList.remove('open');
@@ -218,6 +246,46 @@ function navigate(viewId, cat, skipPush = false) {
         console.error('Falha na navegação:', err);
     }
 }
+
+function updateBreadcrumb(viewId, cat, subId) {
+    const el = $('breadcrumb');
+    if (!el) return;
+    
+    if (viewId === 'dashboard' || !viewId) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+    }
+    
+    el.style.display = 'flex';
+    let html = `<span onclick="navigate('dashboard')" style="cursor:pointer;color:var(--primary);">Dashboard</span>`;
+    
+    const viewName = ROUTES[viewId] || viewId;
+    const viewLabel = viewName.charAt(0).toUpperCase() + viewName.slice(1);
+    
+    html += ` <i class="ri-arrow-right-s-line" style="margin:0 4px;color:var(--text-muted);opacity:0.5;"></i> <span onclick="navigate('${viewId}')" style="cursor:pointer;${!cat && !subId ? 'font-weight:700;color:var(--text);' : 'color:var(--primary);'}">${viewLabel}</span>`;
+    
+    if (cat) {
+        html += ` <i class="ri-arrow-right-s-line" style="margin:0 4px;color:var(--text-muted);opacity:0.5;"></i> <span onclick="viewCategory('${cat}')" style="cursor:pointer;${!subId ? 'font-weight:700;color:var(--text);' : 'color:var(--primary);'}">${cat}</span>`;
+    }
+    
+    if (subId) {
+        let name = subId;
+        if (viewId === 'athletes') {
+            const a = athletes.find(x => x.id == subId || x.supabaseId == subId);
+            if (a) name = a.name;
+        } else if (viewId === 'groups') {
+            const g = groups.find(x => x.id == subId);
+            if (g) name = g.name;
+        } else if (subId === 'new') {
+            name = 'Novo';
+        }
+        html += ` <i class="ri-arrow-right-s-line" style="margin:0 4px;color:var(--text-muted);opacity:0.5;"></i> <span class="current" style="font-weight:700;color:var(--text);">${name}</span>`;
+    }
+    
+    el.innerHTML = html;
+}
+
 
 document.querySelectorAll('.nav-item').forEach(item=>{
     item.addEventListener('click',e=>{
@@ -231,17 +299,27 @@ window.addEventListener('popstate', (e) => {
         if (e.state.viewId === 'activity') {
             if (typeof openActivityDetail === 'function') openActivityDetail(e.state.id, true);
         } else {
-            navigate(e.state.viewId, e.state.cat, true);
+            navigate(e.state.viewId, e.state.cat, true, e.state.subId);
         }
     } else {
         const parts = window.location.pathname.split('/').filter(Boolean);
-        const lastPart = parts[parts.length - 1];
+        const profIdx = parts.indexOf('professor');
+        
+        if (profIdx === -1) {
+            navigate('dashboard', null, true);
+            return;
+        }
+
+        const sectionPart = parts[profIdx + 1];
         const isActivity = window.location.pathname.includes('/atividade/');
         
         if (isActivity && typeof openActivityDetail === 'function') {
-            openActivityDetail(lastPart, true);
+            const actId = parts[profIdx + 2];
+            openActivityDetail(actId, true);
         } else {
-            const viewId = REVERSE_ROUTES[lastPart] || 'dashboard';
+            const viewId = REVERSE_ROUTES[sectionPart] || 'dashboard';
+            // Para simplicidade no popstate sem state object, voltamos apenas para a view principal
+            // Se houver subId, ele deveria estar no e.state
             navigate(viewId, null, true);
         }
     }
@@ -249,17 +327,62 @@ window.addEventListener('popstate', (e) => {
 
 (function restoreNav(){
     const parts = window.location.pathname.split('/').filter(Boolean);
-    const lastPart = parts[parts.length - 1];
+    const profIdx = parts.indexOf('professor');
     
-    if (window.location.pathname.includes('/atividade/')) {
+    // Se não estiver no portal do professor, não faz nada
+    if (profIdx === -1) {
         navigate('dashboard', null, true);
-        setTimeout(() => { if(typeof openActivityDetail === 'function') openActivityDetail(lastPart, true); }, 1000);
+        return;
+    }
+
+    const sectionPart = parts[profIdx + 1]; // 'dashboard', 'pastas', etc.
+    const extraPart = parts[profIdx + 2] ? decodeURIComponent(parts[profIdx + 2]) : null;
+
+    if (sectionPart === 'atividade') {
+        const actId = parts[profIdx + 2];
+        navigate('dashboard', null, true);
+        setTimeout(() => { if(typeof openActivityDetail === 'function') openActivityDetail(actId, true); }, 1000);
+        return;
+    }
+
+    const viewId = REVERSE_ROUTES[sectionPart] || 'dashboard';
+    
+    if (viewId === 'groups') {
+        const cat = extraPart;
+        const action = parts[profIdx + 3];
+        const subId = parts[profIdx + 4];
+        
+        activeCategory = cat;
+        navigate('groups', cat, true, subId || (action === 'novo' ? 'new' : null));
+        
+        if (action === 'novo') {
+            setTimeout(() => openGroupModal(cat), 500);
+        } else if (action === 'editar' && subId) {
+            setTimeout(() => openGroupModal(subId, true), 500);
+        }
+    } else if (viewId === 'athletes') {
+        const action = parts[profIdx + 2]; // 'editar' ou ID
+        const subId = parts[profIdx + 3]; // 'treino' ou ID
+        
+        if (action === 'editar' || subId === 'treino') {
+            const athleteId = subId === 'treino' ? action : subId;
+            const isWorkout = subId === 'treino';
+            
+            navigate('athletes', null, true, athleteId);
+            setTimeout(() => {
+                const a = (athletes || []).find(x => x.id == athleteId || x.supabaseId == athleteId);
+                if (isWorkout && a && a.groupId) editGroup(a.groupId);
+                else if (!isWorkout) openAthleteModal(athleteId);
+            }, 800);
+        } else if (action) {
+             // Caso a URL seja /alunos/ID
+             navigate('athletes', null, true, action);
+             setTimeout(() => openAthleteModal(action), 500);
+        } else {
+            navigate('athletes', null, true);
+        }
     } else {
-        const urlViewId = REVERSE_ROUTES[lastPart];
-        const v = urlViewId || localStorage.getItem('vdot_lastView') || 'dashboard';
-        const c = localStorage.getItem('vdot_lastCat') || '';
-        if(c && v==='groups') activeCategory=c;
-        navigate(v, null, true);
+        navigate(viewId, null, true);
     }
 })();
 
@@ -279,9 +402,6 @@ function renderDashboard(){
     $('stat-history-sub').textContent=tc>0?`${tc} hoje`:'Nenhum hoje';
     $('stat-cats').textContent=categories.length;
     $('stat-cats-sub').textContent=categories.slice(0,3).join(', ')+(categories.length>3?'...':'');
-
-    // Sugestão 2: Gráfico Planejado vs Realizado
-    renderPlannedVsRealizedChart();
 
     // Notifications
     const notifs=[];
@@ -426,7 +546,12 @@ function buildTreadmillQuickTable(){
 //  CATEGORIES
 // ═══════════════════════════════════════
 function openCategoryModal(){const n=prompt('Nome da nova pasta? (Ex: 21km)');if(!n||!n.trim())return;if(categories.includes(n.trim())){showToast('Já existe!','error');return;}categories.push(n.trim());saveState(['cats']);renderGroups();showToast('Pasta criada!');}
-function viewCategory(cat){activeCategory=cat;localStorage.setItem('vdot_lastCat',cat||'');renderGroups();}
+function viewCategory(cat){
+    activeCategory = cat;
+    localStorage.setItem('vdot_lastCat', cat || '');
+    renderGroups();
+    navigate('groups', cat);
+}
 function editCategory(old){const n=prompt(`Renomear '${old}' para:`,old);if(!n||!n.trim()||n===old)return;if(categories.includes(n)){showToast('Já existe!','error');return;}categories=categories.map(c=>c===old?n:c);groups.forEach(g=>{if(g.category===old)g.category=n;});if(activeCategory===old)activeCategory=n;saveState(['cats','groups']);renderGroups();showToast('Renomeada!');}
 function deleteCategory(cat){if(!confirm(`Apagar '${cat}' e TODOS os treinos dentro?`))return;const backup={cats:[...categories],groups:JSON.parse(JSON.stringify(groups))};categories=categories.filter(c=>c!==cat);groups=groups.filter(g=>g.category!==cat);if(activeCategory===cat)activeCategory=null;saveState(['cats','groups']);renderGroups();showToast('Pasta excluída!','default',()=>{categories=backup.cats;groups=backup.groups;saveState(['cats','groups']);renderGroups();});}
 function moveCat(cat,dir){const i=categories.indexOf(cat),t=i+dir;if(t<0||t>=categories.length)return;[categories[i],categories[t]]=[categories[t],categories[i]];saveState(['cats']);renderGroups();}
@@ -466,14 +591,32 @@ function renderGroups(){
             const rows=g.plan.map((d,i)=>{
                 if(!d.active)return'';
                 const steps = d.steps || d.phases || [];
-                const ph=steps.map(p=>{
+                const ph = steps.map(p => {
+                    if (p.type === 'repetition') {
+                        const inner = (p.steps || []).map(is => {
+                            const dur = is.duration ? (is.duration.type === 'time' ? is.duration.value + 'min' : is.duration.value + 'km') : '--';
+                            const int = is.intensity && is.intensity.value > 0 ? ` @ ${is.intensity.value}%VAM` : '';
+                            return `${is.label || phaseLabels[is.type]}: ${dur}${int}`;
+                        }).join(' + ');
+                        return `<div class="plan-ph" style="border-left: 2px solid var(--primary); padding-left: 8px; margin: 4px 0;"><strong>${p.count}x</strong> (${inner})</div>`;
+                    }
+
                     const label = phaseLabels[p.type] || p.label || p.title || p.type;
                     let detail = '';
-                    if (p.km) detail = `${p.km}km @ ${p.pace || 'Livre'}`;
-                    else if (p.volPct) detail = `${p.volPct}%V / ${p.vamPct}%VAM`;
-                    else if (p.duration) detail = `${p.duration.value}${p.duration.type === 'time' ? 'min' : 'km'}`;
                     
-                    return `<div class="plan-ph"><span><strong>${label}:</strong> ${detail}</span>${(p.desc || p.notes)?`<span style="font-style:italic;color:#059669;">${p.desc || p.notes}</span>`:''}</div>`;
+                    if (p.duration) {
+                        const unit = p.duration.type === 'time' ? 'min' : 'km';
+                        detail = `${p.duration.value}${unit}`;
+                        if (p.intensity && p.intensity.value > 0) {
+                            detail += ` @ ${p.intensity.value}%VAM`;
+                        }
+                    } else if (p.km) {
+                        detail = `${p.km}km @ ${p.pace || 'Livre'}`;
+                    } else if (p.volPct) {
+                        detail = `${p.volPct}%V / ${p.vamPct}%VAM`;
+                    }
+                    
+                    return `<div class="plan-ph"><span><strong>${label}:</strong> ${detail}</span>${(p.desc || p.notes) ? `<span style="font-style:italic;color:#059669;">${p.desc || p.notes}</span>` : ''}</div>`;
                 }).join('');
                 return`<div class="plan-row"><div class="plan-row-top"><div class="day">${daysNames[i]}</div></div>${ph}</div>`;
             }).join('');
@@ -503,17 +646,36 @@ function openGroupModal(catOrId, isEdit = false) {
     const id = isEdit ? catOrId : null;
     const cat = isEdit ? null : catOrId;
     const modal = $('modal-group');
-    modal.dataset.editing = id || '';
-    modal.dataset.category = isEdit ? (groups.find(x => x.id === id) || {}).category : cat;
+    if (!modal) return;
     
-    const g = id ? groups.find(x => x.id === id) : null;
+    const g = id ? groups.find(x => x.id == id) : null;
+    modal.dataset.editing = id || '';
+    modal.dataset.category = isEdit ? (g ? g.category : null) : cat;
+    
     const title = g ? g.name : 'Treino de corrida';
     $('group-name').value = title;
     $('display-group-name').textContent = title;
     
-    // Initialize or Clone Plan
+    if ($('group-volume')) $('group-volume').value = g ? g.volume : '';
+    if ($('group-notes')) $('group-notes').value = g ? (g.notes || '') : '';
+    
+    // Initialize or Clone Plan with Migration for old formats
     if (g && g.plan) {
         _editingPlan = JSON.parse(JSON.stringify(g.plan));
+        // Migração: Se o dia tiver 'phases' mas não 'steps', converter para 'steps'
+        _editingPlan.forEach(day => {
+            if (!day.steps && day.phases) {
+                day.steps = day.phases.map(p => ({
+                    id: generateId() + Math.random(),
+                    type: p.type || 'run',
+                    label: p.title || '',
+                    duration: { type: p.km ? 'distance' : 'time', value: (p.km || p.time || '10').toString() },
+                    intensity: { type: p.pace ? 'pace' : 'vam', value: p.pace || p.vamPct || 0 },
+                    notes: p.desc || ''
+                }));
+            }
+            if (!day.steps) day.steps = [];
+        });
     } else {
         _editingPlan = Array.from({ length: 7 }, () => ({
             active: true,
@@ -525,22 +687,21 @@ function openGroupModal(catOrId, isEdit = false) {
         }));
     }
     
-    const floatingHeader = `
-        <div class="floating-chat-header" onclick="toggleFloatingChat()">
-            <h4><i class="ri-message-3-fill"></i> Mensagens</h4>
-            <div class="chat-header-actions" onclick="event.stopPropagation()">
-                <i class="ri-refresh-line" onclick="syncAthletesFromSupabase(true)" title="Sincronizar"></i>
-                <i class="ri-expand-diagonal-line" onclick="expandChat()" title="Expandir"></i>
-                <i class="ri-close-line" onclick="toggleFloatingChat()" title="Fechar"></i>
-            </div>
-        </div>
-    `;
+
 
     _selectedDayIdx = 0;
     _expandedStepIdx = null;
     _expandedParentIdx = null;
     renderEditorSidebar();
     renderEditorSteps();
+    
+    // Atualizar URL para refletir abertura do modal (apenas se não for skipPush ou se vier de um clique direto)
+    if (!isEdit) {
+        navigate('groups', catOrId, false, 'new');
+    }
+    // Se for edição, o caller (editGroup ou restoreNav) já deve ter chamado o navigate correspondente.
+    // Chamar navigate aqui de novo com skipPush=false causaria o fechamento do modal recém-aberto.
+
     modal.classList.add('show');
 }
 
@@ -657,7 +818,16 @@ function renderNormalStep(step, idx, parentIdx = null) {
     else durStr = `${step.duration.value} min`;
 
     // Intensity display string
-    let intStr = step.intensity.value > 0 ? `${step.intensity.value}% VAM` : "Sem meta";
+    let intStr = "Sem meta";
+    if (step.intensity.type === 'vam' && step.intensity.value > 0) {
+        intStr = `${step.intensity.value}% VAM`;
+    } else if (step.intensity.type === 'pace' && step.intensity.value) {
+        intStr = `${step.intensity.value} /km`;
+    } else if (step.intensity.type === 'hr_zone' && step.intensity.value) {
+        intStr = `Z${step.intensity.value}`;
+    } else if (step.intensity.type === 'cadence' && step.intensity.value) {
+        intStr = `${step.intensity.value} spm`;
+    }
 
     if (isExpanded) {
         return `
@@ -719,6 +889,18 @@ function renderNormalStep(step, idx, parentIdx = null) {
                                 <div style="margin-top: 10px;">
                                     <label class="small-label" style="font-size: 11px; margin-bottom: 5px;">Ritmo alvo</label>
                                     <input type="text" placeholder="5:30" value="${step.intensity.value || ''}" onchange="updateStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%;">
+                                </div>
+                            ` : ''}
+                            ${step.intensity.type === 'hr_zone' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px;">Zona Alvo (Ex: 3)</label>
+                                    <input type="number" min="1" max="5" value="${step.intensity.value || ''}" onchange="updateStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%;">
+                                </div>
+                            ` : ''}
+                            ${step.intensity.type === 'cadence' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px;">Cadência Alvo (spm)</label>
+                                    <input type="number" placeholder="170" value="${step.intensity.value || ''}" onchange="updateStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%;">
                                 </div>
                             ` : ''}
                         </div>
@@ -852,6 +1034,7 @@ function saveGroup() {
         name,
         category: cat,
         volume: vol,
+        notes: $('group-notes') ? $('group-notes').value : '',
         plan: _editingPlan
     };
 
@@ -868,27 +1051,30 @@ function saveGroup() {
     closeModals();
     renderGroups();
 }
-function editGroup(id){openGroupModal(id,true);}
-function cloneGroup(id){const c=JSON.parse(JSON.stringify(groups.find(g=>g.id===id)));c.id=generateId();c.name+=' (Cópia)';groups.push(c);saveState(['groups']);renderGroups();showToast('Clonado!');}
-function deleteGroup(id){if(!confirm('Excluir este treino?'))return;const backup=JSON.parse(JSON.stringify(groups.find(g=>g.id===id)));groups=groups.filter(g=>g.id!==id);athletes.forEach(a=>{if(a.groupId===id)a.groupId=null;});saveState(['groups','athletes']);renderGroups();showToast('Treino apagado.','default',()=>{groups.push(backup);saveState(['groups']);renderGroups();});}
+function editGroup(id){
+    const g = groups.find(x => x.id == id);
+    navigate('groups', g ? g.category : null, false, id);
+    openGroupModal(id, true);
+}
+function cloneGroup(id){const c=JSON.parse(JSON.stringify(groups.find(g=>g.id==id)));c.id=generateId();c.name+=' (Cópia)';groups.push(c);saveState(['groups']);renderGroups();showToast('Clonado!');}
+function deleteGroup(id){if(!confirm('Excluir este treino?'))return;const backup=JSON.parse(JSON.stringify(groups.find(g=>g.id==id)));groups=groups.filter(g=>g.id!=id);athletes.forEach(a=>{if(a.groupId==id)a.groupId=null;});saveState(['groups','athletes']);renderGroups();showToast('Treino apagado.','default',()=>{groups.push(backup);saveState(['groups']);renderGroups();});}
 
 // ─── DUPLICATE TO FOLDER ───
 let _dupGroupId=null;
-function openDuplicateModal(gId){_dupGroupId=gId;const g=groups.find(x=>x.id===gId);const others=categories.filter(c=>c!==g.category);
+function openDuplicateModal(gId){_dupGroupId=gId;const g=groups.find(x=>x.id==gId);const others=categories.filter(c=>c!==g.category);
     $('dup-folder-list').innerHTML=others.length?others.map(c=>`<button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="doDuplicate('${c}')"><i class="ri-folder-open-line"></i> ${c}</button>`).join(''):'<div style="color:var(--text-muted);text-align:center;padding:16px;">Crie outra pasta primeiro.</div>';
     $('modal-duplicate').classList.add('show');
 }
-function doDuplicate(targetCat){const c=JSON.parse(JSON.stringify(groups.find(g=>g.id===_dupGroupId)));c.id=generateId();c.category=targetCat;c.name+=' (Cópia)';groups.push(c);saveState(['groups']);closeModals();showToast(`Duplicado para ${targetCat}!`);}
+function doDuplicate(targetCat){const c=JSON.parse(JSON.stringify(groups.find(g=>g.id==_dupGroupId)));c.id=generateId();c.category=targetCat;c.name+=' (Cópia)';groups.push(c);saveState(['groups']);closeModals();showToast(`Duplicado para ${targetCat}!`);}
 
 // ─── ASSIGN ───
-let currentAssignGroupId=null;
-function openAssignModal(gId){currentAssignGroupId=gId;const g=groups.find(x=>x.id===gId);$('modal-assign-title').textContent=`Vincular: ${g.name}`;const list=$('assign-athlete-list');
+function openAssignModal(gId){currentAssignGroupId=gId;const g=groups.find(x=>x.id==gId);$('modal-assign-title').textContent=`Vincular: ${g.name}`;const list=$('assign-athlete-list');
     if(!athletes.length){list.innerHTML='<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px;">Nenhum aluno.</div>';}
-    else{list.innerHTML=athletes.map(a=>{const chk=a.groupId===gId?'checked':'';return`<label style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--panel);border:1px solid ${chk?'var(--primary)':'var(--border)'};border-radius:4px;cursor:pointer;"><input type="checkbox" class="assign-chk" value="${a.id}" ${chk} style="width:16px;height:16px;accent-color:var(--primary);"><span style="font-weight:500;">${a.name}</span></label>`;}).join('');}
+    else{list.innerHTML=athletes.map(a=>{const chk=a.groupId==gId?'checked':'';return`<label style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--panel);border:1px solid ${chk?'var(--primary)':'var(--border)'};border-radius:4px;cursor:pointer;"><input type="checkbox" class="assign-chk" value="${a.id}" ${chk} style="width:16px;height:16px;accent-color:var(--primary);"><span style="font-weight:500;">${a.name}</span></label>`;}).join('');}
     $('modal-assign').classList.add('show');
 }
 function saveAssign(){if(!currentAssignGroupId)return;const assigned=new Set([...document.querySelectorAll('.assign-chk:checked')].map(c=>parseInt(c.value)));
-    athletes.forEach(a=>{if(assigned.has(a.id))a.groupId=currentAssignGroupId;else if(a.groupId===currentAssignGroupId)a.groupId=null;});
+    athletes.forEach(a=>{if(assigned.has(a.id))a.groupId=currentAssignGroupId;else if(a.groupId==currentAssignGroupId)a.groupId=null;});
     saveState(['athletes']);closeModals();renderAthletes();renderDashboard();showToast('Vinculado!');}
 
 // ═══════════════════════════════════════
@@ -1020,6 +1206,17 @@ function openAthleteModal(id=null){
     
     $('athlete-name').value=a?a.name:'';$('athlete-phone').value=a?(a.phone||''):'';$('athlete-dob').value=a?(a.dob||''):'';$('athlete-test-hr').value=a?(a.maxHr||''):'';$('athlete-test').value=a?(a.testTime||''):'';$('athlete-notes').value=a?(a.notes||''):'';sel.value=a?(a.groupId||''):'';
     
+    const preview = $('athlete-photo-preview');
+    if (preview) {
+        if (a && a.avatar_url) {
+            preview.innerHTML = `<img src="${a.avatar_url}" style="width:100%; height:100%; object-fit:cover;">`;
+        } else if (a && a.name) {
+            preview.innerHTML = `<span style="font-size:32px; font-weight:800; color:var(--primary);">${a.name.charAt(0).toUpperCase()}</span>`;
+        } else {
+            preview.innerHTML = `<i class="ri-user-line" style="font-size:40px; color:var(--text-muted);"></i>`;
+        }
+    }
+    
     // Novos campos de FC
     $('athlete-hr-method').value = a?(a.hrMethod||'max'):'max';
     $('athlete-resting-hr').value = a?(a.restingHr||''):'';
@@ -1062,7 +1259,10 @@ function saveAthlete(){
     else{athletes.push({id:generateId(),name,phone,dob,maxHr,hrMethod,restingHr,lthr,testTime,groupId,notes});}
     saveState(['athletes']);closeModals();renderAthletes();renderDashboard();showToast(id?'Atualizado!':'Cadastrado!');
 }
-function editAthlete(id){openAthleteModal(id);}
+function editAthlete(id){
+    navigate('athletes', null, false, id);
+    openAthleteModal(id);
+}
 function deleteAthlete(id){const a=athletes.find(x=>x.id==id);if(!confirm(`Excluir "${a?.name}"?`))return;
     const backupA=JSON.parse(JSON.stringify(a));const backupH=historyPlans.filter(h=>h.athleteId===id).map(h=>JSON.parse(JSON.stringify(h)));
     athletes=athletes.filter(x=>x.id!=id);historyPlans=historyPlans.filter(h=>h.athleteId!=id);
@@ -1340,6 +1540,11 @@ async function syncAthletesFromSupabase(isManual = false) {
                     athletes[index].testTime = supabaseVamTime;
                     updatedCount++;
                 }
+                
+                // Sync Avatar
+                if (p.avatar_url) {
+                    athletes[index].avatar_url = p.avatar_url;
+                }
             } else {
                 athletes.push({
                     id: generateId() + Math.random(),
@@ -1355,6 +1560,7 @@ async function syncAthletesFromSupabase(isManual = false) {
                     lthr: p.lthr || null,
                     testTime: supabaseVamTime,
                     groupId: null,
+                    avatar_url: p.avatar_url || null,
                     notes: 'Importado do App'
                 });
                 addedCount++;
