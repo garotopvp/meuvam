@@ -31,6 +31,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGarminSync } from '../hooks/useGarminSync.js';
 import ActivityMap from '../components/ActivityMap';
 
+const safeFormatLocalDate = (dateStr, options = { weekday: 'long', day: 'numeric', month: 'long' }) => {
+  if (!dateStr) return '';
+  try {
+    const cleanStr = String(dateStr).split('T')[0];
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      const dateObj = new Date(y, m, d);
+      return dateObj.toLocaleDateString('pt-BR', options);
+    }
+    const dateObj = new Date(dateStr);
+    if (isNaN(dateObj.getTime())) return dateStr;
+    return dateObj.toLocaleDateString('pt-BR', options);
+  } catch (e) {
+    console.error('safeFormatLocalDate error:', e);
+    return dateStr;
+  }
+};
+
 const StructuredWorkoutView = ({ steps, athlete }) => {
   if (!steps || !Array.isArray(steps)) return null;
 
@@ -71,6 +92,7 @@ const StructuredWorkoutView = ({ steps, athlete }) => {
   };
 
   const renderStep = (step, isNested = false) => {
+    if (!step) return null;
     if (step.type === 'repetition') {
       return (
         <div key={step.id} style={{ marginBottom: '1.5rem', background: 'rgba(0,0,0,0.02)', borderRadius: '16px', padding: '1rem', border: '1px dashed rgba(0,0,0,0.1)' }}>
@@ -79,7 +101,7 @@ const StructuredWorkoutView = ({ steps, athlete }) => {
             <span style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>Repetir {step.count}x</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '12px', borderLeft: '2px solid rgba(0,0,0,0.05)' }}>
-            {step.steps.map(s => renderStep(s, true))}
+            {(step.steps || []).map(s => renderStep(s, true))}
           </div>
         </div>
       );
@@ -184,7 +206,7 @@ const GarminPushButton = ({ workout, onPush, garminStatus }) => {
           disabled={pushing}
           style={{
             background: 'var(--primary-color)',
-            color: '#fff',
+            color: '#1e293b',
             border: 'none',
             borderRadius: '12px',
             padding: '8px 16px',
@@ -226,8 +248,24 @@ const GarminPushButton = ({ workout, onPush, garminStatus }) => {
   );
 };
 
-const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus }) => {
+const translateDescription = (desc) => {
+  if (!desc) return '';
+  return desc
+    .replace(/\brun\b/gi, 'Corrida')
+    .replace(/\bwarmup\b/gi, 'Aquecimento')
+    .replace(/\bwalk\b/gi, 'Caminhada')
+    .replace(/\brecovery\b/gi, 'Recuperação')
+    .replace(/\brest\b/gi, 'Descanso')
+    .replace(/\bcooldown\b/gi, 'Desaquec.')
+    .replace(/\bother\b/gi, 'Outros');
+};
+
+const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus, isProfessor, onShowStrava }) => {
   if (!workout) return null;
+
+  // Determine personalized greeting and statistics
+  const athleteName = athlete?.name || 'Atleta';
+  const vamPace = athlete?.vam || '--';
 
   return (
     <motion.div 
@@ -240,8 +278,9 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'var(--bg-color)',
-        zIndex: 9999, // Ensure it's above everything including any new bottom navs
+        background: '#ffffff',
+        color: '#1e293b',
+        zIndex: 9999,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         display: 'flex',
@@ -249,15 +288,14 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
       }}
     >
       <motion.div 
-        initial={{ y: '20%', opacity: 0 }}
+        initial={{ y: '30%', opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '20%', opacity: 0 }}
+        exit={{ y: '30%', opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
         style={{
           width: '100%',
           maxWidth: '500px',
           minHeight: '100%',
-          background: 'var(--bg-color)',
           padding: '1.5rem',
           paddingBottom: '8rem',
           position: 'relative'
@@ -271,76 +309,97 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
           marginBottom: '2rem',
           position: 'sticky',
           top: 0,
-          background: 'var(--bg-color)',
+          background: 'rgba(9, 13, 22, 0.85)',
+          backdropFilter: 'blur(20px)',
           padding: '1rem 0',
           zIndex: 10,
-          borderBottom: '1px solid var(--border-color)'
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
         }}>
           <button 
             onClick={onClose}
             style={{ 
-              background: 'var(--surface-accent)', 
-              border: 'none', 
-              borderRadius: '12px', 
-              width: '40px', 
-              height: '40px', 
+              background: 'rgba(255, 255, 255, 0.08)', 
+              border: '1px solid rgba(255, 255, 255, 0.1)', 
+              borderRadius: '14px', 
+              width: '42px', 
+              height: '42px', 
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center', 
               cursor: 'pointer', 
-              color: 'var(--text-primary)' 
+              color: '#1e293b'
             }}
           >
             <X size={20} />
           </button>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            Treino Detalhado
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 900, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
+            Treino Individualizado
           </h3>
-          <div style={{ width: '40px' }} />
+          <div style={{ width: '42px' }} />
+        </div>
+
+        {/* Personalized Welcoming Motivation Card */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(252, 82, 0, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)',
+          border: '1px solid rgba(252, 82, 0, 0.3)',
+          borderRadius: '24px',
+          padding: '1.25rem',
+          marginBottom: '2rem',
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center'
+        }}>
+          <div style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #FC5200 0%, #ef4444 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 900,
+            fontSize: '1.2rem',
+            color: '#1e293b',
+            boxShadow: '0 4px 12px rgba(252, 82, 0, 0.3)',
+            flexShrink: 0
+          }}>
+            {athleteName.charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1 }}>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: '#1e293b' }}>
+              Foco no objetivo, {athleteName}! ⚡
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.6)', margin: '2px 0 0 0', fontWeight: 500 }}>
+              Sua VAM de referência é <strong style={{ color: '#FC5200' }}>{vamPace} min/km</strong>. Cada ritmo abaixo foi calculado sob medida para você!
+            </p>
+          </div>
         </div>
 
         {/* Hero Section */}
-        <div style={{ marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            {/* Removed workout.type badge per user request */}
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
             {workout.status === 'completed' && (
               <span style={{ 
-                background: 'rgba(52, 199, 89, 0.1)', 
-                color: 'var(--success)', 
-                padding: '6px 14px', 
+                background: 'rgba(52, 199, 89, 0.2)', 
+                color: '#34c759', 
+                border: '1px solid rgba(52, 199, 89, 0.3)',
+                padding: '4px 12px', 
                 borderRadius: '100px', 
-                fontSize: '0.75rem', 
-                fontWeight: 800,
-                textTransform: 'uppercase'
+                fontSize: '0.7rem', 
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
               }}>
                 Concluído
               </span>
             )}
           </div>
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 900, letterSpacing: '-1px', lineHeight: 1.1, marginBottom: '0.5rem' }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-1.5px', lineHeight: 1.05, marginBottom: '0.5rem', color: '#1e293b' }}>
             {workout.title}
           </h1>
-          <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-            {new Date(workout.date).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          <p style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.5)', fontWeight: 600 }}>
+            {safeFormatLocalDate(workout.date)}
           </p>
-        </div>
-
-        {/* Interactive Map */}
-        <div style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-             <h3 style={{ fontSize: '0.9rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <MapIcon size={18} color="var(--primary-color)" /> MAPA DA ATIVIDADE
-             </h3>
-             {workout.status === 'completed' && (
-               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)' }}>Intensidade por Heatmap 🔥</span>
-             )}
-          </div>
-          <ActivityMap 
-            isHeatmap={workout.status === 'completed'} 
-            routeData={workout.status === 'completed' ? [
-              [-23.5505, -46.6333], [-23.5515, -46.6343], [-23.5525, -46.6353], [-23.5535, -46.6363], [-23.5545, -46.6353]
-            ] : null} 
-          />
         </div>
 
         {/* Quick Metrics */}
@@ -348,68 +407,83 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
           display: 'grid', 
           gridTemplateColumns: '1fr 1fr', 
           gap: '16px', 
-          marginBottom: '2.5rem' 
+          marginBottom: '2rem' 
         }}>
-          <div style={{ background: 'var(--surface-color)', padding: '1.25rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-secondary)' }}>
+          <div style={{ 
+            background: 'rgba(255, 255, 255, 0.04)', 
+            backdropFilter: 'blur(20px)',
+            padding: '1.25rem', 
+            borderRadius: '24px', 
+            border: '1px solid rgba(255, 255, 255, 0.06)' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'rgba(255, 255, 255, 0.5)' }}>
               <MapPin size={18} />
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Distância</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Distância</span>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary-color)' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#FC5200' }}>
               {workout.metrics?.distance || '--'}
             </div>
           </div>
-          <div style={{ background: 'var(--surface-color)', padding: '1.25rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-secondary)' }}>
+          <div style={{ 
+            background: 'rgba(255, 255, 255, 0.04)', 
+            backdropFilter: 'blur(20px)',
+            padding: '1.25rem', 
+            borderRadius: '24px', 
+            border: '1px solid rgba(255, 255, 255, 0.06)' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'rgba(255, 255, 255, 0.5)' }}>
               <Clock size={18} />
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Duração</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duração</span>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary-color)' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#FC5200' }}>
               {workout.metrics?.duration || '--'}
             </div>
           </div>
         </div>
 
         {/* Structured Steps or Dynamic Chart */}
-        {(workout.structured_steps || workout.metrics?.structured_steps) ? (
-          <StructuredWorkoutView steps={workout.structured_steps || workout.metrics.structured_steps} athlete={athlete} />
-        ) : (
-          <IntensityChart 
-            description={workout.description || ''} 
-            vamPace={athlete?.vam || '--'} 
-          />
-        )}
+        <div style={{ marginBottom: '2.5rem' }}>
+          {(workout.structured_steps || workout.metrics?.structured_steps) ? (
+            <StructuredWorkoutView steps={workout.structured_steps || workout.metrics.structured_steps} athlete={athlete} />
+          ) : (
+            <IntensityChart 
+              description={workout.description || ''} 
+              vamPace={athlete?.vam || '--'} 
+            />
+          )}
+        </div>
 
         {/* Workout Prescription (Always show text as backup) */}
         <div style={{ marginBottom: '2.5rem' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 900, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Zap size={18} color="#fff" fill="#fff" />
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 900, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase', letterSpacing: '1px', color: 'rgba(255, 255, 255, 0.8)' }}>
+            <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: 'linear-gradient(135deg, #FC5200 0%, #ef4444 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Zap size={16} color="#fff" fill="#fff" />
             </div>
             PRESCRIÇÃO DO TREINO
           </h3>
           <div style={{ 
-            background: 'var(--surface-accent)', 
-            padding: '2rem', 
-            borderRadius: '28px', 
-            fontSize: '1.15rem', 
-            lineHeight: '1.6', 
-            color: 'var(--text-primary)',
+            background: 'rgba(255, 255, 255, 0.03)', 
+            backdropFilter: 'blur(20px)',
+            padding: '1.75rem', 
+            borderRadius: '24px', 
+            fontSize: '1.1rem', 
+            lineHeight: '1.65', 
+            color: 'rgba(255, 255, 255, 0.9)',
             whiteSpace: 'pre-line',
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
-            border: '1px solid var(--border-color)'
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
           }}>
-            {workout.description || 'Sem descrição detalhada para este treino.'}
+            {translateDescription(workout.description) || 'Sem descrição detalhada para este treino.'}
           </div>
         </div>
 
         {/* External Integration — Strava (Professor Only) */}
         {isProfessor && (
           <div style={{ 
-            background: 'rgba(252, 82, 0, 0.08)', 
+            background: 'rgba(252, 82, 0, 0.1)', 
             padding: '1.5rem', 
             borderRadius: '24px', 
-            border: '1px solid rgba(252, 82, 0, 0.2)',
+            border: '1px solid rgba(252, 82, 0, 0.25)',
             display: 'flex',
             alignItems: 'center',
             gap: '16px',
@@ -419,8 +493,8 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
               <Activity size={24} color="#fff" />
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: '1rem', fontWeight: 800, color: '#FC5200' }}>Integração com Strava</p>
-              <p style={{ fontSize: '0.85rem', color: 'rgba(252, 82, 0, 0.8)', fontWeight: 500 }}>
+              <p style={{ fontSize: '1rem', fontWeight: 800, color: '#FC5200', margin: 0 }}>Integração com Strava</p>
+              <p style={{ fontSize: '0.85rem', color: 'rgba(252, 82, 0, 0.8)', fontWeight: 500, margin: '4px 0 0 0' }}>
                 {athlete?.integrations?.strava?.connected 
                   ? `Conectado como ${athlete.integrations.strava.username || 'Atleta'}`
                   : 'O atleta ainda não conectou o Strava.'}
@@ -428,10 +502,10 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
             </div>
             {athlete?.integrations?.strava?.connected && (
               <button 
-                onClick={() => setShowStravaModal(true)}
+                onClick={onShowStrava}
                 style={{
                   background: '#FC5200',
-                  color: '#fff',
+                  color: '#1e293b',
                   border: 'none',
                   padding: '8px 14px',
                   borderRadius: '12px',
@@ -449,7 +523,6 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
           </div>
         )}
 
-
         {/* Garmin Send Button */}
         {onPushToGarmin && (
           <GarminPushButton workout={workout} onPush={onPushToGarmin} garminStatus={garminStatus} />
@@ -460,8 +533,11 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus 
 };
 
 const paceToSeconds = (paceStr) => {
-  if (!paceStr || paceStr === '--' || !paceStr.includes(':')) return null;
-  const [min, sec] = paceStr.split(':').map(Number);
+  if (!paceStr || paceStr === '--') return null;
+  const str = String(paceStr);
+  if (!str.includes(':')) return null;
+  const [min, sec] = str.split(':').map(Number);
+  if (isNaN(min) || isNaN(sec)) return null;
   return min * 60 + sec;
 };
 
@@ -478,7 +554,16 @@ const IntensityChart = ({ description, vamPace }) => {
 
   // Regex para encontrar padrões como "90% VAM" ou "60% da VAM"
   const regex = /(\d+)\s*%\s*(?:da\s+)?VAM/gi;
-  const matches = [...description.matchAll(regex)];
+  const matches = [];
+  let match;
+  regex.lastIndex = 0;
+  try {
+    while ((match = regex.exec(description)) !== null) {
+      matches.push(match);
+    }
+  } catch (err) {
+    console.error("Erro seguro no regex do gráfico de intensidade:", err);
+  }
 
   if (matches.length === 0) return null;
 
@@ -606,7 +691,7 @@ const GarminSyncPanel = ({ workouts, userId, garminSync, athlete }) => {
               onClick={handleSyncWeek}
               disabled={isLoading}
               style={{
-                background: 'var(--primary-color)', color: '#fff', border: 'none',
+                background: 'var(--primary-color)', color: '#1e293b', border: 'none',
                 borderRadius: '12px', padding: '8px 14px', fontSize: '0.78rem', fontWeight: 800,
                 cursor: isLoading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px',
@@ -689,7 +774,7 @@ const GarminSyncPanel = ({ workouts, userId, garminSync, athlete }) => {
                 type="submit"
                 disabled={isLoading}
                 style={{
-                  background: 'var(--primary-color)', color: '#fff', border: 'none',
+                  background: 'var(--primary-color)', color: '#1e293b', border: 'none',
                   borderRadius: '12px', padding: '10px', fontWeight: 800,
                   fontSize: '0.85rem', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
@@ -810,7 +895,7 @@ const StravaActivitiesModal = ({ athlete, onClose }) => {
                   <div>
                     <h4 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '4px' }}>{activity.title}</h4>
                     <div style={{ display: 'flex', gap: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                      <span>{new Date(activity.date).toLocaleDateString('pt-BR')}</span>
+                      <span>{safeFormatLocalDate(activity.date, { day: 'numeric', month: 'numeric', year: 'numeric' })}</span>
                       <span style={{ color: '#FC5200' }}>{activity.metrics.distance}</span>
                     </div>
                   </div>
@@ -1006,7 +1091,7 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
 
       <div style={{ marginBottom: '1.5rem' }}>
         <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '1rem' }}>
-          {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {safeFormatLocalDate(selectedDate)}
         </h3>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1071,6 +1156,8 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
             onClose={() => setSelectedWorkout(null)}
             onPushToGarmin={handlePushToGarmin}
             garminStatus={garminSync.garminStatus}
+            isProfessor={isProfessor}
+            onShowStrava={() => setShowStravaModal(true)}
           />
         )}
         {showStravaModal && (
@@ -1085,3 +1172,5 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
 };
 
 export default TrainingView;
+
+
