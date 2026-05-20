@@ -23,16 +23,52 @@ const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete, the
     <div className="animate-slide-up">
       <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.5px' }}>Meu Perfil</h1>
-        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="ag-btn" style={{ width: '44px', height: '44px', borderRadius: '12px' }}>{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
+        <button 
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          style={{ 
+            background: 'var(--surface-accent)', 
+            border: 'none', 
+            color: 'var(--text-primary)', 
+            cursor: 'pointer',
+            width: '44px',
+            height: '44px',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'var(--transition-smooth)'
+          }}
+        >
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
       </header>
 
       {/* Profile Header Card */}
-      <div className="card ag-card" style={{ padding: '2rem 1.5rem', textAlign: 'center', marginBottom: '2rem', position: 'relative', overflow: 'hidden' }}>
+      <div className="card" style={{ 
+        padding: '2rem 1.5rem', 
+        textAlign: 'center', 
+        marginBottom: '2rem',
+        background: 'linear-gradient(135deg, var(--surface-color) 0%, var(--surface-accent) 100%)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
         {/* Background decorative elements */}
         <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', borderRadius: '50%', background: 'var(--primary-color)', opacity: 0.05 }}></div>
         
         <div style={{ position: 'relative', display: 'inline-block', marginBottom: '1.25rem' }}>
-          <div style={{ width: '100px', height: '100px', borderRadius: '35px', background: 'var(--surface-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-color)', border: '3px solid var(--primary-color)', overflow: 'hidden', boxShadow: '0 12px 24px rgba(0, 122, 255, 0.12)' }}>
+          <div style={{ 
+            width: '100px', 
+            height: '100px', 
+            borderRadius: '35px', 
+            background: 'var(--surface-color)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--primary-color)',
+            border: '3px solid var(--primary-color)',
+            overflow: 'hidden',
+            boxShadow: '0 12px 24px rgba(0, 122, 255, 0.15)'
+          }}>
             {athlete.profileImage ? (
               <img src={athlete.profileImage} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
@@ -73,7 +109,22 @@ const ProfileView = ({ athlete, onEdit, onPhotoUpload, onLogout, setAthlete, the
           <ProfileStatCard label="PESO" value={athlete.weight || '--'} unit="kg" />
         </div>
 
-        <button onClick={onEdit} className="ag-btn" style={{ marginTop: '1.5rem', padding: '10px 20px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700 }}>Editar Perfil Completo</button>
+        <button 
+          onClick={onEdit}
+          style={{ 
+            marginTop: '1.5rem', 
+            background: 'transparent', 
+            border: '1px solid var(--border-color)', 
+            color: 'var(--text-primary)', 
+            padding: '10px 20px', 
+            borderRadius: '12px',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          Editar Perfil Completo
+        </button>
       </div>
 
       {/* Info Section */}

@@ -139,7 +139,16 @@ const AuthView = ({ onBack }) => {
   };
 
   return (
-    <div className="ag-auth" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: '2rem',
+      background: '#f8fafc',
+      textAlign: 'center'
+    }}>
       {/* Botão de Voltar Padronizado */}
       <button 
         onClick={onBack}
@@ -190,11 +199,21 @@ const AuthView = ({ onBack }) => {
         </div>
       </div>
 
-      <div className="card ag-card" style={{ width: '100%', maxWidth: '380px', padding: '2.5rem 2rem' }}>
+      <div className="card" style={{ 
+        width: '100%', 
+        maxWidth: '380px', 
+        padding: '2.5rem 2rem',
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '24px',
+        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.03)'
+      }}>
         <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--primary-color)', borderRadius: '100px', fontSize: '11px', fontWeight: 800, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {window.location.pathname.includes('professor') ? 'Portal do Professor' : 'Portal do Aluno'}
         </div>
-        <h2 className="ag-hero" style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem' }}>{isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}</h2>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', color: '#0f172a' }}>
+          {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
+        </h2>
 
         {error && (
           <div style={{ 
@@ -215,18 +234,34 @@ const AuthView = ({ onBack }) => {
           {!isLogin && !isResettingPassword && (
             <div style={{ position: 'relative' }}>
               <UserIcon size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input className="auth-input" type="text" placeholder="Seu nome completo" required value={name} onChange={e => setName(e.target.value)} style={{ paddingLeft: '48px' }} />
+              <input 
+                className="auth-input"
+                type="text" placeholder="Seu nome completo" required 
+                value={name} onChange={e => setName(e.target.value)}
+                style={{ paddingLeft: '48px' }}
+              />
             </div>
           )}
           {!isResettingPassword && (
             <div style={{ position: 'relative' }}>
               <Mail size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input className="auth-input" type="email" placeholder="E-mail" required value={email} onChange={e => setEmail(e.target.value)} style={{ paddingLeft: '48px' }} />
+              <input 
+                className="auth-input"
+                type="email" placeholder="E-mail" required 
+                value={email} onChange={e => setEmail(e.target.value)}
+                style={{ paddingLeft: '48px' }}
+              />
             </div>
           )}
           <div style={{ position: 'relative' }}>
             <Lock size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input className="auth-input" type={showPassword ? "text" : "password"} placeholder={isResettingPassword ? "Digite a NOVA senha" : "Senha"} required value={password} onChange={e => setPassword(e.target.value)} style={{ paddingLeft: '48px', paddingRight: '48px' }} />
+            <input 
+              className="auth-input"
+              type={showPassword ? "text" : "password"} 
+              placeholder={isResettingPassword ? "Digite a NOVA senha" : "Senha"} required 
+              value={password} onChange={e => setPassword(e.target.value)}
+              style={{ paddingLeft: '48px', paddingRight: '48px' }}
+            />
             <button 
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -239,7 +274,13 @@ const AuthView = ({ onBack }) => {
           {(!isLogin || isResettingPassword) && (
             <div style={{ position: 'relative' }}>
               <Lock size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input className="auth-input" type={showPassword ? "text" : "password"} placeholder="Confirme a senha" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={{ paddingLeft: '48px', paddingRight: '48px' }} />
+              <input 
+                className="auth-input"
+                type={showPassword ? "text" : "password"} 
+                placeholder="Confirme a senha" required 
+                value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                style={{ paddingLeft: '48px', paddingRight: '48px' }}
+              />
             </div>
           )}
 
@@ -255,7 +296,28 @@ const AuthView = ({ onBack }) => {
             </div>
           )}
 
-          <button type="submit" disabled={loading} className="ag-btn ag-btn-primary" style={{ marginTop: '0.5rem', padding: '16px', borderRadius: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{loading ? <Loader2 className="animate-spin" size={20} /> : (isResettingPassword ? 'Salvar Nova Senha' : isLogin ? 'Entrar no App' : 'Cadastrar Conta')}</button>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="btn-primary" 
+            style={{ 
+              marginTop: '0.5rem', 
+              background: 'var(--primary-color)', 
+              color: '#fff', 
+              border: 'none', 
+              padding: '16px', 
+              borderRadius: '16px', 
+              fontWeight: 800, 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)'
+            }}
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (isResettingPassword ? 'Salvar Nova Senha' : isLogin ? 'Entrar no App' : 'Cadastrar Conta')}
+
+          </button>
         </form>
 
         {!isResettingPassword && (
