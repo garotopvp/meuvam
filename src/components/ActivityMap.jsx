@@ -50,54 +50,60 @@ const ActivityMap = ({ routeData, isHeatmap = false, style }) => {
     }
 
     function initMap() {
-      if (!mapRef.current || mapInstance.current) return;
+      try {
+        if (!mapRef.current || mapInstance.current) return;
 
-      const L = window.L;
-      let coords = routeData;
+        const L = window.L;
+        if (!L) return; // Se o Leaflet não estiver pronto, sai de forma segura
 
-      if (typeof routeData === 'string' && routeData.length > 0) {
-        coords = decodePolyline(routeData);
-      }
+        let coords = routeData;
 
-      if (!coords || coords.length === 0) return;
+        if (typeof routeData === 'string' && routeData.length > 0) {
+          coords = decodePolyline(routeData);
+        }
 
-      const center = coords[0];
-      
-      mapInstance.current = L.map(mapRef.current, {
-        zoomControl: false,
-        attributionControl: false,
-        dragging: !style?.pointerEvents, // Se tiver pointerEvents none, desativa drag
-        touchZoom: !style?.pointerEvents,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-      }).setView(center, 14);
+        if (!coords || coords.length === 0) return;
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19
-      }).addTo(mapInstance.current);
+        const center = coords[0];
+        
+        mapInstance.current = L.map(mapRef.current, {
+          zoomControl: false,
+          attributionControl: false,
+          dragging: !style?.pointerEvents, // Se tiver pointerEvents none, desativa drag
+          touchZoom: !style?.pointerEvents,
+          scrollWheelZoom: false,
+          doubleClickZoom: false,
+        }).setView(center, 14);
 
-      const polyline = L.polyline(coords, {
-        color: '#fc4c02', // Strava Orange
-        weight: 4,
-        opacity: 0.9,
-        lineJoin: 'round',
-        lineCap: 'round'
-      }).addTo(mapInstance.current);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 19
+        }).addTo(mapInstance.current);
 
-      mapInstance.current.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+        const polyline = L.polyline(coords, {
+          color: '#fc4c02', // Strava Orange
+          weight: 4,
+          opacity: 0.9,
+          lineJoin: 'round',
+          lineCap: 'round'
+        }).addTo(mapInstance.current);
 
-      if (isHeatmap) {
-        coords.forEach((point, i) => {
-          if (i % 8 === 0) {
-            const intensity = Math.random();
-            L.circle(point, {
-              radius: 25,
-              fillColor: intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f59e0b' : '#22c55e',
-              fillOpacity: 0.3,
-              stroke: false
-            }).addTo(mapInstance.current);
-          }
-        });
+        mapInstance.current.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+
+        if (isHeatmap) {
+          coords.forEach((point, i) => {
+            if (i % 8 === 0) {
+              const intensity = Math.random();
+              L.circle(point, {
+                radius: 25,
+                fillColor: intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f59e0b' : '#22c55e',
+                fillOpacity: 0.3,
+                stroke: false
+              }).addTo(mapInstance.current);
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Erro seguro ao inicializar o mapa Leaflet:", err);
       }
     }
 

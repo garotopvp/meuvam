@@ -68,6 +68,26 @@ function formatPace(secsPerKm) {
 }
 
 /**
+ * Parse flexible pace inputs (MM:SS, decimals, integers) to seconds.
+ */
+function parsePaceToSeconds(paceInput) {
+  if (!paceInput) return null;
+  let clean = String(paceInput).trim().replace(',', '.').replace(/[^0-9.:]/g, '');
+  if (clean.includes(':')) {
+    const parts = clean.split(':').map(Number);
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      return parts[0] * 60 + parts[1];
+    }
+  } else {
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num > 0) {
+      return Math.round(num * 60);
+    }
+  }
+  return null;
+}
+
+/**
  * Build a single Garmin step from a Superação step object.
  * Format reverse-engineered from garmin-connect lib's Running.toJson().
  */
@@ -108,10 +128,8 @@ function buildGarminStep(step, stepOrder) {
   const intensity = step.intensity || {};
   if (intensity.type === 'pace' && intensity.value) {
     try {
-      const paceStr = String(intensity.value);
-      const [min, sec] = paceStr.split(':').map(Number);
-      if (!isNaN(min) && !isNaN(sec)) {
-        const totalSec = min * 60 + sec;
+      const totalSec = parsePaceToSeconds(intensity.value);
+      if (totalSec && totalSec > 0) {
         const mPerSec = 1000 / totalSec;
         const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; 
         targetType = { workoutTargetTypeId: 6, workoutTargetTypeKey: 'pace.zone' };

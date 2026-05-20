@@ -77,11 +77,25 @@ const AuthView = ({ onBack }) => {
         if (error) throw error;
         
         const user = data.user;
-        if (user && (user.user_metadata?.role === 'professor' || user.email.includes('superacao'))) {
-          await supabase.auth.signOut();
-          throw new Error('Esta é uma conta de Professor e não pode ser usada no App do Aluno.');
-        }
+        if (user) {
+          // Check metadata or email suffix
+          if (user.user_metadata?.role === 'professor' || user.email.includes('superacao')) {
+            await supabase.auth.signOut();
+            throw new Error('Esta é uma conta de Professor e não pode ser usada no App do Aluno.');
+          }
 
+          // Fetch the profile from the database to check the actual role
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile && profile.role === 'professor') {
+            await supabase.auth.signOut();
+            throw new Error('Esta é uma conta de Professor e não pode ser usada no App do Aluno.');
+          }
+        }
       } else {
         if (password !== confirmPassword) {
           throw new Error('As senhas não coincidem.');

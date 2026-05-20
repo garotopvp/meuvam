@@ -181,6 +181,54 @@ router.get('/activities', async (req, res) => {
       };
     });
 
+    // ─── AUTO-COMPLETE PENDING WORKOUTS ────────────────────────────────────
+    try {
+      const supabase = getSupabase();
+      
+      // Buscar todos os treinos não concluídos do usuário
+      const { data: pendingWorkouts } = await supabase
+        .from('workouts')
+        .select('*')
+        .eq('athlete_id', userId)
+        .neq('status', 'completed');
+        
+      if (pendingWorkouts && pendingWorkouts.length > 0) {
+        for (const act of formattedWorkouts) {
+          // Extrair a data local YYYY-MM-DD da data da atividade Strava
+          const actDateStr = act.date.substring(0, 10);
+          
+          // Encontrar se existe um treino pendente para a mesma data
+          const matchedWorkout = pendingWorkouts.find(w => w.date === actDateStr);
+          
+          if (matchedWorkout) {
+            console.log(`[Strava AutoSync] Treino pendente encontrado para a data ${actDateStr}. Marcando como concluído...`);
+            
+            // Atualizar no Supabase
+            const { error: updateErr } = await supabase
+              .from('workouts')
+              .update({
+                status: 'completed',
+                effort: act.effort,
+                metrics: act.metrics
+              })
+              .eq('id', matchedWorkout.id);
+              
+            if (updateErr) {
+              console.error(`[Strava AutoSync] Erro ao atualizar treino ${matchedWorkout.id}:`, updateErr.message);
+            } else {
+              console.log(`[Strava AutoSync] Treino ${matchedWorkout.id} atualizado com sucesso!`);
+              // Remover dos pendentes para evitar duplicidade de sincronia para a mesma data
+              const idx = pendingWorkouts.findIndex(w => w.id === matchedWorkout.id);
+              if (idx > -1) pendingWorkouts.splice(idx, 1);
+            }
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.error('[Strava AutoSync] Erro no auto-complete:', syncErr.message);
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     // ─── CACHE FOR COMMUNITY FEED ──────────────────────────────────────────
     try {
       const supabase = getSupabase();

@@ -9,6 +9,28 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // Usar o cliente do auth.js se disponível para manter a sessão
 let dbClient = (typeof supabaseClient !== 'undefined' && supabaseClient) ? supabaseClient : supabase.createClient(supabaseUrl, supabaseKey);
 
+// Injetar CSS para Hover e transições das ações do calendário
+(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .workout-calendar-item:hover {
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08) !important;
+            transform: translateY(-1px);
+        }
+        .workout-calendar-item:hover .workout-actions-overlay {
+            display: flex !important;
+        }
+        .workout-actions-overlay i {
+            transition: all 0.15s ease;
+        }
+        .workout-actions-overlay i:hover {
+            transform: scale(1.25);
+            filter: brightness(0.7);
+        }
+    `;
+    document.head.appendChild(style);
+})();
+
 // ─── STATE ───
 let rawCats   = JSON.parse(localStorage.getItem('vdot_cats'));
 let rawGroups = JSON.parse(localStorage.getItem('vdot_groups')) || [];
@@ -64,8 +86,18 @@ function saveState(k=['cats','groups','athletes','history']){
 const $=id=>document.getElementById(id);
 const allModals=['modal-group','modal-athlete','modal-history','modal-export','modal-assign','modal-duplicate','modal-strava','modal-strava-graph','modal-garmin-details','modal-activity-detail'].map(id=>$(id)).filter(Boolean);
 const daysNames=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
-const phaseLabels={warmup:'Aquecimento',main:'Principal',cooldown:'Desaquec.'};
-const VAM_ZONES=[{label:'Recuperação',pct:60,color:'#94a3b8'},{label:'Aeróbico Leve',pct:70,color:'#3b82f6'},{label:'Aeróbico',pct:80,color:'#10b981'},{label:'Limiar',pct:90,color:'#f59e0b'},{label:'VAM (Máximo)',pct:100,color:'#ef4444'}];
+const phaseLabels={warmup:'Aquecimento',main:'Principal',run:'Corrida',walk:'Caminhada',recovery:'Recuperação',rest:'Descanso',cooldown:'Desaquec.',other:'Outros'};
+/** Cores semânticas — alinhadas a style.css */
+const SEM_COLOR = {
+    ui: '#1a73e8',
+    brand: '#e63946',
+    success: '#1e8e3e',
+    warning: '#f9ab00',
+    danger: '#d93025',
+    strava: '#fc4c02',
+};
+
+const VAM_ZONES=[{label:'Recuperação',pct:60,color:'#94a3b8'},{label:'Aeróbico Leve',pct:70,color:'#3b82f6'},{label:'Aeróbico',pct:80,color:'#10b981'},{label:'Limiar',pct:90,color:SEM_COLOR.warning},{label:'VAM (Máximo)',pct:100,color:SEM_COLOR.danger}];
 
 // ─── UTILS ───
 function generateId(){return Date.now();}
@@ -107,8 +139,8 @@ function closeModals(shouldNavigate = true){
     if (shouldNavigate) {
         const v = localStorage.getItem('vdot_lastView') || 'dashboard';
         const c = localStorage.getItem('vdot_lastCat') || '';
-        const s = localStorage.getItem('vdot_lastSubId') || null;
-        navigate(v, c, true, s);
+        localStorage.setItem('vdot_lastSubId', '');
+        navigate(v, c, false, null);
     }
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
@@ -116,7 +148,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
 let _toastTimer=null,_undoFn=null;
 function showToast(msg,type='default',undoFn=null){
     const t=$('toast');$('toast-msg').textContent=msg;
-    t.style.background=type==='error'?'#ef4444':'#111827';
+    t.style.background=type==='error'?SEM_COLOR.danger:(type==='success'?SEM_COLOR.success:'#111827');
     // Remove old undo button
     const old=t.querySelector('.toast-undo');if(old)old.remove();
     if(undoFn){
@@ -205,7 +237,11 @@ function navigate(viewId, cat, skipPush = false, subId = null) {
                     else newUrl += '/editar/' + subId;
                 }
             } else if (viewId === 'athletes' && subId) {
-                newUrl += '/editar/' + subId;
+                if (typeof subId === 'string' && subId.startsWith('historico_')) {
+                    newUrl += '/historico/' + subId.replace('historico_', '');
+                } else {
+                    newUrl += '/editar/' + subId;
+                }
             } else if (viewId === 'chat' && subId) {
                 newUrl += '/' + subId;
             } else if (viewId === 'activity' && subId) {
@@ -298,6 +334,10 @@ window.addEventListener('popstate', (e) => {
     if (e.state && e.state.viewId) {
         if (e.state.viewId === 'activity') {
             if (typeof openActivityDetail === 'function') openActivityDetail(e.state.id, true);
+        } else if (e.state.subId && typeof e.state.subId === 'string' && e.state.subId.startsWith('historico_')) {
+            const athleteId = e.state.subId.replace('historico_', '');
+            navigate('athletes', null, true, e.state.subId);
+            openHistory(athleteId);
         } else {
             navigate(e.state.viewId, e.state.cat, true, e.state.subId);
         }
@@ -361,10 +401,13 @@ window.addEventListener('popstate', (e) => {
             setTimeout(() => openGroupModal(subId, true), 500);
         }
     } else if (viewId === 'athletes') {
-        const action = parts[profIdx + 2]; // 'editar' ou ID
-        const subId = parts[profIdx + 3]; // 'treino' ou ID
+        const action = parts[profIdx + 2]; // 'editar', 'historico' ou ID
+        const subId = parts[profIdx + 3]; // ID ou subId
         
-        if (action === 'editar' || subId === 'treino') {
+        if (action === 'historico' && subId) {
+            navigate('athletes', null, true, 'historico_' + subId);
+            setTimeout(() => openHistory(subId), 500);
+        } else if (action === 'editar' || subId === 'treino') {
             const athleteId = subId === 'treino' ? action : subId;
             const isWorkout = subId === 'treino';
             
@@ -392,8 +435,10 @@ window.addEventListener('popstate', (e) => {
 function renderDashboard(){
     const h=new Date().getHours();
     $('dashboard-greeting').textContent=`${h<12?'Bom dia':h<18?'Boa tarde':'Boa noite'}! Resumo da assessoria.`;
-    $('stat-athletes').textContent=athletes.length;
-    $('stat-athletes-sub').textContent=athletes.length===0?'Nenhum cadastrado':`${athletes.filter(a=>a.groupId).length} com planilha`;
+    
+    const activeAthletes = athletes.filter(a => a.role !== 'professor');
+    $('stat-athletes').textContent=activeAthletes.length;
+    $('stat-athletes-sub').textContent=activeAthletes.length===0?'Nenhum cadastrado':`${activeAthletes.filter(a=>a.groupId).length} com planilha`;
     $('stat-groups').textContent=groups.length;
     $('stat-groups-sub').textContent=`Em ${categories.length} pasta(s)`;
     $('stat-history').textContent=historyPlans.length;
@@ -405,14 +450,14 @@ function renderDashboard(){
 
     // Notifications
     const notifs=[];
-    const noGroup=athletes.filter(a=>!a.groupId);
-    if(noGroup.length)notifs.push({icon:'ri-user-unfollow-line',color:'#f59e0b',msg:`${noGroup.length} atleta(s) sem planilha associada`,action:`navigate('athletes')`});
-    const noTest=athletes.filter(a=>!a.testTime);
-    if(noTest.length)notifs.push({icon:'ri-flask-line',color:'#ef4444',msg:`${noTest.length} atleta(s) sem teste VAM registrado`,action:`navigate('athletes')`});
-    $('dashboard-notifs').innerHTML=notifs.map(n=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${n.color}10;border:1px solid ${n.color}30;border-radius:var(--radius);cursor:pointer;" onclick="${n.action}">
-        <i class="${n.icon}" style="font-size:18px;color:${n.color};"></i>
-        <span style="font-size:13px;font-weight:600;color:${n.color};">${n.msg}</span>
-        <i class="ri-arrow-right-s-line" style="margin-left:auto;color:${n.color};opacity:0.5;"></i>
+    const noGroup=activeAthletes.filter(a=>!a.groupId);
+    if(noGroup.length)notifs.push({icon:'ri-user-unfollow-line',type:'warning',msg:`${noGroup.length} atleta(s) sem planilha associada`,action:`navigate('athletes')`});
+    const noTest=activeAthletes.filter(a=>!a.testTime);
+    if(noTest.length)notifs.push({icon:'ri-flask-line',type:'warning',msg:`${noTest.length} atleta(s) sem teste VAM registrado`,action:`navigate('athletes')`});
+    $('dashboard-notifs').innerHTML=notifs.map(n=>`<div class="alert-banner alert-banner--${n.type}" onclick="${n.action}">
+        <i class="${n.icon}" style="font-size:18px;"></i>
+        <span>${n.msg}</span>
+        <i class="ri-arrow-right-s-line"></i>
     </div>`).join('');
 
     // Recent
@@ -528,7 +573,7 @@ function calculateRace(){
     $('race-main-result').style.display='block';$('race-pace-result').textContent=ps;$('race-speed-result').textContent=(dist/(tot/3600)).toFixed(2)+' km/h';
     const sp=dist<=10?1:5;const splits=[];let k=sp;while(k<dist-0.01){splits.push(parseFloat(k.toFixed(3)));k+=sp;}splits.push(parseFloat(dist.toFixed(3)));
     $('race-splits-dist').textContent=`${dist} km`;
-    const rows=splits.map((k,i)=>{const el=psk*k;const eH=Math.floor(el/3600),eM=Math.floor((el%3600)/60),eS=Math.round(el%60);const ts=eH>0?`${eH}h ${eM.toString().padStart(2,'0')}:${eS.toString().padStart(2,'0')}`:`${eM.toString().padStart(2,'0')}:${eS.toString().padStart(2,'0')}`;const fin=i===splits.length-1;const bg=fin?'background:linear-gradient(135deg,#0f172a,#1e3a5f);':(i%2===0?'background:var(--bg);':'');const fg=fin?'color:#fff;':'';const lb=fin&&k!==Math.round(k)?`${k.toFixed(3)} km 🏁`:`${k%1===0?k:k.toFixed(3)} km`;
+    const rows=splits.map((k,i)=>{const el=psk*k;const eH=Math.floor(el/3600),eM=Math.floor((el%3600)/60),eS=Math.round(el%60);const ts=eH>0?`${eH}h ${eM.toString().padStart(2,'0')}:${eS.toString().padStart(2,'0')}`:`${eM.toString().padStart(2,'0')}:${eS.toString().padStart(2,'0')}`;const fin=i===splits.length-1;const bg=fin?'background:linear-gradient(135deg,#0f172a,#1e3a5f);':(i%2===0?'background:var(--bg);':'');const fg=fin?'color:#fff;':'';const lb=fin&&k!==Math.round(k)?`${k.toFixed(3)} km (chegada)`:`${k%1===0?k:k.toFixed(3)} km`;
         return`<tr style="${bg}"><td style="padding:11px 20px;font-weight:700;${fg}">${lb}</td><td style="padding:11px 20px;font-weight:600;${fg}">${ps}</td><td style="padding:11px 20px;font-weight:800;text-align:right;${fg}">${ts}</td></tr>`;}).join('');
     $('race-splits-body').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:var(--bg);"><th style="padding:10px 20px;text-align:left;font-size:11px;color:var(--text-muted);">Split</th><th style="padding:10px 20px;text-align:left;font-size:11px;color:var(--text-muted);">Pace</th><th style="padding:10px 20px;text-align:right;font-size:11px;color:var(--text-muted);">Acumulado</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -580,7 +625,7 @@ function renderGroups(){
                         <button class="btn btn-tertiary" onclick="moveCat('${cat}',-1)" ${disL}><i class="ri-arrow-left-s-line"></i></button>
                         <button class="btn btn-tertiary" onclick="moveCat('${cat}',1)" ${disR}><i class="ri-arrow-right-s-line"></i></button>
                         <button class="btn btn-tertiary" onclick="editCategory('${cat}')"><i class="ri-edit-line"></i></button>
-                        <button class="btn btn-tertiary" onclick="deleteCategory('${cat}')" style="color:var(--danger);"><i class="ri-delete-bin-line"></i></button>
+                        <button class="btn btn-tertiary btn-icon-danger" onclick="deleteCategory('${cat}')"><i class="ri-delete-bin-line"></i></button>
                     </div>
                 </div>
             </div>`;}).join('')}</div>`;
@@ -625,7 +670,7 @@ function renderGroups(){
                 <button class="btn btn-tertiary" onclick="openDuplicateModal('${g.id}')" title="Duplicar p/ outra pasta"><i class="ri-folders-line"></i></button>
                 <button class="btn btn-tertiary" onclick="cloneGroup('${g.id}')" title="Clonar"><i class="ri-file-copy-line"></i></button>
                 <button class="btn btn-tertiary" onclick="editGroup('${g.id}')" title="Editar"><i class="ri-edit-line"></i></button>
-                <button class="btn btn-tertiary" onclick="deleteGroup('${g.id}')" style="color:var(--danger);" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                <button class="btn btn-tertiary btn-icon-danger" onclick="deleteGroup('${g.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
             </div></div><div class="plan-body">${rows||'<div style="padding:16px 0;color:#999;font-size:12px;font-style:italic;">Não configurado.</div>'}</div></div>`;}).join('');
         const empty=!cg.length?'<div style="text-align:center;padding:64px 32px;color:var(--text-muted);grid-column:1/-1;"><i class="ri-calendar-line" style="font-size:48px;display:block;margin-bottom:16px;opacity:0.25;"></i><strong>Pasta vazia</strong><p style="font-size:13px;margin-top:6px;">Adicione um treino.</p></div>':'';
         list.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
@@ -674,7 +719,11 @@ function openGroupModal(catOrId, isEdit = false) {
                     notes: p.desc || ''
                 }));
             }
-            if (!day.steps) day.steps = [];
+            if (day.steps) {
+                day.steps = day.steps.map(s => normalizeWorkoutStep(s)).filter(Boolean);
+            } else {
+                day.steps = [];
+            }
         });
     } else {
         _editingPlan = Array.from({ length: 7 }, () => ({
@@ -750,6 +799,74 @@ function renderEditorSteps() {
         return;
     }
 
+    // Distance preview calculator initialization
+    if (typeof window._previewVam === 'undefined') {
+        const gId = parseInt($('modal-group')?.dataset?.editing || '0');
+        const linked = athletes.find(a => a.groupId == gId && a.testTime);
+        if (linked) {
+            window._previewVam = 180 / linked.testTime;
+            window._previewAthleteId = `athlete-${linked.id}`;
+        } else {
+            window._previewVam = 14.0;
+            window._previewAthleteId = '14';
+        }
+    }
+
+    const sortedAthletes = [...athletes].filter(a => a.testTime && a.role !== 'professor').sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+    let optionsHtml = '';
+    const generics = [10, 12, 14, 16, 18];
+    optionsHtml += '<optgroup label="Velocidade Genérica">';
+    generics.forEach(g => {
+        const selected = (window._previewAthleteId === String(g)) ? 'selected' : '';
+        optionsHtml += `<option value="${g}" ${selected}>${g} km/h (Referência)</option>`;
+    });
+    optionsHtml += '</optgroup>';
+    
+    if (sortedAthletes.length > 0) {
+        optionsHtml += '<optgroup label="Seus Atletas (MeuVAM)">';
+        sortedAthletes.forEach(a => {
+            const vamVal = 180 / a.testTime;
+            const selected = (window._previewAthleteId === `athlete-${a.id}`) ? 'selected' : '';
+            optionsHtml += `<option value="athlete-${a.id}" ${selected}>${a.name} (${vamVal.toFixed(1)} km/h)</option>`;
+        });
+        optionsHtml += '</optgroup>';
+    }
+
+    if (!window.changePreviewVam) {
+        window.changePreviewVam = function(value) {
+            if (value.startsWith('athlete-')) {
+                const aId = parseInt(value.replace('athlete-', ''));
+                const a = athletes.find(x => x.id == aId);
+                if (a && a.testTime) {
+                    window._previewVam = 180 / a.testTime;
+                    window._previewAthleteId = value;
+                }
+            } else {
+                window._previewVam = parseFloat(value) || 14.0;
+                window._previewAthleteId = value;
+            }
+            renderEditorSteps();
+        };
+    }
+
+    const previewHtml = `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <i class="ri-calculator-line" style="font-size: 24px; color: #1265C2;"></i>
+                <div>
+                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">Calculadora de Estimativas</div>
+                    <div style="font-size: 11px; color: #64748b;">Visualizar tempos e distâncias estimadas da planilha</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 12px; font-weight: 600; color: #475569;">Atleta/VAM:</span>
+                <select onchange="window.changePreviewVam(this.value)" style="font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-weight: 700; color: #0f172a; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    ${optionsHtml}
+                </select>
+            </div>
+        </div>
+    `;
+
     const stepsHtml = day.steps.map((step, idx) => {
         if (step.type === 'repetition') {
             return renderRepetitionStep(step, idx);
@@ -758,6 +875,7 @@ function renderEditorSteps() {
     }).join('');
 
     container.innerHTML = `
+        ${previewHtml}
         <div class="steps-list" id="main-steps-list">
             ${stepsHtml || '<div style="padding:40px; text-align:center; color:var(--text-muted); border:2px dashed #eee; border-radius:8px;">Arraste as etapas para cá ou use os botões ao lado.</div>'}
         </div>
@@ -800,6 +918,44 @@ function initSortable() {
     });
 }
 
+function getStepCalculations(step, vamKmh) {
+    if (!step || !step.duration || !step.intensity || !vamKmh || vamKmh <= 0) return null;
+    
+    const durVal = parseFloat(step.duration.value) || 0;
+    const intVal = parseFloat(step.intensity.value) || 0;
+    
+    if (durVal <= 0) return null;
+    
+    // We only calculate if intensity is VAM
+    if (step.intensity.type !== 'vam' || intVal <= 0) return null;
+    
+    const speed = vamKmh * (intVal / 100); // km/h
+    
+    if (step.duration.type === 'time') {
+        // Calculate estimated distance
+        const dist = speed * (durVal / 60);
+        return {
+            type: 'distance',
+            value: `${dist.toFixed(2)} km`,
+            label: 'Distância Est.'
+        };
+    } else if (step.duration.type === 'distance') {
+        // Calculate estimated time
+        const hours = durVal / speed;
+        const mins = hours * 60;
+        const wholeMins = Math.floor(mins);
+        const secs = Math.round((mins - wholeMins) * 60);
+        const timeStr = secs > 0 ? `${wholeMins}m ${secs}s` : `${wholeMins} min`;
+        return {
+            type: 'time',
+            value: timeStr,
+            label: 'Tempo Est.'
+        };
+    }
+    
+    return null;
+}
+
 function renderNormalStep(step, idx, parentIdx = null) {
     const isExpanded = _expandedStepIdx === idx && _expandedParentIdx === parentIdx;
     const typeLabels = { 
@@ -828,6 +984,8 @@ function renderNormalStep(step, idx, parentIdx = null) {
     } else if (step.intensity.type === 'cadence' && step.intensity.value) {
         intStr = `${step.intensity.value} spm`;
     }
+
+    const calc = getStepCalculations(step, window._previewVam);
 
     if (isExpanded) {
         return `
@@ -905,6 +1063,14 @@ function renderNormalStep(step, idx, parentIdx = null) {
                             ` : ''}
                         </div>
                     </div>
+                    ${calc ? `
+                        <div style="margin-top: 15px; padding: 10px 14px; background: #f0f9ff; border-radius: 8px; border: 1px solid #bae6fd; display: flex; align-items: center; gap: 8px; max-width: fit-content;">
+                            <i class="ri-flashlight-line" style="color: #0284c7; font-size: 16px;"></i>
+                            <span style="font-size: 12px; font-weight: 700; color: #0369a1;">
+                                Estimativa (${window._previewVam.toFixed(1)} km/h): <strong style="font-size: 13px;">${calc.value}</strong>
+                            </span>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -931,6 +1097,12 @@ function renderNormalStep(step, idx, parentIdx = null) {
                         <div style="font-size: 15px; font-weight: 500;">${intStr}</div>
                         <div style="font-size: 11px; color: #888;">Meta de intensidade</div>
                     </div>
+                    ${calc ? `
+                    <div>
+                        <div style="font-size: 15px; font-weight: 700; color: #1265C2;">${calc.value}</div>
+                        <div style="font-size: 11px; color: #888;">${calc.label}</div>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
         </div>
@@ -1069,8 +1241,9 @@ function doDuplicate(targetCat){const c=JSON.parse(JSON.stringify(groups.find(g=
 
 // ─── ASSIGN ───
 function openAssignModal(gId){currentAssignGroupId=gId;const g=groups.find(x=>x.id==gId);$('modal-assign-title').textContent=`Vincular: ${g.name}`;const list=$('assign-athlete-list');
-    if(!athletes.length){list.innerHTML='<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px;">Nenhum aluno.</div>';}
-    else{list.innerHTML=athletes.map(a=>{const chk=a.groupId==gId?'checked':'';return`<label style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--panel);border:1px solid ${chk?'var(--primary)':'var(--border)'};border-radius:4px;cursor:pointer;"><input type="checkbox" class="assign-chk" value="${a.id}" ${chk} style="width:16px;height:16px;accent-color:var(--primary);"><span style="font-weight:500;">${a.name}</span></label>`;}).join('');}
+    const activeAthletes = athletes.filter(a => a.role !== 'professor');
+    if(!activeAthletes.length){list.innerHTML='<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px;">Nenhum aluno.</div>';}
+    else{list.innerHTML=activeAthletes.map(a=>{const chk=a.groupId==gId?'checked':'';return`<label style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--panel);border:1px solid ${chk?'var(--primary)':'var(--border)'};border-radius:4px;cursor:pointer;"><input type="checkbox" class="assign-chk" value="${a.id}" ${chk} style="width:16px;height:16px;accent-color:var(--primary);"><span style="font-weight:500;">${a.name}</span></label>`;}).join('');}
     $('modal-assign').classList.add('show');
 }
 function saveAssign(){if(!currentAssignGroupId)return;const assigned=new Set([...document.querySelectorAll('.assign-chk:checked')].map(c=>String(c.value)));
@@ -1085,16 +1258,16 @@ function sortAthletes(key){if(athleteSort.key===key)athleteSort.asc=!athleteSort
 function renderAthletes(){
     const q=($('athlete-search')?.value||'').toLowerCase();
     let filtered=athletes.filter(a => {
-        const matchesSearch = a.name.toLowerCase().includes(q);
+        const matchesSearch = (a.name || '').toLowerCase().includes(q);
         const isNotProfessor = a.role !== 'professor';
         return matchesSearch && isNotProfessor;
     });
     // Sort
     filtered.sort((a,b)=>{
         let va,vb;
-        if(athleteSort.key==='name'){va=a.name.toLowerCase();vb=b.name.toLowerCase();}
+        if(athleteSort.key==='name'){va=(a.name || '').toLowerCase();vb=(b.name || '').toLowerCase();}
         else if(athleteSort.key==='vam'){va=a.testTime?(180/a.testTime):0;vb=b.testTime?(180/b.testTime):0;}
-        else{va=a.name;vb=b.name;}
+        else{va=a.name || '';vb=b.name || '';}
         if(va<vb)return athleteSort.asc?-1:1;if(va>vb)return athleteSort.asc?1:-1;return 0;
     });
     const empty=$('athlete-empty');
@@ -1109,10 +1282,10 @@ function renderAthletes(){
             <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <div style="width:32px; height:32px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; background:#f1f5f9; border:1px solid #e2e8f0;">
-                        ${a.avatar_url ? `<img src="${a.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<span style="font-size:12px;font-weight:700;color:var(--primary);">${a.name.charAt(0).toUpperCase()}</span>`}
+                        ${a.avatar_url ? `<img src="${a.avatar_url}" style="width:100%;height:100%;object-fit:cover;">` : `<span style="font-size:12px;font-weight:700;color:var(--primary);">${(a.name && a.name.trim() !== '') ? a.name.charAt(0).toUpperCase() : 'A'}</span>`}
                     </div>
                     <strong onclick="editAthlete('${a.id}')" style="cursor:pointer;color:var(--primary-color);text-decoration:none;">${displayName}</strong>
-                    ${(a.lastActivityDate && (new Date() - new Date(a.lastActivityDate)) > 5 * 24 * 60 * 60 * 1000) ? `<span title="Inativo há mais de 5 dias" style="color:#ef4444; font-size:16px;"><i class="ri-error-warning-fill"></i></span>` : ''}
+                    ${(a.lastActivityDate && (new Date() - new Date(a.lastActivityDate)) > 5 * 24 * 60 * 60 * 1000) ? `<span title="Inativo há mais de 5 dias" style="color:var(--warning); font-size:16px;"><i class="ri-error-warning-fill"></i></span>` : ''}
                 </div>
                 ${a.phone?`<div style="font-size:11px;color:var(--text-muted);">${a.phone}</div>`:''}
             </td>
@@ -1124,7 +1297,7 @@ function renderAthletes(){
                 <button class="btn btn-tertiary" onclick="openStravaActivities('${a.id}')" title="Atividades Strava" style="color:#fc4c02;"><i class="ri-strava-line"></i></button>
                 <button class="btn btn-tertiary" onclick="openHistory('${a.id}')" title="Histórico"><i class="ri-history-line"></i></button>
                 <button class="btn btn-tertiary" onclick="editAthlete('${a.id}')" title="Editar"><i class="ri-edit-line"></i></button>
-                <button class="btn btn-tertiary" onclick="deleteAthlete('${a.id}')" title="Excluir" style="color:var(--danger);"><i class="ri-delete-bin-line"></i></button>
+                <button class="btn btn-tertiary btn-icon-danger" onclick="deleteAthlete('${a.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
                 <button class="btn btn-primary" onclick="generateAndExport('${a.id}')" style="padding:6px 12px;font-size:12px;margin-left:4px;"><i class="ri-send-plane-2-line"></i> Enviar</button>
             </td></tr>`;}).join('');
 }
@@ -1274,12 +1447,1349 @@ function deleteAthlete(id){const a=athletes.find(x=>x.id==id);if(!confirm(`Exclu
 //  HISTORY
 // ═══════════════════════════════════════
 let currentHistoryAthleteId=null;
-function openHistory(aId){currentHistoryAthleteId=aId;const a=athletes.find(x=>x.id==aId);$('hist-athlete-name').textContent=a.name;renderHistoryList(aId);$('modal-history').classList.add('show');}
+let calendarCurrentDate = new Date();
+let calendarWorkouts = [];
+
+async function openHistory(aId) {
+    currentHistoryAthleteId = aId;
+    const a = athletes.find(x => x.id == aId);
+    if (!a) return;
+    
+    // Update URL to history subpath
+    const baseUrl = '/professor';
+    const newUrl = baseUrl + '/atletas/historico/' + aId;
+    if (window.location.pathname !== newUrl) {
+        history.pushState({ viewId: 'athletes', subId: 'historico_' + aId }, '', newUrl);
+    }
+    localStorage.setItem('vdot_lastSubId', 'historico_' + aId);
+    
+    $('hist-athlete-name').textContent = a.name;
+    calendarCurrentDate = new Date(); // Iniciar no mês corrente
+    
+    // Renderizar o histórico de planilhas antigas na parte inferior
+    renderHistoryList(aId);
+    
+    // Exibir o modal
+    $('modal-history').classList.add('show');
+    
+    // Carregar os treinos em tempo real e renderizar no calendário
+    await loadCalendarWorkouts();
+}
+
+async function loadCalendarWorkouts() {
+    const container = $('history-calendar-container');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div style="display:flex; justify-content:center; align-items:center; padding:60px; color:var(--text-muted);">
+            <i class="ri-loader-4-line ri-spin" style="font-size:36px; margin-right:8px; color:var(--primary);"></i>
+            <span>Carregando histórico e calendário de treinos...</span>
+        </div>
+    `;
+    
+    const a = athletes.find(x => x.id == currentHistoryAthleteId);
+    if (!a) return;
+    
+    try {
+        if (!a.supabaseId) {
+            container.innerHTML = `
+                <div style="padding:40px; text-align:center; color:var(--text-muted);">
+                    <i class="ri-information-line" style="font-size:40px; display:block; margin-bottom:12px; color:var(--primary);"></i>
+                    <h4 style="font-weight:700; color:var(--text); margin-bottom:8px;">Atleta Manual (Sem Conta no App)</h4>
+                    <p style="font-size:13px; max-width:500px; margin:0 auto; line-height:1.5;">
+                        Este atleta não possui uma conta de login vinculada no aplicativo. Para gerenciar treinos diários interativos no calendário e sincronizar atividades do Strava/Garmin, vincule um e-mail de acesso nas configurações do atleta.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Buscar todos os treinos da tabela workouts do Supabase
+        const { data, error } = await dbClient
+            .from('workouts')
+            .select('*')
+            .eq('athlete_id', a.supabaseId)
+            .order('date', { ascending: true });
+            
+        if (error) throw error;
+        
+        calendarWorkouts = data || [];
+        renderHistoryCalendar();
+    } catch (err) {
+        console.error("Erro ao carregar calendário:", err);
+        container.innerHTML = `
+            <div style="padding:40px; text-align:center; color:var(--danger);">
+                <i class="ri-error-warning-line" style="font-size:40px; display:block; margin-bottom:12px;"></i>
+                Erro ao conectar ao banco de dados para carregar o histórico de treinos.
+            </div>
+        `;
+    }
+}
+
+function renderHistoryCalendar() {
+    const container = $('history-calendar-container');
+    if (!container) return;
+    
+    const year = calendarCurrentDate.getFullYear();
+    const month = calendarCurrentDate.getMonth();
+    
+    const monthNames = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ];
+    const monthName = monthNames[month];
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const totalDays = lastDay.getDate();
+    
+    // Obter o dia da semana do primeiro dia do mês (0=Dom, 1=Seg...)
+    // Mapear para Segunda como início: 0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom
+    let startDayOfWeek = firstDay.getDay();
+    startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+    
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    
+    // Calcular a quantidade de linhas necessárias no grid para o mês
+    const totalRenderedCells = startDayOfWeek + totalDays;
+    const numRows = Math.ceil(totalRenderedCells / 7);
+    
+    let html = `
+        <div class="calendar-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="font-size:18px; font-weight:800; color:var(--text); margin:0;">${monthName} ${year}</h3>
+                <span style="font-size:11px; background:rgba(18,101,194,0.1); color:var(--primary); padding:3px 8px; border-radius:100px; font-weight:700;">
+                    ${calendarWorkouts.length} treinos cadastrados
+                </span>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <button class="btn btn-secondary" onclick="changeCalendarMonth(-1)" style="padding:6px 12px; font-size:12px;"><i class="ri-arrow-left-s-line"></i> Anterior</button>
+                <button class="btn btn-secondary" onclick="changeCalendarMonth(0)" style="padding:6px 12px; font-size:12px;">Hoje</button>
+                <button class="btn btn-secondary" onclick="changeCalendarMonth(1)" style="padding:6px 12px; font-size:12px;">Próximo <i class="ri-arrow-right-s-line"></i></button>
+            </div>
+        </div>
+        
+        <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: auto repeat(${numRows}, 1fr); gap:6px; flex:1; min-height:0;">
+            <!-- Headers da semana -->
+            ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(d => `
+                <div style="text-align:center; font-weight:700; font-size:12px; color:var(--text-muted); padding:4px 0; border-bottom:2px solid var(--border-strong);">
+                    ${d}
+                </div>
+            `).join('')}
+    `;
+    
+    // Dias vazios do mês anterior
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+        const dNum = prevMonthLastDay - i;
+        html += `
+            <div style="height:100%; min-height:0; background:var(--bg); border:1px solid var(--border-strong); border-radius:8px; padding:6px; opacity:0.35; cursor:not-allowed; overflow:hidden;">
+                <span style="font-size:11px; font-weight:600; color:var(--text-muted);">${dNum}</span>
+            </div>
+        `;
+    }
+    
+    // Dias do mês atual
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isToday = dateStr === todayStr;
+        
+        const dayWorkouts = calendarWorkouts.filter(w => w.date.split('T')[0] === dateStr);
+        
+        html += `
+            <div class="calendar-day-box" 
+                 onclick="handleCalendarDayClick(event, '${dateStr}')" 
+                 ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';" 
+                 ondragleave="this.style.borderColor='${isToday ? 'var(--primary)' : 'var(--border-strong)'}';" 
+                 ondrop="this.style.borderColor='${isToday ? 'var(--primary)' : 'var(--border-strong)'}'; handleWorkoutDrop(event, '${dateStr}')"
+                 style="height:100%; min-height:0; background:var(--bg); border: 1px solid ${isToday ? 'var(--primary)' : 'var(--border-strong)'}; border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:4px; cursor:pointer; transition:all 0.15s; position:relative; overflow:hidden; ${isToday ? 'box-shadow: 0 0 0 1px var(--primary);' : ''}">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+                    <span style="font-size:11px; font-weight:800; color:${isToday ? 'var(--primary)' : 'var(--text)'};">${day}</span>
+                    ${isToday ? `<span style="width:5px; height:5px; background:var(--primary); border-radius:50%;"></span>` : ''}
+                </div>
+                
+                <div style="flex:1; display:flex; flex-direction:column; gap:4px; overflow-y:auto; min-height:0; margin-top:2px;">
+                    ${dayWorkouts.map(w => {
+                        const isCompleted = w.status === 'completed';
+                        const metricText = isCompleted 
+                            ? `${w.real_distance ? w.real_distance.toFixed(1) : w.distance || '0'}km` 
+                            : `${w.distance || '—'}km`;
+
+                        // Definir cores vibrantes e esportivas baseadas no tipo de treino
+                        let badgeBg = '#fff9c4'; // Amarelo suave padrão para corrida prescrita
+                        let borderStroke = '#fdd835'; // Borda amarela forte
+                        let textColor = '#1e293b'; // Slate gray escuro para excelente contraste
+                        let typeIcon = '<i class="ri-run-line" style="font-size:12px;"></i>';
+
+                        if (w.type === 'Natação') {
+                            badgeBg = '#e0f2fe';
+                            borderStroke = '#7dd3fc';
+                            textColor = '#0369a1';
+                            typeIcon = '<i class="ri-water-flash-line" style="font-size:12px;"></i>';
+                        } else if (w.type === 'Ciclismo') {
+                            badgeBg = '#ecfdf5';
+                            borderStroke = '#6ee7b7';
+                            textColor = '#047857';
+                            typeIcon = '<i class="ri-riding-line" style="font-size:12px;"></i>';
+                        } else if (w.type === 'Fortalecimento') {
+                            badgeBg = '#f5f3ff';
+                            borderStroke = '#c084fc';
+                            textColor = '#6d28d9';
+                            typeIcon = '<i class="ri-focus-3-line" style="font-size:12px;"></i>';
+                        } else if (w.type === 'Outros') {
+                            badgeBg = '#f8fafc';
+                            borderStroke = '#cbd5e1';
+                            textColor = '#475569';
+                            typeIcon = '<i class="ri-file-list-3-line" style="font-size:12px;"></i>';
+                        }
+
+                        // Se concluído, borda verde esmeralda destacada e ícone de checkmark
+                        if (isCompleted) {
+                            borderStroke = '#10b981';
+                            typeIcon = '<i class="ri-checkbox-circle-fill" style="font-size:12px; color:#10b981;"></i>';
+                        }
+
+                        return `
+                            <div draggable="true" 
+                                 ondragstart="handleWorkoutDragStart(event, '${w.id}')" 
+                                 onclick="handleCalendarWorkoutClick(event, '${w.id}')" 
+                                 oncontextmenu="handleWorkoutContextMenu(event, '${w.id}')"
+                                 class="workout-calendar-item"
+                                 style="background:${badgeBg}; color:${textColor}; padding:6px 8px; border-radius:6px; font-size:11px; font-weight:700; display:flex; flex-direction:column; gap:2px; border:1px solid ${borderStroke}; cursor:grab; position:relative; box-shadow:0 1px 3px rgba(0,0,0,0.05); transition:all 0.15s;" 
+                                 title="Clique para editar\nArraste para mover/copiar (Ctrl)\nBotão direito para copiar/excluir\n\n${w.title}\n${w.description || ''}">
+                                
+                                <div style="display:flex; align-items:center; gap:4px; width:100%;">
+                                    <span style="display:inline-flex; align-items:center; opacity:0.8;">${typeIcon}</span>
+                                    <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-weight:800;">${w.title}</span>
+                                    
+                                    <!-- Hover overlay de ações rápidas -->
+                                    <div class="workout-actions-overlay" style="display:none; gap:6px; align-items:center; position:absolute; right:4px; top:4px; background:${badgeBg}; padding-left:6px; border-radius:4px; box-shadow:-4px 0 8px ${badgeBg};">
+                                        <i class="ri-file-copy-line" onclick="event.stopPropagation(); event.preventDefault(); quickDuplicateWorkout('${w.id}')" title="Duplicar neste dia" style="cursor:pointer; font-size:12px; color:#f59e0b;"></i>
+                                        <i class="ri-send-plane-line" onclick="event.stopPropagation(); event.preventDefault(); openSendWorkoutToAthleteModal('${w.id}')" title="Copiar p/ Outro Aluno" style="cursor:pointer; font-size:12px; color:#3b82f6;"></i>
+                                        <i class="ri-folder-add-line" onclick="event.stopPropagation(); event.preventDefault(); openSendWorkoutToFolderModal('${w.id}')" title="Salvar como Modelo" style="cursor:pointer; font-size:12px; color:#0891b2;"></i>
+                                        <i class="ri-delete-bin-line btn-icon-danger" onclick="event.stopPropagation(); event.preventDefault(); quickDeleteWorkout('${w.id}')" title="Excluir" style="cursor:pointer; font-size:12px;"></i>
+                                    </div>
+                                </div>
+
+                                <div class="workout-metric-text" style="font-size:9.5px; opacity:0.8; display:flex; align-items:center; gap:4px; font-weight:600; margin-top:2px;">
+                                    ${metricText}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    // Completar o grid do calendário com dias vazios do próximo mês
+    const remainingCells = 7 - (totalRenderedCells % 7);
+    if (remainingCells < 7) {
+        for (let dayNum = 1; dayNum <= remainingCells; dayNum++) {
+            html += `
+                <div style="height:100%; min-height:0; background:var(--bg); border:1px solid var(--border-strong); border-radius:8px; padding:6px; opacity:0.35; cursor:not-allowed; overflow:hidden;">
+                    <span style="font-size:11px; font-weight:600; color:var(--text-muted);">${dayNum}</span>
+                </div>
+            `;
+        }
+    }
+    
+    html += `</div>`;
+    container.innerHTML = html;
+    
+    // Adicionar estilos de hover de forma limpa e otimizada
+    if (!document.getElementById('calendar-hover-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'calendar-hover-styles';
+        styleEl.innerHTML = `
+            .calendar-day-box:hover {
+                transform: translateY(-2px);
+                border-color: var(--primary) !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+                background: var(--panel) !important;
+            }
+            .workout-calendar-item:hover .workout-actions-overlay {
+                display: flex !important;
+            }
+            .workout-calendar-item:hover .workout-metric-text {
+                display: none !important;
+            }
+        `;
+        document.head.appendChild(styleEl);
+    }
+}
+
+function changeCalendarMonth(offset) {
+    if (offset === 0) {
+        calendarCurrentDate = new Date();
+    } else {
+        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + offset);
+    }
+    renderHistoryCalendar();
+}
+
+function handleWorkoutDragStart(e, wId) {
+    e.dataTransfer.setData('text/plain', wId);
+    e.dataTransfer.effectAllowed = 'copyMove';
+}
+
+async function handleWorkoutDrop(e, targetDateStr) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const wId = e.dataTransfer.getData('text/plain');
+    if (!wId) return;
+    
+    const isCopy = e.ctrlKey || e.metaKey || e.altKey;
+    const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
+    if (!workout) return;
+    
+    if (!isCopy && workout.date.split('T')[0] === targetDateStr) return;
+    
+    if (isCopy) {
+        const newWorkout = { ...workout, id: Date.now(), date: targetDateStr + 'T12:00:00', status: 'planned' };
+        calendarWorkouts.push(newWorkout);
+        renderHistoryCalendar();
+        
+        const { error } = await dbClient.from('workouts').insert([{
+            athlete_id: currentHistoryAthleteId,
+            date: targetDateStr,
+            title: workout.title,
+            type: workout.type,
+            description: workout.description,
+            metrics: workout.metrics,
+            status: 'planned'
+        }]);
+        if (error) { showToast('Erro ao duplicar treino.'); loadCalendarWorkouts(); }
+        else { showToast('Treino copiado!'); loadCalendarWorkouts(); }
+    } else {
+        const oldDate = workout.date;
+        workout.date = targetDateStr + 'T12:00:00';
+        renderHistoryCalendar();
+        
+        const { error } = await dbClient.from('workouts').update({ date: targetDateStr }).eq('id', wId);
+        if (error) { workout.date = oldDate; renderHistoryCalendar(); showToast('Erro ao mover treino.'); }
+        else { showToast('Treino movido!'); }
+    }
+}
+
+function handleWorkoutContextMenu(e, wId) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const oldMenu = document.getElementById('workout-context-menu');
+    if (oldMenu) oldMenu.remove();
+    
+    const menu = document.createElement('div');
+    menu.id = 'workout-context-menu';
+    menu.style.position = 'fixed';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    menu.style.background = 'var(--panel)';
+    menu.style.border = '1px solid var(--border-strong)';
+    menu.style.borderRadius = '8px';
+    menu.style.padding = '4px 0';
+    menu.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
+    menu.style.zIndex = '1050';
+    menu.style.minWidth = '140px';
+    
+    menu.innerHTML = `
+        <div onclick="quickDuplicateWorkout('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--text); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
+            <i class="ri-file-copy-line" style="font-size:16px;"></i> Duplicar Treino
+        </div>
+        <div onclick="openSendWorkoutToAthleteModal('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--text); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
+            <i class="ri-send-plane-line" style="font-size:16px;"></i> Copiar p/ Aluno
+        </div>
+        <div onclick="openSendWorkoutToFolderModal('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--text); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
+            <i class="ri-folder-add-line" style="font-size:16px;"></i> Salvar na Biblioteca
+        </div>
+        <div onclick="quickDeleteWorkout('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--danger); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
+            <i class="ri-delete-bin-line" style="font-size:16px;"></i> Excluir Treino
+        </div>
+    `;
+    
+    document.body.appendChild(menu);
+    
+    setTimeout(() => {
+        const closeMenu = () => {
+            if (menu) menu.remove();
+            document.removeEventListener('click', closeMenu);
+            document.removeEventListener('contextmenu', closeMenu);
+        };
+        document.addEventListener('click', closeMenu);
+        document.addEventListener('contextmenu', closeMenu);
+    }, 10);
+}
+
+async function quickDuplicateWorkout(wId) {
+    const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
+    if (!workout) return;
+    
+    const newWorkout = { ...workout, id: Date.now(), status: 'planned' };
+    calendarWorkouts.push(newWorkout);
+    renderHistoryCalendar();
+    
+    const { error } = await dbClient.from('workouts').insert([{
+        athlete_id: currentHistoryAthleteId,
+        date: workout.date.split('T')[0],
+        title: workout.title,
+        type: workout.type,
+        description: workout.description,
+        metrics: workout.metrics,
+        status: 'planned'
+    }]);
+    
+    if (error) { showToast('Erro ao duplicar.'); loadCalendarWorkouts(); }
+    else { showToast('Treino duplicado no mesmo dia!'); loadCalendarWorkouts(); }
+}
+
+async function quickDeleteWorkout(wId) {
+    if (!confirm('Excluir permanentemente este treino?')) return;
+    
+    calendarWorkouts = calendarWorkouts.filter(x => String(x.id) !== String(wId));
+    renderHistoryCalendar();
+    
+    const { error } = await dbClient.from('workouts').delete().eq('id', wId);
+    if (error) { showToast('Erro ao excluir.'); loadCalendarWorkouts(); }
+    else { showToast('Treino excluído!'); }
+}
+
+// ==========================================
+// AÇÕES RÁPIDAS DE COPIAR E ARQUIVAR TREINOS
+// ==========================================
+
+function openSendWorkoutToAthleteModal(wId) {
+    const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
+    if (!workout) return;
+    
+    const oldModal = document.getElementById('modal-send-workout-athlete');
+    if (oldModal) oldModal.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'modal-send-workout-athlete';
+    modal.className = 'modal active';
+    modal.style.zIndex = '1100';
+    modal.style.background = 'rgba(0,0,0,0.5)';
+    modal.style.backdropFilter = 'blur(4px)';
+    
+    // Ordenar alunos por nome (excluindo o atual se possível)
+    const sortedAthletes = [...athletes]
+        .filter(a => String(a.id) !== String(currentHistoryAthleteId))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    
+    modal.innerHTML = `
+        <div class="modal-card" style="max-width:420px; border-radius:12px; overflow:hidden; border:none; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15);">
+            <div class="modal-header" style="background:#fff; border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-weight:800; font-size:16px; display:flex; align-items:center; gap:8px; color:var(--text); margin:0;">
+                    <i class="ri-send-plane-fill" style="color:var(--primary); font-size:18px;"></i> Copiar para Aluno
+                </h3>
+                <button class="btn-close" onclick="document.getElementById('modal-send-workout-athlete').remove()" style="border:none; background:transparent; cursor:pointer; font-size:20px; color:var(--text-muted);"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="padding:20px; background:#fff; max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+                <p style="font-size:13px; color:var(--text-muted); margin:0 0 4px 0; line-height:1.4;">
+                    Selecione um aluno para copiar o treino <strong>"${workout.title}"</strong> para o mesmo dia (${workout.date.split('T')[0]}):
+                </p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    ${sortedAthletes.length ? sortedAthletes.map(a => `
+                        <div onclick="executeSendWorkoutToAthlete('${wId}', '${a.id}')" style="padding:12px; background:var(--panel); border:1px solid var(--border-strong); border-radius:8px; display:flex; align-items:center; gap:10px; cursor:pointer; transition:all 0.15s; font-weight:700; font-size:13px;" onmouseover="this.style.borderColor='var(--primary)'; this.style.background='#eff6ff';" onmouseout="this.style.borderColor='var(--border-strong)'; this.style.background='var(--panel)';">
+                            <div style="width:32px; height:32px; background:var(--primary); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px; flex-shrink:0;">
+                                ${a.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style="flex:1; min-width:0; text-align:left;">
+                                <div style="color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${a.name}</div>
+                                <div style="font-size:10px; color:var(--text-muted); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${a.email || 'Conta Manual'}</div>
+                            </div>
+                            <i class="ri-arrow-right-s-line" style="font-size:18px; color:var(--text-muted);"></i>
+                        </div>
+                    `).join('') : '<div style="color:var(--text-muted); text-align:center; padding:16px; font-size:13px;">Você não possui outros alunos cadastrados.</div>'}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+async function executeSendWorkoutToAthlete(wId, targetAthleteId) {
+    const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
+    if (!workout) return;
+    
+    const targetAthlete = athletes.find(a => String(a.id) === String(targetAthleteId));
+    if (!targetAthlete) return;
+    
+    if (!targetAthlete.supabaseId) {
+        showToast('Aluno manual não tem conta vinculada. Configure um e-mail.', 'error');
+        return;
+    }
+    
+    const { error } = await dbClient.from('workouts').insert([{
+        athlete_id: targetAthlete.supabaseId,
+        date: workout.date.split('T')[0],
+        title: workout.title,
+        type: workout.type,
+        description: workout.description,
+        metrics: workout.metrics,
+        status: 'planned'
+    }]);
+    
+    const modal = document.getElementById('modal-send-workout-athlete');
+    if (modal) modal.remove();
+    
+    if (error) {
+        showToast('Erro ao copiar treino.', 'error');
+    } else {
+        showToast(`Treino enviado para ${targetAthlete.name}!`);
+        if (String(currentHistoryAthleteId) === String(targetAthleteId)) {
+            loadCalendarWorkouts();
+        }
+    }
+}
+
+function openSendWorkoutToFolderModal(wId) {
+    const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
+    if (!workout) return;
+    
+    const oldModal = document.getElementById('modal-send-workout-folder');
+    if (oldModal) oldModal.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'modal-send-workout-folder';
+    modal.className = 'modal active';
+    modal.style.zIndex = '1100';
+    modal.style.background = 'rgba(0,0,0,0.5)';
+    modal.style.backdropFilter = 'blur(4px)';
+    
+    const dateObj = new Date(workout.date.split('T')[0] + 'T12:00:00');
+    let jsDay = dateObj.getDay();
+    let defaultDayIdx = jsDay === 0 ? 6 : jsDay - 1;
+    
+    const daysOfWeekNames = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"];
+    
+    modal.innerHTML = `
+        <div class="modal-card" style="max-width:440px; border-radius:12px; overflow:hidden; border:none; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15);">
+            <div class="modal-header" style="background:#fff; border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-weight:800; font-size:16px; display:flex; align-items:center; gap:8px; color:var(--text); margin:0;">
+                    <i class="ri-folder-add-fill" style="color:#0891b2; font-size:18px;"></i> Salvar na Biblioteca
+                </h3>
+                <button class="btn-close" onclick="document.getElementById('modal-send-workout-folder').remove()" style="border:none; background:transparent; cursor:pointer; font-size:20px; color:var(--text-muted);"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="padding:20px; background:#fff; max-height:480px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; text-align:left;">
+                <p style="font-size:13px; color:var(--text-muted); margin:0; line-height:1.4;">
+                    Salve o treino <strong>"${workout.title}"</strong> como modelo em uma de suas pastas de treinos semanais.
+                </p>
+                
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label style="font-weight:800; font-size:11px; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">1. Pasta (Categoria)</label>
+                    <select id="send-folder-cat-select" onchange="updateSendFolderGroupOptions()" style="width:100%; padding:10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text); font-weight:600;">
+                        <option value="">-- Selecione a Pasta --</option>
+                        ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label style="font-weight:800; font-size:11px; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">2. Semana de Treino (Modelo)</label>
+                    <select id="send-folder-group-select" style="width:100%; padding:10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text); font-weight:600;" disabled>
+                        <option value="">-- Selecione a Categoria Primeiro --</option>
+                    </select>
+                    <div style="display:flex; justify-content:flex-end; margin-top:2px;">
+                        <button onclick="createNewGroupInSendModal('${wId}')" id="btn-create-group-send" style="font-size:11.5px; color:var(--primary); font-weight:800; border:none; background:transparent; cursor:pointer; display:none; padding:4px 0;">
+                            + Criar Novo Modelo Semanal
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label style="font-weight:800; font-size:11px; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">3. Dia Alvo do Modelo</label>
+                    <select id="send-folder-day-select" style="width:100%; padding:10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text); font-weight:600;">
+                        ${daysOfWeekNames.map((d, idx) => `
+                            <option value="${idx}" ${idx === defaultDayIdx ? 'selected' : ''}>${d}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                
+                <button class="btn btn-primary" onclick="executeSendWorkoutToFolder('${wId}')" style="width:100%; font-weight:800; padding:12px; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="ri-checkbox-circle-line"></i> Confirmar e Salvar na Pasta
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function updateSendFolderGroupOptions() {
+    const cat = document.getElementById('send-folder-cat-select').value;
+    const groupSelect = document.getElementById('send-folder-group-select');
+    const btnCreate = document.getElementById('btn-create-group-send');
+    
+    if (!cat) {
+        groupSelect.innerHTML = '<option value="">-- Selecione a Categoria Primeiro --</option>';
+        groupSelect.disabled = true;
+        btnCreate.style.display = 'none';
+        return;
+    }
+    
+    const catGroups = groups.filter(g => g.category === cat);
+    
+    if (catGroups.length === 0) {
+        groupSelect.innerHTML = '<option value="">Nenhum modelo nesta pasta. Crie um!</option>';
+        groupSelect.disabled = true;
+    } else {
+        groupSelect.innerHTML = `
+            <option value="">-- Selecione o Modelo Semanal --</option>
+            ${catGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+        `;
+        groupSelect.disabled = false;
+    }
+    btnCreate.style.display = 'block';
+}
+
+function createNewGroupInSendModal(wId) {
+    const cat = document.getElementById('send-folder-cat-select').value;
+    if (!cat) return;
+    
+    const newName = prompt('Nome do novo Modelo Semanal? (Ex: Semana 1 - Preparação)');
+    if (!newName || !newName.trim()) return;
+    
+    const plan = Array.from({ length: 7 }, () => ({
+        title: '',
+        type: 'Corrida',
+        distance: '',
+        pace: '',
+        description: '',
+        steps: []
+    }));
+    
+    const newGroup = {
+        id: Date.now() + Math.random(),
+        name: newName.trim(),
+        category: cat,
+        volume: '0km',
+        plan: plan
+    };
+    
+    groups.push(newGroup);
+    saveState(['groups']);
+    
+    updateSendFolderGroupOptions();
+    document.getElementById('send-folder-group-select').value = newGroup.id;
+    
+    showToast('Novo Modelo Semanal criado!');
+}
+
+function executeSendWorkoutToFolder(wId) {
+    const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
+    if (!workout) return;
+    
+    const groupId = document.getElementById('send-folder-group-select').value;
+    const dayIdx = parseInt(document.getElementById('send-folder-day-select').value);
+    
+    if (!groupId) {
+        alert('Selecione ou crie um Modelo Semanal primeiro.');
+        return;
+    }
+    
+    const group = groups.find(g => String(g.id) === String(groupId));
+    if (!group) return;
+    
+    group.plan[dayIdx] = {
+        title: workout.title,
+        type: workout.type || 'Corrida',
+        distance: workout.distance || '',
+        pace: workout.pace || '',
+        description: workout.description || '',
+        steps: workout.metrics?.steps || []
+    };
+    
+    let totalVol = 0;
+    group.plan.forEach(d => {
+        if (d && d.distance) {
+            const v = parseFloat(d.distance.toString().replace(',', '.'));
+            if (!isNaN(v)) totalVol += v;
+        }
+    });
+    group.volume = totalVol > 0 ? `${totalVol.toFixed(1)}km` : '0km';
+    
+    saveState(['groups']);
+    
+    const modal = document.getElementById('modal-send-workout-folder');
+    if (modal) modal.remove();
+    
+    showToast('Modelo salvo com sucesso na sua Biblioteca!');
+    
+    if (typeof renderGroups === 'function') {
+        renderGroups();
+    }
+}
+
+function handleCalendarDayClick(event, dateStr) {
+    if (event.target.closest('[onclick^="handleCalendarWorkoutClick"]')) return;
+    openEditWorkoutModal(null, dateStr);
+}
+
+function handleCalendarWorkoutClick(event, workoutId) {
+    event.stopPropagation();
+    event.preventDefault();
+    const workout = calendarWorkouts.find(w => String(w.id) === String(workoutId));
+    if (workout) {
+        openEditWorkoutModal(workout);
+    }
+}
+
+let _editingCalendarWorkout = null;
+let _calendarWorkoutExpandedStepIdx = null;
+let _calendarWorkoutExpandedParentIdx = null;
+
+function renderCalendarWorkoutSteps() {
+    const container = $('calendar-workout-steps-container');
+    if (!container || !_editingCalendarWorkout) return;
+
+    if (typeof window._calendarWorkoutPreviewVam === 'undefined') {
+        const a = athletes.find(x => x.id == currentHistoryAthleteId);
+        if (a && a.testTime) {
+            window._calendarWorkoutPreviewVam = 180 / a.testTime;
+            window._calendarWorkoutPreviewAthleteId = `athlete-${a.id}`;
+        } else {
+            window._calendarWorkoutPreviewVam = 14.0;
+            window._calendarWorkoutPreviewAthleteId = '14';
+        }
+    }
+
+    const sortedAthletes = [...athletes].filter(a => a.testTime && a.role !== 'professor').sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+    let optionsHtml = '';
+    const generics = [10, 12, 14, 16, 18];
+    optionsHtml += '<optgroup label="Velocidade Genérica">';
+    generics.forEach(g => {
+        const selected = (window._calendarWorkoutPreviewAthleteId === String(g)) ? 'selected' : '';
+        optionsHtml += `<option value="${g}" ${selected}>${g} km/h (Referência)</option>`;
+    });
+    optionsHtml += '</optgroup>';
+    
+    if (sortedAthletes.length > 0) {
+        optionsHtml += '<optgroup label="Seus Atletas (MeuVAM)">';
+        sortedAthletes.forEach(a => {
+            const vamVal = 180 / a.testTime;
+            const selected = (window._calendarWorkoutPreviewAthleteId === `athlete-${a.id}`) ? 'selected' : '';
+            optionsHtml += `<option value="athlete-${a.id}" ${selected}>${a.name} (${vamVal.toFixed(1)} km/h)</option>`;
+        });
+        optionsHtml += '</optgroup>';
+    }
+
+    if (!window.changeCalendarWorkoutPreviewVam) {
+        window.changeCalendarWorkoutPreviewVam = function(value) {
+            if (value.startsWith('athlete-')) {
+                const aId = parseInt(value.replace('athlete-', ''));
+                const a = athletes.find(x => x.id == aId);
+                if (a && a.testTime) {
+                    window._calendarWorkoutPreviewVam = 180 / a.testTime;
+                    window._calendarWorkoutPreviewAthleteId = value;
+                }
+            } else {
+                window._calendarWorkoutPreviewVam = parseFloat(value) || 14.0;
+                window._calendarWorkoutPreviewAthleteId = value;
+            }
+            renderCalendarWorkoutSteps();
+        };
+    }
+
+    const previewHtml = `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); flex-shrink: 0; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <i class="ri-calculator-line" style="font-size: 24px; color: #1265C2;"></i>
+                <div>
+                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">Calculadora de Estimativas</div>
+                    <div style="font-size: 11px; color: #64748b;">Visualizar tempos e distâncias estimadas da planilha</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 12px; font-weight: 600; color: #475569;">Atleta/VAM:</span>
+                <select onchange="window.changeCalendarWorkoutPreviewVam(this.value)" style="font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-weight: 700; color: #0f172a; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    ${optionsHtml}
+                </select>
+            </div>
+        </div>
+    `;
+
+    const stepsHtml = _editingCalendarWorkout.steps.map((step, idx) => {
+        if (step.type === 'repetition') {
+            return renderCalendarWorkoutRepetitionStep(step, idx);
+        }
+        return renderCalendarWorkoutNormalStep(step, idx);
+    }).join('');
+
+    container.innerHTML = `
+        ${previewHtml}
+        <div class="steps-list" id="calendar-workout-steps-list" style="flex: 1; overflow-y: auto; min-height: 0; padding-right: 4px; width: 100%;">
+            ${stepsHtml || '<div style="padding:40px; text-align:center; color:var(--text-muted); border:2px dashed #eee; border-radius:8px;">Use os botões ao lado para adicionar etapas de aquecimento, corrida, desaquecimento, etc.</div>'}
+        </div>
+    `;
+
+    initCalendarWorkoutSortable();
+}
+
+function initCalendarWorkoutSortable() {
+    const mainList = document.getElementById('calendar-workout-steps-list');
+    if (mainList) {
+        new Sortable(mainList, {
+            animation: 150,
+            handle: '.step-drag-handle',
+            onEnd: (evt) => {
+                const item = _editingCalendarWorkout.steps.splice(evt.oldIndex, 1)[0];
+                _editingCalendarWorkout.steps.splice(evt.newIndex, 0, item);
+            }
+        });
+    }
+
+    document.querySelectorAll('#calendar-workout-steps-list .repetition-inner').forEach((el) => {
+        const pIdx = parseInt(el.parentElement.getAttribute('data-index'));
+        new Sortable(el, {
+            animation: 150,
+            handle: '.step-drag-handle',
+            onEnd: (evt) => {
+                const item = _editingCalendarWorkout.steps[pIdx].steps.splice(evt.oldIndex, 1)[0];
+                _editingCalendarWorkout.steps[pIdx].steps.splice(evt.newIndex, 0, item);
+            }
+        });
+    });
+}
+
+function normalizeWorkoutStep(step) {
+    if (!step) return null;
+    
+    const id = step.id || generateId();
+    
+    // Ensure duration object
+    let duration = { type: 'time', value: '10' };
+    if (step.duration) {
+        if (typeof step.duration === 'object') {
+            duration.type = step.duration.type || 'time';
+            duration.value = String(step.duration.value !== undefined ? step.duration.value : '10');
+        } else {
+            duration.value = String(step.duration);
+            duration.type = (String(step.duration).includes('km') || parseFloat(step.duration) < 5) ? 'distance' : 'time';
+        }
+    }
+    
+    // Ensure intensity object
+    let intensity = { type: 'none', value: 0 };
+    if (step.intensity) {
+        if (typeof step.intensity === 'object') {
+            intensity.type = step.intensity.type || 'none';
+            intensity.value = step.intensity.value !== undefined ? step.intensity.value : 0;
+        } else {
+            intensity.value = parseFloat(step.intensity) || 0;
+            intensity.type = intensity.value > 0 ? 'vam' : 'none';
+        }
+    }
+    
+    const normalized = {
+        id: id,
+        type: step.type || 'run',
+        label: step.label || '',
+        duration: duration,
+        intensity: intensity,
+        notes: step.notes || ''
+    };
+    
+    if (step.type === 'repetition') {
+        normalized.count = parseInt(step.count) || 2;
+        normalized.steps = Array.isArray(step.steps) 
+            ? step.steps.map(s => normalizeWorkoutStep(s)).filter(Boolean)
+            : [];
+    }
+    
+    return normalized;
+}
+
+function renderCalendarWorkoutNormalStep(step, idx, parentIdx = null) {
+    const isExpanded = _calendarWorkoutExpandedStepIdx === idx && _calendarWorkoutExpandedParentIdx === parentIdx;
+    const typeLabels = { 
+        warmup: 'Aquecimento', 
+        run: 'Corrida', 
+        walk: 'Caminhada', 
+        recovery: 'Recuperação', 
+        rest: 'Descanso', 
+        cooldown: 'Desaquecimento', 
+        other: 'Outros' 
+    };
+    
+    let durStr = "";
+    if (step.duration?.type === 'distance') durStr = `${step.duration?.value || '0'} km`;
+    else durStr = `${step.duration?.value || '0'} min`;
+
+    let intStr = "Sem meta";
+    if (step.intensity?.type === 'vam' && step.intensity?.value > 0) {
+        intStr = `${step.intensity?.value}% VAM`;
+    } else if (step.intensity?.type === 'pace' && step.intensity?.value) {
+        intStr = `${step.intensity?.value} /km`;
+    } else if (step.intensity?.type === 'hr_zone' && step.intensity?.value) {
+        intStr = `Z${step.intensity?.value}`;
+    } else if (step.intensity?.type === 'cadence' && step.intensity?.value) {
+        intStr = `${step.intensity?.value} spm`;
+    }
+
+    const calc = getStepCalculations(step, window._calendarWorkoutPreviewVam);
+
+    if (isExpanded) {
+        return `
+            <div class="step-card expanded" style="flex-direction: column; min-height: auto; border-bottom: 2px solid var(--primary); width: 100%;">
+                <div style="display: flex; align-items: stretch; width: 100%;">
+                    <div class="step-indicator ${step.type || 'run'}"></div>
+                    <div class="step-drag-handle"><i class="ri-more-2-fill" style="transform: rotate(90deg);"></i></div>
+                    <div class="step-content">
+                        <select onchange="updateCalendarWorkoutStepField(${idx}, 'type', this.value, ${parentIdx}); renderCalendarWorkoutSteps();" style="border:none; font-size:16px; padding:0; font-weight:400; background:transparent;">
+                            <option value="warmup" ${step.type === 'warmup' ? 'selected' : ''}>Aquecimento</option>
+                            <option value="run" ${step.type === 'run' ? 'selected' : ''}>Corrida</option>
+                            <option value="walk" ${step.type === 'walk' ? 'selected' : ''}>Caminhada</option>
+                            <option value="recovery" ${step.type === 'recovery' ? 'selected' : ''}>Recuperação</option>
+                            <option value="rest" ${step.type === 'rest' ? 'selected' : ''}>Descanso</option>
+                            <option value="cooldown" ${step.type === 'cooldown' ? 'selected' : ''}>Desaquecimento</option>
+                            <option value="other" ${step.type === 'other' ? 'selected' : ''}>Outros</option>
+                        </select>
+                    </div>
+                    <div class="step-action-links" style="padding-right: 16px; display: flex; align-items: center; gap: 12px; margin-left: auto;">
+                        <button class="btn-text-link" onclick="toggleCalendarWorkoutExpandStep(${idx}, ${parentIdx})">Concluir</button>
+                        <i class="ri-delete-bin-line" style="color:#999; cursor:pointer;" onclick="removeCalendarWorkoutStep(${idx}, ${parentIdx})"></i>
+                    </div>
+                </div>
+                
+                <div style="padding: 20px 40px; background: #fafafa; border-top: 1px solid #eee; width: 100%;">
+                    <div style="display: flex; gap: 40px; margin-bottom: 20px;">
+                        <div style="flex: 1;">
+                            <label class="small-label" style="font-size: 11px; margin-bottom: 10px; display: block; font-weight: 700; color: #475569;">Tipo de duração</label>
+                            <select onchange="updateCalendarWorkoutStepNestedField(${idx}, 'duration', 'type', this.value, ${parentIdx}); renderCalendarWorkoutSteps();" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                <option value="time" ${step.duration?.type === 'time' ? 'selected' : ''}>Tempo</option>
+                                <option value="distance" ${step.duration?.type === 'distance' ? 'selected' : ''}>Distância</option>
+                            </select>
+                            ${step.duration?.type !== 'lap_button' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px; display: block; font-weight: 700; color: #475569;">${step.duration?.type === 'time' ? 'Tempo (min)' : 'Distância (km)'}</label>
+                                    <input type="text" value="${step.duration?.value || ''}" onchange="updateCalendarWorkoutStepNestedField(${idx}, 'duration', 'value', this.value, ${parentIdx})" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div style="flex: 1;">
+                            <label class="small-label" style="font-size: 11px; margin-bottom: 10px; display: block; font-weight: 700; color: #475569;">Meta de intensidade</label>
+                            <select onchange="updateCalendarWorkoutStepNestedField(${idx}, 'intensity', 'type', this.value, ${parentIdx}); renderCalendarWorkoutSteps();" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                <option value="none" ${step.intensity?.type === 'none' ? 'selected' : ''}>Sem objetivo</option>
+                                <option value="vam" ${step.intensity?.type === 'vam' ? 'selected' : ''}>% VAM (Recomendado)</option>
+                                <option value="pace" ${step.intensity?.type === 'pace' ? 'selected' : ''}>Ritmo</option>
+                                <option value="hr_zone" ${step.intensity?.type === 'hr_zone' ? 'selected' : ''}>Zona de frequência cardíaca</option>
+                                <option value="cadence" ${step.intensity?.type === 'cadence' ? 'selected' : ''}>Cadência</option>
+                            </select>
+                            ${step.intensity?.type === 'vam' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px; display: block; font-weight: 700; color: #475569;">Objetivo de % VAM</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" value="${step.intensity?.value || 0}" onchange="updateCalendarWorkoutStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                        <span style="font-weight: 700; color: #666;">%</span>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${step.intensity?.type === 'pace' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px; display: block; font-weight: 700; color: #475569;">Ritmo alvo</label>
+                                    <input type="text" placeholder="5:30" value="${step.intensity?.value || ''}" onchange="updateCalendarWorkoutStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                </div>
+                            ` : ''}
+                            ${step.intensity?.type === 'hr_zone' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px; display: block; font-weight: 700; color: #475569;">Zona Alvo (Ex: 3)</label>
+                                    <input type="number" min="1" max="5" value="${step.intensity?.value || ''}" onchange="updateCalendarWorkoutStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                </div>
+                            ` : ''}
+                            ${step.intensity?.type === 'cadence' ? `
+                                <div style="margin-top: 10px;">
+                                    <label class="small-label" style="font-size: 11px; margin-bottom: 5px; display: block; font-weight: 700; color: #475569;">Cadência Alvo (spm)</label>
+                                    <input type="number" placeholder="170" value="${step.intensity?.value || ''}" onchange="updateCalendarWorkoutStepNestedField(${idx}, 'intensity', 'value', this.value, ${parentIdx})" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ${calc ? `
+                        <div style="margin-top: 15px; padding: 10px 14px; background: #f0f9ff; border-radius: 8px; border: 1px solid #bae6fd; display: flex; align-items: center; gap: 8px; max-width: fit-content;">
+                            <i class="ri-flashlight-line" style="color: #0284c7; font-size: 16px;"></i>
+                            <span style="font-size: 12px; font-weight: 700; color: #0369a1;">
+                                Estimativa (${window._calendarWorkoutPreviewVam.toFixed(1)} km/h): <strong style="font-size: 13px;">${calc.value}</strong>
+                            </span>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="step-card" style="width: 100%;">
+            <div class="step-indicator ${step.type || 'run'}"></div>
+            <div class="step-drag-handle"><i class="ri-more-2-fill" style="transform: rotate(90deg);"></i></div>
+            <div class="step-content">
+                <div class="step-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span class="step-type-label" style="font-weight: 700;">${step.label || typeLabels[step.type || 'run']}</span>
+                    <div class="step-action-links" style="display: flex; align-items: center; gap: 12px;">
+                        <button class="btn-text-link" onclick="toggleCalendarWorkoutExpandStep(${idx}, ${parentIdx})">Editar etapa</button>
+                        <i class="ri-delete-bin-line" style="color:#999; cursor:pointer;" onclick="removeCalendarWorkoutStep(${idx}, ${parentIdx})"></i>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 40px; margin-top: 10px;">
+                    <div>
+                        <div style="font-size: 15px; font-weight: 500;">${durStr}</div>
+                        <div style="font-size: 11px; color: #888;">Duração</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 15px; font-weight: 500;">${intStr}</div>
+                        <div style="font-size: 11px; color: #888;">Meta de intensidade</div>
+                    </div>
+                    ${calc ? `
+                    <div>
+                        <div style="font-size: 15px; font-weight: 700; color: #1265C2;">${calc.value}</div>
+                        <div style="font-size: 11px; color: #888;">${calc.label}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderCalendarWorkoutRepetitionStep(step, idx) {
+    const innerStepsHtml = (step.steps || []).map((s, sIdx) => renderCalendarWorkoutNormalStep(s, sIdx, idx)).join('');
+    return `
+        <div class="step-card repetition-card" data-index="${idx}" style="flex-direction: column; min-height: auto; width: 100%;">
+            <div class="repetition-header" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 16px; background: #fafafa; border-bottom: 1px solid #eee;">
+                <div class="step-drag-handle" style="padding-left: 0; cursor: move;"><i class="ri-more-2-fill" style="transform: rotate(90deg);"></i></div>
+                <i class="ri-repeat-line" style="color:var(--primary); font-size:18px;"></i>
+                <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+                    <input type="number" value="${step.count || 2}" style="width:50px; text-align:center; border: 1px solid #ccc; padding: 4px; border-radius: 4px;" onchange="updateCalendarWorkoutStepField(${idx}, 'count', this.value)">
+                    <span style="font-size: 14px; font-weight: 600;">Vezes</span>
+                </div>
+                <i class="ri-delete-bin-line" style="color:#999; cursor:pointer;" onclick="removeCalendarWorkoutStep(${idx})"></i>
+            </div>
+            <div class="repetition-inner" style="padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                ${innerStepsHtml}
+                <button class="btn-text-link" style="margin-top: 10px; font-weight: 700;" onclick="addCalendarWorkoutStep('run', ${idx})">+ Adicionar uma etapa à repetição</button>
+            </div>
+        </div>
+    `;
+}
+
+function toggleCalendarWorkoutExpandStep(idx, parentIdx = null) {
+    if (_calendarWorkoutExpandedStepIdx === idx && _calendarWorkoutExpandedParentIdx === parentIdx) {
+        _calendarWorkoutExpandedStepIdx = null;
+        _calendarWorkoutExpandedParentIdx = null;
+    } else {
+        _calendarWorkoutExpandedStepIdx = idx;
+        _calendarWorkoutExpandedParentIdx = parentIdx;
+    }
+    renderCalendarWorkoutSteps();
+}
+
+function addCalendarWorkoutStep(type, parentIdx = null) {
+    const newStep = {
+        id: generateId(),
+        type: type === 'repetition' ? 'repetition' : type,
+        label: '',
+        duration: { type: 'time', value: '10' },
+        intensity: { type: 'vam', value: 75 },
+        notes: ''
+    };
+
+    if (type === 'repetition') {
+        newStep.count = 2;
+        newStep.steps = [
+            { id: generateId() + 1, type: 'run', label: 'Trabalho', duration: { type: 'distance', value: '0.4' }, intensity: { type: 'vam', value: 95 }, notes: '' },
+            { id: generateId() + 2, type: 'recovery', label: 'Descanso', duration: { type: 'time', value: '1' }, intensity: { type: 'vam', value: 0 }, notes: '' }
+        ];
+    }
+
+    if (parentIdx !== null) {
+        _editingCalendarWorkout.steps[parentIdx].steps.push(newStep);
+    } else {
+        _editingCalendarWorkout.steps.push(newStep);
+    }
+    renderCalendarWorkoutSteps();
+}
+
+function removeCalendarWorkoutStep(idx, parentIdx = null) {
+    if (parentIdx !== null) {
+        _editingCalendarWorkout.steps[parentIdx].steps.splice(idx, 1);
+    } else {
+        _editingCalendarWorkout.steps.splice(idx, 1);
+    }
+    renderCalendarWorkoutSteps();
+}
+
+function updateCalendarWorkoutStepField(idx, field, value, parentIdx = null) {
+    if (parentIdx !== null) {
+        _editingCalendarWorkout.steps[parentIdx].steps[idx][field] = value;
+    } else {
+        _editingCalendarWorkout.steps[idx][field] = value;
+    }
+}
+
+function updateCalendarWorkoutStepNestedField(idx, group, field, value, parentIdx = null) {
+    if (parentIdx !== null) {
+        _editingCalendarWorkout.steps[parentIdx].steps[idx][group][field] = value;
+    } else {
+        _editingCalendarWorkout.steps[idx][group][field] = value;
+    }
+}
+
+function openEditWorkoutModal(workout = null, defaultDate = null) {
+    const modal = $('modal-edit-workout');
+    if (!modal) return;
+
+    const idEl            = $('edit-workout-id');
+    const dateEl          = $('edit-workout-date');
+    const titleInput      = $('edit-workout-title');
+    const typeHidden      = $('edit-workout-type');
+    const descInput       = $('edit-workout-desc');
+    const distInput       = $('edit-workout-dist');
+    const paceInput       = $('edit-workout-pace');
+    const statusSelect    = $('edit-workout-status');
+    const effortInput     = $('edit-workout-effort');
+    const deleteBtn       = $('edit-workout-delete-btn');
+    const realDistInput   = $('edit-workout-real-dist');
+    const realDurInput    = $('edit-workout-real-duration');
+    const realPaceInput   = $('edit-workout-real-pace');
+
+    _calendarWorkoutExpandedStepIdx = null;
+    _calendarWorkoutExpandedParentIdx = null;
+
+    if (workout) {
+        idEl.value          = workout.id;
+        dateEl.value        = workout.date.split('T')[0];
+        titleInput.value    = workout.title || '';
+        descInput.value     = workout.description || '';
+        distInput.value     = workout.metrics?.distance_value || (workout.metrics?.distance ? workout.metrics.distance.replace(' km','') : '') || '';
+        paceInput.value     = workout.metrics?.pace_value || workout.metrics?.duration || '';
+        statusSelect.value  = workout.status || 'pending';
+        effortInput.value   = workout.metrics?.effort_score || '';
+        deleteBtn.style.display = 'block';
+        realDistInput.value = workout.metrics?.real_distance || '';
+        realDurInput.value  = workout.metrics?.real_duration || '';
+        realPaceInput.value = workout.metrics?.real_pace || '';
+
+        setWorkoutTypePill(workout.type || 'Corrida');
+
+        if (workout.metrics && Array.isArray(workout.metrics.structured_steps)) {
+            const rawSteps = JSON.parse(JSON.stringify(workout.metrics.structured_steps));
+            _editingCalendarWorkout = { steps: rawSteps.map(s => normalizeWorkoutStep(s)).filter(Boolean) };
+        } else {
+            _editingCalendarWorkout = { steps: [] };
+        }
+    } else {
+        idEl.value          = '';
+        dateEl.value        = defaultDate;
+        titleInput.value    = '';
+        descInput.value     = '';
+        distInput.value     = '';
+        paceInput.value     = '';
+        statusSelect.value  = 'pending';
+        effortInput.value   = '';
+        deleteBtn.style.display = 'none';
+        realDistInput.value = '';
+        realDurInput.value  = '';
+        realPaceInput.value = '';
+
+        setWorkoutTypePill('Corrida');
+        _editingCalendarWorkout = { steps: [] };
+    }
+
+    // Default step structure if steps are empty
+    if (_editingCalendarWorkout.steps.length === 0) {
+        _editingCalendarWorkout.steps = [
+            { id: generateId(), type: 'warmup', label: 'Aquecimento', duration: { type: 'time', value: '10' }, intensity: { type: 'none', value: 0 }, notes: '' },
+            { id: generateId() + 1, type: 'run', label: 'Corrida', duration: { type: 'time', value: '10' }, intensity: { type: 'vam', value: 75 }, notes: '' },
+            { id: generateId() + 2, type: 'cooldown', label: 'Desaquecimento', duration: { type: 'time', value: '10' }, intensity: { type: 'vam', value: 75 }, notes: '' }
+        ];
+    }
+    
+    toggleEditWorkoutCompletedFields();
+    renderCalendarWorkoutSteps();
+    modal.classList.add('show');
+}
+
+function closeEditWorkoutModal() {
+    const modal = $('modal-edit-workout');
+    if (modal) modal.classList.remove('show');
+}
+
+// ── Pill selector ──────────────────────────────────────────────
+// Updates hidden input value, icon badge, and pill visual states
+function setWorkoutTypePill(type) {
+    const typeHidden = $('edit-workout-type');
+    if (typeHidden) typeHidden.value = type;
+
+    const config = {
+        'Corrida':        { bg:'#fef9c3', border:'#fbbf24', text:'#92400e', icon:'ri-run-line',       iconBg:'#fbbf24' },
+        'Natação':        { bg:'#e0f2fe', border:'#38bdf8', text:'#0369a1', icon:'ri-swimming-line',  iconBg:'#0ea5e9' },
+        'Ciclismo':       { bg:'#dcfce7', border:'#4ade80', text:'#166534', icon:'ri-riding-line',    iconBg:'#22c55e' },
+        'Fortalecimento': { bg:'#ede9fe', border:'#a78bfa', text:'#5b21b6', icon:'ri-barbell-line',   iconBg:'#8b5cf6' },
+        'Outros':         { bg:'#f1f5f9', border:'#94a3b8', text:'#475569', icon:'ri-clipboard-line', iconBg:'#64748b' },
+    };
+    const c = config[type] || config['Outros'];
+
+    document.querySelectorAll('.workout-type-pill').forEach(btn => {
+        const isActive = btn.dataset.type === type;
+        const pc = config[btn.dataset.type] || config['Outros'];
+        btn.style.opacity    = isActive ? '1'    : '0.4';
+        btn.style.transform  = isActive ? 'scale(1.08)' : 'scale(1)';
+        btn.style.background  = isActive ? pc.bg      : '#f8fafc';
+        btn.style.borderColor = isActive ? pc.border  : '#e2e8f0';
+        btn.style.color       = isActive ? pc.text    : '#94a3b8';
+        btn.style.fontWeight  = isActive ? '800' : '600';
+    });
+
+    const iconEl = $('edit-workout-type-icon');
+    if (iconEl) {
+        iconEl.style.background = c.iconBg;
+        iconEl.innerHTML = `<i class="${c.icon}"></i>`;
+    }
+}
+
+function toggleEditWorkoutCompletedFields() {
+    const status = $('edit-workout-status').value;
+    const completedFields = $('edit-workout-completed-fields');
+    if (completedFields) {
+        completedFields.style.display = status === 'completed' ? 'flex' : 'none';
+    }
+}
+
+async function saveIndividualWorkout() {
+    const id = $('edit-workout-id').value;
+    const date = $('edit-workout-date').value;
+    const title = $('edit-workout-title').value.trim() || 'Corrida';
+    const type = $('edit-workout-type').value;
+    const description = $('edit-workout-desc').value.trim();
+    const distance = parseFloat($('edit-workout-dist').value) || null;
+    const pace = $('edit-workout-pace').value.trim() || null;
+    const status = $('edit-workout-status').value;
+    const effort_score = parseInt($('edit-workout-effort').value) || null;
+    
+    const real_distance = parseFloat($('edit-workout-real-dist').value) || null;
+    const real_duration = parseInt($('edit-workout-real-duration').value) || null;
+    const real_pace = $('edit-workout-real-pace').value.trim() || null;
+    
+    const a = athletes.find(x => x.id == currentHistoryAthleteId);
+    if (!a || !a.supabaseId) {
+        showToast("Erro: Atleta sem conta vinculada.", "error");
+        return;
+    }
+
+    const typeLabels = { 
+        warmup: 'Aquecimento', 
+        run: 'Corrida', 
+        walk: 'Caminhada', 
+        recovery: 'Recuperação', 
+        rest: 'Descanso', 
+        cooldown: 'Desaquecimento', 
+        other: 'Outros' 
+    };
+
+    // Compile text description from Garmin steps
+    let compiledDescription = "";
+    if (_editingCalendarWorkout && _editingCalendarWorkout.steps.length > 0) {
+        compiledDescription = _editingCalendarWorkout.steps.map(s => {
+            if (s.type === 'repetition') {
+                const inner = s.steps.map(is => {
+                    const dur = is.duration.type === 'lap_button' ? 'Até Lap' : `${is.duration.value}${is.duration.type === 'time' ? 'min' : 'km'}`;
+                    const intensity = is.intensity.value > 0 ? ` @ ${is.intensity.value}% VAM` : '';
+                    return `   - ${is.label || typeLabels[is.type] || is.type}: ${dur}${intensity}`;
+                }).join('\n');
+                return `${s.count}x Repetições de:\n${inner}`;
+            } else {
+                const dur = s.duration.type === 'lap_button' ? 'Até Lap' : `${s.duration.value}${s.duration.type === 'time' ? 'min' : 'km'}`;
+                const intensity = s.intensity.value > 0 ? ` @ ${s.intensity.value}% VAM` : '';
+                return `${s.label || typeLabels[s.type] || s.type}: ${dur}${intensity}`;
+            }
+        }).join('\n\n');
+        
+        // Append additional description text if any
+        if (description) {
+            compiledDescription += `\n\nNotas:\n${description}`;
+        }
+    } else {
+        compiledDescription = description;
+    }
+    
+    const payload = {
+        athlete_id: a.supabaseId,
+        date: date + 'T09:00:00Z',
+        title,
+        type,
+        description: compiledDescription,
+        status,
+        metrics: {
+            distance: distance ? `${distance} km` : '--',
+            duration: pace || '--',
+            distance_value: distance,
+            pace_value: pace,
+            effort_score: effort_score,
+            real_distance: status === 'completed' ? real_distance : null,
+            real_duration: status === 'completed' ? real_duration : null,
+            real_pace: status === 'completed' ? real_pace : null,
+            structured_steps: _editingCalendarWorkout ? _editingCalendarWorkout.steps : null
+        }
+    };
+    
+    try {
+        if (id) {
+            const { error } = await dbClient
+                .from('workouts')
+                .update(payload)
+                .eq('id', id);
+                
+            if (error) throw error;
+            showToast("Treino atualizado com sucesso!");
+        } else {
+            const { error } = await dbClient
+                .from('workouts')
+                .insert([payload]);
+                
+            if (error) throw error;
+            showToast("Treino adicionado com sucesso!");
+        }
+        
+        closeEditWorkoutModal();
+        await loadCalendarWorkouts();
+    } catch (err) {
+        console.error("Erro ao salvar treino:", err);
+        showToast("Erro ao salvar treino.", "error");
+    }
+}
+
+async function deleteIndividualWorkout() {
+    const id = $('edit-workout-id').value;
+    if (!id) return;
+    
+    if (!confirm("Deseja realmente excluir permanentemente este treino individual?")) return;
+    
+    try {
+        const { error } = await dbClient
+            .from('workouts')
+            .delete()
+            .eq('id', id);
+            
+        if (error) throw error;
+        
+        showToast("Treino individual excluído.");
+        closeEditWorkoutModal();
+        await loadCalendarWorkouts();
+    } catch (err) {
+        console.error("Erro ao excluir treino:", err);
+        showToast("Erro ao excluir treino.", "error");
+    }
+}
 function renderHistoryList(aId){
-    const plans=historyPlans.filter(p=>p.athleteId==aId).sort((a,b)=>b.id-a.id);const list=$('history-list');
+    const list = $('history-list');
+    if (!list) return;
+    const plans=historyPlans.filter(p=>p.athleteId==aId).sort((a,b)=>b.id-a.id);
     if(!plans.length){list.innerHTML='<div style="padding:32px;color:var(--text-muted);text-align:center;"><i class="ri-calendar-line" style="font-size:36px;display:block;margin-bottom:8px;opacity:0.3;"></i>Nenhum treino.</div>';return;}
-    const toolbar=`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:var(--bg);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-muted);"><input type="checkbox" id="hist-select-all" onchange="toggleSelectAllHistory()" style="width:15px;height:15px;accent-color:var(--primary);">Selecionar todos (${plans.length})</label><button class="btn" id="hist-delete-selected" onclick="deleteSelectedHistory()" style="background:var(--danger);color:white;padding:6px 12px;font-size:12px;display:none;"><i class="ri-delete-bin-line"></i> Excluir</button></div>`;
-    const rows=plans.map(p=>{const d=new Date(p.id).toLocaleDateString('pt-BR');return`<div class="history-item"><div style="display:flex;align-items:center;gap:12px;"><input type="checkbox" class="hist-chk" value="${p.id}" onchange="updateHistoryToolbar()" style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer;"><div><div class="hist-date">${d}</div><div class="hist-vol">${p.calcData.categoryName} / ${p.calcData.groupName} · ${p.calcData.volume}km</div></div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary" onclick="viewExport(${p.id})" style="padding:5px 10px;font-size:12px;"><i class="ri-image-line"></i> Ver</button><button class="btn btn-tertiary" onclick="deleteHistory(${p.id})" style="padding:5px 8px;color:var(--danger);font-size:12px;"><i class="ri-delete-bin-line"></i></button></div></div>`;}).join('');
+    const toolbar=`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:var(--bg);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-muted);"><input type="checkbox" id="hist-select-all" onchange="toggleSelectAllHistory()" style="width:15px;height:15px;accent-color:var(--primary);">Selecionar todos (${plans.length})</label><button class="btn btn-danger-solid" id="hist-delete-selected" onclick="deleteSelectedHistory()" style="padding:6px 12px;font-size:12px;display:none;"><i class="ri-delete-bin-line"></i> Excluir</button></div>`;
+    const rows=plans.map(p=>{const d=new Date(p.id).toLocaleDateString('pt-BR');return`<div class="history-item"><div style="display:flex;align-items:center;gap:12px;"><input type="checkbox" class="hist-chk" value="${p.id}" onchange="updateHistoryToolbar()" style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer;"><div><div class="hist-date">${d}</div><div class="hist-vol">${p.calcData.categoryName} / ${p.calcData.groupName} · ${p.calcData.volume}km</div></div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary" onclick="viewExport(${p.id})" style="padding:5px 10px;font-size:12px;"><i class="ri-image-line"></i> Ver</button><button class="btn btn-tertiary btn-icon-danger" onclick="deleteHistory(${p.id})" style="padding:5px 8px;font-size:12px;"><i class="ri-delete-bin-line"></i></button></div></div>`;}).join('');
     list.innerHTML=toolbar+rows;
 }
 function updateHistoryToolbar(){const all=[...document.querySelectorAll('.hist-chk')],sel=all.filter(c=>c.checked),btn=$('hist-delete-selected'),ca=$('hist-select-all');if(btn){btn.style.display=sel.length>0?'inline-flex':'none';btn.innerHTML=`<i class="ri-delete-bin-line"></i> Excluir ${sel.length}`;}if(ca){ca.indeterminate=sel.length>0&&sel.length<all.length;ca.checked=sel.length===all.length&&all.length>0;}}
@@ -1347,11 +2857,66 @@ async function openStravaActivities(athleteId) {
 // ═══════════════════════════════════════
 function calculatePlan(athlete){
     const g=groups.find(x=>x.id==athlete.groupId);if(!g||!athlete.testTime)return null;const vamKmh=180/athlete.testTime;
-    const rows=g.plan.reduce((acc,d,i)=>{if(!d.active)return acc;const phases=d.phases.filter(ph=>ph.volPct>0).map(ph=>({type:ph.type,title:phaseLabels[ph.type],km:((ph.volPct/100)*g.volume).toFixed(1),pace:vamToPace(vamKmh*(ph.vamPct/100)),desc:ph.desc}));if(phases.length)acc.push({dayName:daysNames[i],phases});return acc;},[]);
+    const rows=g.plan.reduce((acc,d,i)=>{
+        if(!d.active)return acc;
+        const phases = [];
+        if (d.steps && d.steps.length > 0) {
+            d.steps.forEach(s => {
+                if (s.type === 'repetition') {
+                    const inner = (s.steps || []).map(is => {
+                        const dur = is.duration ? (is.duration.type === 'time' ? is.duration.value + 'min' : is.duration.value + 'km') : '--';
+                        const int = is.intensity && is.intensity.value > 0 ? ` @ ${is.intensity.value}% VAM` : '';
+                        return `${is.label || phaseLabels[is.type] || is.type}: ${dur}${int}`;
+                    }).join(' + ');
+                    
+                    // Calcular a distância estimada das etapas internas da repetição
+                    let repKm = 0;
+                    if (s.steps) {
+                        s.steps.forEach(is => {
+                            if (is.duration && is.duration.value) {
+                                if (is.duration.type === 'distance') {
+                                    repKm += parseFloat(is.duration.value) || 0;
+                                } else if (is.duration.type === 'time' && is.intensity && is.intensity.type === 'vam' && is.intensity.value > 0) {
+                                    const speed = vamKmh * ((parseFloat(is.intensity.value) || 0) / 100);
+                                    repKm += speed * ((parseFloat(is.duration.value) || 0) / 60);
+                                }
+                            }
+                        });
+                    }
+                    const totalRepKm = repKm * (parseInt(s.count) || 1);
+                    phases.push({ type: s.type, title: `Repetição (${s.count}x)`, km: totalRepKm > 0 ? totalRepKm.toFixed(2) : '', pace: '', desc: inner });
+                } else {
+                    let km = ''; let pace = 'Livre'; let desc = s.notes || s.desc || '';
+                    if (s.duration) {
+                        if (s.duration.type === 'time') { 
+                            desc = `${s.duration.value}min ` + desc; 
+                            // Calcular distância estimada para etapas baseadas em tempo usando a VAM
+                            if (s.intensity && s.intensity.type === 'vam' && s.intensity.value > 0) {
+                                const speed = vamKmh * ((parseFloat(s.intensity.value) || 0) / 100);
+                                km = (speed * ((parseFloat(s.duration.value) || 0) / 60)).toFixed(2);
+                            }
+                        } 
+                        else { 
+                            km = s.duration.value; 
+                        }
+                    }
+                    if (s.intensity && s.intensity.type === 'vam' && s.intensity.value > 0) {
+                        pace = vamToPace(vamKmh * (s.intensity.value / 100));
+                    }
+                    phases.push({ type: s.type, title: s.label || phaseLabels[s.type] || s.type, km, pace, desc: desc.trim() });
+                }
+            });
+        } else if (d.phases) {
+            d.phases.filter(ph=>ph.volPct>0).forEach(ph => {
+                phases.push({ type:ph.type, title:phaseLabels[ph.type], km:((ph.volPct/100)*g.volume).toFixed(1), pace:vamToPace(vamKmh*(ph.vamPct/100)), desc:ph.desc });
+            });
+        }
+        if(phases.length)acc.push({dayName:daysNames[i],phases});return acc;
+    },[]);
     // HR zones if data available
     let hrInfo=null;
     const fcMax=athlete.testHr||null;
-    if(fcMax){hrInfo={z1:`${Math.round(fcMax*0.6)}-${Math.round(fcMax*0.7)}`,z2:`${Math.round(fcMax*0.7)}-${Math.round(fcMax*0.8)}`,z3:`${Math.round(fcMax*0.8)}-${Math.round(fcMax*0.9)}`,z4:`${Math.round(fcMax*0.9)}-${Math.round(fcMax*0.95)}`,z5:`${Math.round(fcMax*0.95)}-${fcMax}`};}
+    if(fcMax){hrInfo={z1:`${Math.round(fcMax*0.6)}-${Math.round(fcMax*0.7)}`,z2:`${Math.round(fcMax*0.7)}-${Math.round(fcMax*0.8)}`,z3:`${Math.round(fcMax*0.8)}-${Math.round(fcMax*0.9)}`,z4:`${Math.round(fcMax*0.9)}-${Math.round(fcMax*0.95)}`,z5:`${Math.round(fcMax*0.95)}-fcMax`};}
     return{athleteName:athlete.name,volume:g.volume,groupName:g.name,categoryName:g.category,rows,hrInfo,vamKmh:vamKmh.toFixed(1)};
 }
 
@@ -1368,11 +2933,11 @@ async function clearAthleteWorkouts() {
     try {
         const { error } = await dbClient.from('workouts').delete().eq('athlete_id', a.supabaseId);
         if (error) throw error;
-        showToast('✅ Todos os treinos foram removidos do App!');
+        showToast('Todos os treinos foram removidos do App!', 'success');
         closeModals();
     } catch (err) {
         console.error('Clear Workouts Error:', err);
-        showToast('❌ Erro ao limpar treinos.', 'error');
+        showToast('Erro ao limpar treinos.', 'error');
     }
 }
 
@@ -1428,12 +2993,13 @@ async function generateAndExport(aId){
                 .lte('date', sundayStr);
 
             const dayMap = { 'Segunda': 0, 'Terça': 1, 'Quarta': 2, 'Quinta': 3, 'Sexta': 4, 'Sábado': 5, 'Domingo': 6 };
+            const groupPlan = groups.find(x => x.id == a.groupId)?.plan || [];
             const workoutsToInsert = calc.rows.map(row => {
                 const workoutDate = new Date(monday);
                 workoutDate.setDate(monday.getDate() + dayMap[row.dayName]);
                 
                 // Get structured steps for this day if they exist
-                const dayPlan = _editingPlan[dayMap[row.dayName]];
+                const dayPlan = groupPlan[dayMap[row.dayName]];
                 
                 let textDescription = "";
                 if (dayPlan && dayPlan.steps) {
@@ -1465,10 +3031,10 @@ async function generateAndExport(aId){
                     type: calc.categoryName,
                     title: calc.groupName,
                     description: textDescription,
-                    structured_steps: dayPlan ? dayPlan.steps : null, // Enviar steps estruturados se houver
                     metrics: { 
-                        distance: row.phases.reduce((sum, p) => sum + parseFloat(p.km), 0).toFixed(1) + ' km',
-                        duration: row.phases[0] ? row.phases[0].pace : '--'
+                        distance: row.phases.reduce((sum, p) => sum + (parseFloat(p.km) || 0), 0).toFixed(1) + ' km',
+                        duration: row.phases[0] ? row.phases[0].pace : '--',
+                        structured_steps: dayPlan ? dayPlan.steps : null // Enviar steps estruturados se houver
                     },
                     status: 'pending'
                 };
@@ -1480,25 +3046,25 @@ async function generateAndExport(aId){
             // --- NOTIFICAÇÃO DE PLANILHA LIBERADA ---
             await dbClient.from('notifications').insert([{
                 athlete_id: athleteId,
-                title: 'Planilha Liberada! 🏃‍♂️',
+                title: 'Planilha liberada',
                 text: `Sua planilha de ${calc.categoryName} (${calc.groupName}) já está disponível no app. Bons treinos!`,
                 type: 'training_update',
                 created_at: new Date().toISOString()
             }]);
 
-            showToast('✅ Planilha enviada para o App!');
+            showToast('Planilha enviada para o App!', 'success');
             if (btn) {
-                btn.innerHTML = '✅ Enviado';
+                btn.innerHTML = 'Enviado';
                 btn.style.background = '#34C759'; btn.style.color = 'white';
                 setTimeout(() => { btn.disabled = false; btn.innerHTML = oldHtml; btn.style.background = ''; btn.style.color = ''; }, 3000);
             }
         } else {
-            showToast('⚠️ Aluno não cadastrado no App.', 'default');
+            showToast('Aluno não cadastrado no App.', 'default');
             if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
         }
     } catch (err) {
         console.error('Supabase Sync Error:', err);
-        showToast('❌ Erro ao enviar.', 'error');
+        showToast('Erro ao enviar.', 'error');
         if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
     }
     
@@ -1522,7 +3088,26 @@ async function syncAthletesFromSupabase(isManual = false) {
 
         profiles.forEach(p => {
             const index = athletes.findIndex(a => a.supabaseId === p.id || (a.name === p.name && !a.supabaseId));
-            const supabaseVamTime = p.vam ? 180/p.vam : null;
+            
+            // Converter VAM (que pode ser pace "MM:SS" ou velocidade "13.5" no Supabase) para tempo de teste 3km
+            let vamKmh = 0;
+            if (p.vam && typeof p.vam === 'string') {
+                const cleaned = p.vam.trim();
+                if (cleaned.includes(':')) {
+                    const parts = cleaned.split(':').map(Number);
+                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        const minutes = parts[0] + (parts[1] / 60);
+                        if (minutes > 0) {
+                            vamKmh = 60 / minutes;
+                        }
+                    }
+                } else {
+                    vamKmh = parseFloat(cleaned) || 0;
+                }
+            } else if (typeof p.vam === 'number') {
+                vamKmh = p.vam;
+            }
+            const supabaseVamTime = (vamKmh > 0) ? (180 / vamKmh) : null;
 
             if (index !== -1) {
                 athletes[index].supabaseId = p.id;
@@ -1590,14 +3175,14 @@ async function syncAthletesFromSupabase(isManual = false) {
 
         if (isManual) {
             if (addedCount > 0) {
-                showToast(`✅ ${addedCount} novo(s) aluno(s) sincronizado(s)!`);
+                showToast(`${addedCount} novo(s) aluno(s) sincronizado(s)!`, 'success');
             } else {
-                showToast('✅ Sincronização concluída. Nenhum atleta novo.');
+                showToast('Sincronização concluída. Nenhum atleta novo.', 'success');
             }
         }
     } catch (err) {
         console.error('Erro na sincronização:', err);
-        if (isManual) showToast('❌ Falha ao sincronizar: ' + err.message, 'error');
+        if (isManual) showToast('Falha ao sincronizar: ' + err.message, 'error');
     }
 }
 
@@ -1662,12 +3247,13 @@ function importAllData(e){
 
 // ─── EXPORT CSV ───
 function exportAthletesCSV() {
-    if (!athletes.length) return showToast('Nenhum atleta para exportar', 'error');
+    const activeAthletes = athletes.filter(a => a.role !== 'professor');
+    if (!activeAthletes.length) return showToast('Nenhum atleta para exportar', 'error');
     
     // Header
     let csv = 'Nome,Email,Telefone,Nascimento,VAM (min),VAM (km/h),Planilha Base,Notas\n';
     
-    athletes.forEach(a => {
+    activeAthletes.forEach(a => {
         const g = groups.find(x => x.id == a.groupId);
         const plan = g ? `${g.category} - ${g.name}` : 'Sem planilha';
         const vam = a.testTime ? (180 / a.testTime).toFixed(2) : '';
@@ -1972,8 +3558,8 @@ async function renderStaff() {
             <tr>
                 <td>
                     <div style="display:flex;align-items:center;gap:10px;">
-                        <div class="user-avatar" style="width:32px;height:32px;font-size:12px;background:var(--primary);color:white;">${p.name.charAt(0).toUpperCase()}</div>
-                        <strong style="color:var(--text);">${p.name}</strong>
+                        <div class="user-avatar" style="width:32px;height:32px;font-size:12px;background:var(--primary);color:white;">${(p.name && p.name.trim() !== '') ? p.name.charAt(0).toUpperCase() : 'P'}</div>
+                        <strong style="color:var(--text);">${p.name || 'Sem nome'}</strong>
                     </div>
                 </td>
                 <td style="color:var(--text-muted);">${p.email || 'Não informado'}</td>
@@ -4142,3 +5728,11 @@ async function renderPlannedVsRealizedChart() {
         }
     });
 }
+
+// ─── OFFLINE / ONLINE DETECTION ───
+window.addEventListener('online', () => {
+    showToast('Você está online novamente! Conexão restabelecida.', 'success');
+});
+window.addEventListener('offline', () => {
+    showToast('Sem conexão com a internet. Suas alterações serão salvas localmente no navegador.', 'error');
+});

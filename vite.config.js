@@ -2,9 +2,34 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/** Rotas /professor/* (resumo, atletas…) → public/professor/index.html */
+function professorSpaFallback() {
+  return {
+    name: 'professor-spa-fallback',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const path = (req.url || '').split('?')[0]
+        if (!path.startsWith('/professor')) return next()
+
+        const isStatic = /\.(js|mjs|css|png|jpe?g|gif|svg|ico|woff2?|json|html|map|txt)$/i.test(path)
+        if (isStatic) return next()
+
+        if (path === '/professor' || path === '/professor/') {
+          req.url = '/professor/index.html'
+          return next()
+        }
+
+        req.url = '/professor/index.html'
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    professorSpaFallback(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',

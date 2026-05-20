@@ -17,21 +17,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (data.session) {
             // Cachear ID do professor para uso no chat flutuante sem chamadas async
             window._profId = data.session.user.id;
-            // Segurança: Verificar se é professor
-            const { data: profile, error: profileError } = await supabaseClient
-                .from('profiles')
-                .select('role, email')
-                .eq('id', data.session.user.id)
-                .single();
+            
+            // Segurança: Verificar se é professor (usando cache local se disponível para evitar lockouts em falhas de rede)
+            let userRole = sessionStorage.getItem('vdot_role') || data.session.user.user_metadata?.role;
+            let profile = null;
 
-            const userRole = profile?.role || data.session.user.user_metadata?.role;
-            if (profileError || !userRole || userRole !== 'professor') {
+            try {
+                const { data: dbProfile } = await supabaseClient
+                    .from('profiles')
+                    .select('role, email')
+                    .eq('id', data.session.user.id)
+                    .maybeSingle();
+                
+                profile = dbProfile;
+                if (profile) {
+                    userRole = profile.role;
+                    sessionStorage.setItem('vdot_role', profile.role);
+                }
+            } catch (e) {
+                console.warn("Erro ao buscar perfil do banco (usando cache local):", e);
+            }
+
+            // Se o perfil não existe no banco, mas o metadata do login diz que é professor, cria o perfil automaticamente
+            if (!profile && data.session.user.user_metadata?.role === 'professor') {
+                try {
+                    await supabaseClient.from('profiles').insert([{
+                        id: data.session.user.id,
+                        email: data.session.user.email,
+                        name: data.session.user.user_metadata?.full_name || data.session.user.email.split('@')[0],
+                        role: 'professor'
+                    }]);
+                    userRole = 'professor';
+                    sessionStorage.setItem('vdot_role', 'professor');
+                    console.log("Perfil de professor auto-criado e corrigido no banco de dados.");
+                } catch (e) {
+                    console.error("Erro ao auto-criar perfil de professor:", e);
+                }
+            }
+
+            if (!userRole || userRole !== 'professor') {
                 console.log("Acesso negado ao portal do professor: perfil não encontrado ou papel incorreto.");
                 
                 if (isIndex) {
                     // Se o usuário já está logado como aluno, perguntamos se ele quer sair para entrar como professor
                     // Isso evita o loop infinito de redirecionamento entre / e /professor
                     if (confirm("Esta conta está registrada como Aluno. Deseja sair para entrar com uma conta de Professor?")) {
+                        sessionStorage.removeItem('vdot_role');
                         await supabaseClient.auth.signOut();
                         window.location.href = "login.html?role_error=true";
                     } else {
@@ -44,14 +75,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (path.includes("login") || path.includes("register")) {
                 window.location.href = "/professor/resumo";
+                return;
             }
+
+            showProfessorApp();
         } else {
             if (isIndex && !localStorage.getItem('vdot_offline')) {
-                window.location.href = "login.html";
+                window.location.href = "/professor/login.html";
+                return;
+            }
+
+            if (isIndex && localStorage.getItem('vdot_offline')) {
+                showProfessorApp();
+            } else {
+                hideProfessorBoot();
             }
         }
+    } else if (window.location.pathname.includes('/professor') && !window.location.pathname.includes('login') && !window.location.pathname.includes('register')) {
+        window.location.href = "/professor/login.html";
+    } else {
+        hideProfessorBoot();
     }
 });
+
+function hideProfessorBoot() {
+    const boot = document.getElementById('professor-boot');
+    if (boot) boot.classList.add('hidden');
+}
+
+function showProfessorApp() {
+    hideProfessorBoot();
+    const appLayout = document.querySelector('.app-layout');
+    if (appLayout) appLayout.style.display = 'flex';
+}
 
 function showMessage(text, type = 'error') {
     const msgDiv = document.getElementById('auth-message');
@@ -61,13 +117,13 @@ function showMessage(text, type = 'error') {
     msgDiv.textContent = text;
     
     if (type === 'success') {
-        msgDiv.style.background = '#f0fdf4';
-        msgDiv.style.color = '#166534';
-        msgDiv.style.border = '1px solid #bbf7d0';
+        msgDiv.style.background = '#e6f4ea';
+        msgDiv.style.color = '#1e8e3e';
+        msgDiv.style.border = '1px solid rgba(30, 142, 62, 0.3)';
     } else {
-        msgDiv.style.background = '#fef2f2';
-        msgDiv.style.color = '#991b1b';
-        msgDiv.style.border = '1px solid #fecaca';
+        msgDiv.style.background = '#fce8e6';
+        msgDiv.style.color = '#d93025';
+        msgDiv.style.border = '1px solid rgba(217, 48, 37, 0.3)';
     }
 }
 
@@ -141,6 +197,7 @@ async function login() {
                 return;
             }
 
+            sessionStorage.setItem('vdot_role', 'professor');
             localStorage.removeItem('vdot_offline');
             window.location.href = "/professor/resumo";
         }
@@ -241,6 +298,7 @@ async function logout() {
             await supabaseClient.auth.signOut();
         }
         localStorage.removeItem('vdot_offline');
+        sessionStorage.removeItem('vdot_role');
         window.location.href = "/professor/login.html";
     }
 }

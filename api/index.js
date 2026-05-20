@@ -15,7 +15,7 @@ const allowedOrigins = [
 
 app.use(cors({ 
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
       callback(new Error('Bloqueado pela política de CORS'));

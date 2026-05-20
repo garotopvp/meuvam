@@ -22,6 +22,7 @@ import ProfileView from './views/ProfileView';
 import EditProfileView from './views/EditProfileView';
 import AuthView from './views/AuthView';
 import PortalSelection from './views/PortalSelection';
+import AntigravityPreview from './views/AntigravityPreview';
 
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
@@ -33,11 +34,17 @@ import { athleteData } from './data/mockData';
 
 const calculateZones = (vamInput, maxHr, hrMethod = 'max', restingHr = 60, lthrVal = 170) => {
   let vamKmh = 0;
-  if (typeof vamInput === 'string' && vamInput.includes(':')) {
-    const [m, s] = vamInput.split(':').map(Number);
-    vamKmh = 60 / (m + (s / 60));
-  } else {
-    vamKmh = parseFloat(vamInput) || 0;
+  if (vamInput) {
+    const cleaned = String(vamInput).trim().replace(',', '.');
+    if (cleaned.includes(':')) {
+      const parts = cleaned.split(':').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        const minutes = parts[0] + (parts[1] / 60);
+        if (minutes > 0) vamKmh = 60 / minutes;
+      }
+    } else {
+      vamKmh = parseFloat(cleaned) || 0;
+    }
   }
 
   const maxHeartRate = parseInt(maxHr) || 0;
@@ -259,6 +266,23 @@ const AppContent = () => {
     if (!session?.user?.id) return;
     setIsRefreshing(true);
     try {
+      // 1. Sincronizar atividades do Strava se conectado para marcar treinos como concluídos
+      const { data: integrations } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('athlete_id', session.user.id)
+        .eq('platform', 'strava');
+
+      if (integrations && integrations.length > 0 && integrations[0].connected) {
+        console.log('[Sync] Sincronizando atividades com Strava para auto-complete...');
+        try {
+          await fetch(`/api/strava/activities?userId=${session.user.id}`);
+        } catch (syncErr) {
+          console.error('[Sync] Erro na sincronização Strava:', syncErr);
+        }
+      }
+
+      // 2. Buscar planilha de treinos atualizada
       const { data, error } = await supabase
         .from('workouts')
         .select('*')
@@ -293,9 +317,8 @@ const AppContent = () => {
 
       if (profileData) {
         if (profileData.role === 'professor') {
-          if (!window.location.pathname.startsWith('/professor')) {
-            window.location.href = '/professor/resumo';
-          }
+          console.log('[App] Conta de Professor detectada no App do Aluno. Redirecionando para o painel do professor.');
+          window.location.href = '/professor/resumo';
           return;
         }
         
@@ -455,6 +478,7 @@ const AppContent = () => {
         )
       } />
 
+      <Route path="/preview" element={<AntigravityPreview />} />
       <Route path="/baixar" element={<InstallView />} />
       <Route path="/instalar" element={<InstallView />} />
 

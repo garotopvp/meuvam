@@ -25,9 +25,11 @@ import {
   AlertCircle,
   Loader2,
   ExternalLink,
+  Link2,
   Map as MapIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../lib/supabase';
 import { useGarminSync } from '../hooks/useGarminSync.js';
 import ActivityMap from '../components/ActivityMap';
 
@@ -95,12 +97,12 @@ const StructuredWorkoutView = ({ steps, athlete }) => {
     if (!step) return null;
     if (step.type === 'repetition') {
       return (
-        <div key={step.id} style={{ marginBottom: '1.5rem', background: 'rgba(0,0,0,0.02)', borderRadius: '16px', padding: '1rem', border: '1px dashed rgba(0,0,0,0.1)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', color: '#64748b' }}>
+        <div key={step.id} style={{ marginBottom: '1.5rem', background: 'var(--surface-accent)', borderRadius: '16px', padding: '1rem', border: '1px dashed var(--border-color)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', color: 'var(--text-secondary)' }}>
             <RefreshCw size={14} />
             <span style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>Repetir {step.count}x</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '12px', borderLeft: '2px solid rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '12px', borderLeft: '2px solid var(--border-color)' }}>
             {(step.steps || []).map(s => renderStep(s, true))}
           </div>
         </div>
@@ -115,9 +117,10 @@ const StructuredWorkoutView = ({ steps, athlete }) => {
         display: 'flex', 
         gap: '12px', 
         padding: '12px', 
-        background: '#fff', 
+        background: 'var(--surface-color)', 
         borderRadius: '12px', 
-        boxShadow: isNested ? 'none' : '0 2px 8px rgba(0,0,0,0.04)',
+        boxShadow: isNested ? 'none' : 'var(--shadow-premium)',
+        border: '1px solid var(--border-color)',
         borderLeft: `4px solid ${typeColors[step.type] || '#cbd5e1'}`,
         marginBottom: isNested ? '0' : '8px'
       }}>
@@ -126,12 +129,12 @@ const StructuredWorkoutView = ({ steps, athlete }) => {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-            <span style={{ fontWeight: 800, fontSize: '13px', color: '#1e293b' }}>{step.label || typeLabels[step.type]}</span>
+            <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>{step.label || typeLabels[step.type]}</span>
             <span style={{ fontWeight: 900, fontSize: '13px', color: typeColors[step.type] }}>{duration}</span>
           </div>
           {targetPace && (
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Zap size={10} /> Pace Alvo: <span style={{ color: '#0f172a', fontWeight: 800 }}>{targetPace}/km</span>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Zap size={10} /> Pace Alvo: <span style={{ color: 'var(--text-primary)', fontWeight: 800 }}>{targetPace}/km</span>
             </div>
           )}
         </div>
@@ -141,10 +144,7 @@ const StructuredWorkoutView = ({ steps, athlete }) => {
 
   return (
     <div style={{ marginBottom: '2.5rem' }}>
-      <h3 style={{ fontSize: '1rem', fontWeight: 900, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-          <Activity size={18} />
-        </div>
+      <h3 style={{ fontSize: '1rem', fontWeight: 900, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
         ETAPAS DO TREINO
       </h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -176,9 +176,7 @@ const GarminPushButton = ({ workout, onPush, garminStatus }) => {
         border: '1px solid rgba(0, 122, 255, 0.15)',
         display: 'flex',
         alignItems: 'center',
-        gap: '12px'
       }}>
-        <Watch size={20} color="var(--primary-color)" />
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
           Conecte seu Garmin na aba de treinos para enviar este treino ao dispositivo.
         </p>
@@ -193,14 +191,7 @@ const GarminPushButton = ({ workout, onPush, garminStatus }) => {
       borderRadius: '20px',
       border: '1px solid rgba(0, 122, 255, 0.15)',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: result ? '12px' : 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Watch size={20} color="var(--primary-color)" />
-          <div>
-            <p style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Garmin Connect</p>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{garminStatus.user?.displayName}</p>
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: result ? '12px' : 0 }}>
         <button
           onClick={handlePush}
           disabled={pushing}
@@ -213,13 +204,10 @@ const GarminPushButton = ({ workout, onPush, garminStatus }) => {
             fontSize: '0.8rem',
             fontWeight: 800,
             cursor: pushing ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
             opacity: pushing ? 0.7 : 1,
+            width: '100%'
           }}
         >
-          {pushing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
           {pushing ? 'Enviando...' : 'Enviar para Garmin'}
         </button>
       </div>
@@ -260,7 +248,7 @@ const translateDescription = (desc) => {
     .replace(/\bother\b/gi, 'Outros');
 };
 
-const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus, isProfessor, onShowStrava }) => {
+const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus, isProfessor, onShowStrava, onLinkClick }) => {
   if (!workout) return null;
 
   // Determine personalized greeting and statistics
@@ -278,8 +266,8 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
         left: 0,
         right: 0,
         bottom: 0,
-        background: '#ffffff',
-        color: '#1e293b',
+        background: 'var(--bg-color)',
+        color: 'var(--text-primary)',
         zIndex: 9999,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
@@ -304,22 +292,22 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
         {/* Top Navigation */}
         <div style={{ 
           display: 'flex', 
-          justifyContent: 'space-between', 
+          justifyContent: 'flex-start', 
           alignItems: 'center', 
           marginBottom: '2rem',
           position: 'sticky',
           top: 0,
-          background: 'rgba(9, 13, 22, 0.85)',
+          background: 'var(--bg-color)',
           backdropFilter: 'blur(20px)',
           padding: '1rem 0',
           zIndex: 10,
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+          borderBottom: '1px solid var(--border-color)'
         }}>
           <button 
             onClick={onClose}
             style={{ 
-              background: 'rgba(255, 255, 255, 0.08)', 
-              border: '1px solid rgba(255, 255, 255, 0.1)', 
+              background: 'var(--surface-accent)', 
+              border: '1px solid var(--border-color)', 
               borderRadius: '14px', 
               width: '42px', 
               height: '42px', 
@@ -327,15 +315,11 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
               alignItems: 'center', 
               justifyContent: 'center', 
               cursor: 'pointer', 
-              color: '#1e293b'
+              color: 'var(--text-primary)'
             }}
           >
             <X size={20} />
           </button>
-          <h3 style={{ fontSize: '0.85rem', fontWeight: 900, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
-            Treino Individualizado
-          </h3>
-          <div style={{ width: '42px' }} />
         </div>
 
         {/* Personalized Welcoming Motivation Card */}
@@ -349,27 +333,43 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
           gap: '12px',
           alignItems: 'center'
         }}>
-          <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #FC5200 0%, #ef4444 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 900,
-            fontSize: '1.2rem',
-            color: '#1e293b',
-            boxShadow: '0 4px 12px rgba(252, 82, 0, 0.3)',
-            flexShrink: 0
-          }}>
-            {athleteName.charAt(0).toUpperCase()}
-          </div>
+          {(athlete?.profileImage || athlete?.avatar_url) ? (
+            <img 
+              src={athlete.profileImage || athlete.avatar_url} 
+              alt={athleteName}
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                flexShrink: 0,
+                boxShadow: '0 4px 12px rgba(252, 82, 0, 0.3)',
+                border: '2px solid #FC5200'
+              }}
+            />
+          ) : (
+            <div style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #FC5200 0%, #ef4444 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 900,
+              fontSize: '1.2rem',
+              color: '#ffffff',
+              boxShadow: '0 4px 12px rgba(252, 82, 0, 0.3)',
+              flexShrink: 0
+            }}>
+              {athleteName.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div style={{ flex: 1 }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: '#1e293b' }}>
-              Foco no objetivo, {athleteName}! ⚡
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              Foco no objetivo, {athleteName}!
             </h4>
-            <p style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.6)', margin: '2px 0 0 0', fontWeight: 500 }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '2px 0 0 0', fontWeight: 500 }}>
               Sua VAM de referência é <strong style={{ color: '#FC5200' }}>{vamPace} min/km</strong>. Cada ritmo abaixo foi calculado sob medida para você!
             </p>
           </div>
@@ -381,7 +381,7 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
             {workout.status === 'completed' && (
               <span style={{ 
                 background: 'rgba(52, 199, 89, 0.2)', 
-                color: '#34c759', 
+                color: 'var(--success)', 
                 border: '1px solid rgba(52, 199, 89, 0.3)',
                 padding: '4px 12px', 
                 borderRadius: '100px', 
@@ -394,10 +394,10 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
               </span>
             )}
           </div>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-1.5px', lineHeight: 1.05, marginBottom: '0.5rem', color: '#1e293b' }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-1.5px', lineHeight: 1.05, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
             {workout.title}
           </h1>
-          <p style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.5)', fontWeight: 600 }}>
+          <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
             {safeFormatLocalDate(workout.date)}
           </p>
         </div>
@@ -410,13 +410,14 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
           marginBottom: '2rem' 
         }}>
           <div style={{ 
-            background: 'rgba(255, 255, 255, 0.04)', 
+            background: 'var(--surface-color)', 
             backdropFilter: 'blur(20px)',
             padding: '1.25rem', 
             borderRadius: '24px', 
-            border: '1px solid rgba(255, 255, 255, 0.06)' 
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-premium)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'rgba(255, 255, 255, 0.5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-secondary)' }}>
               <MapPin size={18} />
               <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Distância</span>
             </div>
@@ -425,13 +426,14 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
             </div>
           </div>
           <div style={{ 
-            background: 'rgba(255, 255, 255, 0.04)', 
+            background: 'var(--surface-color)', 
             backdropFilter: 'blur(20px)',
             padding: '1.25rem', 
             borderRadius: '24px', 
-            border: '1px solid rgba(255, 255, 255, 0.06)' 
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-premium)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'rgba(255, 255, 255, 0.5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-secondary)' }}>
               <Clock size={18} />
               <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duração</span>
             </div>
@@ -455,23 +457,20 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
 
         {/* Workout Prescription (Always show text as backup) */}
         <div style={{ marginBottom: '2.5rem' }}>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 900, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase', letterSpacing: '1px', color: 'rgba(255, 255, 255, 0.8)' }}>
-            <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: 'linear-gradient(135deg, #FC5200 0%, #ef4444 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Zap size={16} color="#fff" fill="#fff" />
-            </div>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 900, marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
             PRESCRIÇÃO DO TREINO
           </h3>
           <div style={{ 
-            background: 'rgba(255, 255, 255, 0.03)', 
+            background: 'var(--surface-color)', 
             backdropFilter: 'blur(20px)',
             padding: '1.75rem', 
             borderRadius: '24px', 
             fontSize: '1.1rem', 
             lineHeight: '1.65', 
-            color: 'rgba(255, 255, 255, 0.9)',
+            color: 'var(--text-primary)',
             whiteSpace: 'pre-line',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-premium)'
           }}>
             {translateDescription(workout.description) || 'Sem descrição detalhada para este treino.'}
           </div>
@@ -523,8 +522,55 @@ const WorkoutModal = ({ workout, athlete, onClose, onPushToGarmin, garminStatus,
           </div>
         )}
 
-        {/* Garmin Send Button */}
-        {onPushToGarmin && (
+        {/* Strava Integration for Athlete (Only show if Strava connected in profile) */}
+        {!isProfessor && athlete?.integrations?.strava?.connected && (
+          <div style={{ 
+            background: 'rgba(252, 82, 0, 0.08)', 
+            padding: '1.25rem', 
+            borderRadius: '24px', 
+            border: '1px solid rgba(252, 82, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            marginBottom: '1rem'
+          }}>
+            <div style={{ background: '#FC5200', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Activity size={24} color="#fff" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '0.95rem', fontWeight: 800, color: '#FC5200', margin: 0 }}>Sincronizar com Strava</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500, margin: '2px 0 0 0' }}>
+                {workout.status === 'completed' 
+                  ? 'Este treino já foi concluído!' 
+                  : 'Vincule uma atividade específica do Strava a este treino.'}
+              </p>
+            </div>
+            {workout.status !== 'completed' && (
+              <button 
+                onClick={onLinkClick}
+                style={{
+                  background: '#FC5200',
+                  color: '#1e293b',
+                  border: 'none',
+                  padding: '10px 16px',
+                  borderRadius: '14px',
+                  fontSize: '0.8rem',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(252, 82, 0, 0.2)'
+                }}
+              >
+                <Link2 size={14} /> VINCULAR
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Garmin Send Button (Only show if Garmin connected in profile) */}
+        {onPushToGarmin && athlete?.integrations?.garmin?.connected && (
           <GarminPushButton workout={workout} onPush={onPushToGarmin} garminStatus={garminStatus} />
         )}
       </motion.div>
@@ -606,7 +652,7 @@ const IntensityChart = ({ description, vamPace }) => {
                 <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginLeft: '8px' }}>({item.percentage}%)</span>
               </div>
             </div>
-            <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(item.percentage, 100)}%` }}
@@ -809,7 +855,10 @@ const GarminSyncPanel = ({ workouts, userId, garminSync, athlete }) => {
             }}
           >
             {lastResult.success ? <CheckCheck size={14} style={{ flexShrink: 0, marginTop: '1px' }} /> : <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />}
-            <span>{lastResult.message || lastResult.error}</span>
+            <span>
+              {lastResult.message || lastResult.error}
+              {!lastResult.success && " (Dica: Sessões do Garmin expiram periodicamente. Se o erro persistir, tente desconectar e reconecte na aba Meu Perfil.)"}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -817,7 +866,7 @@ const GarminSyncPanel = ({ workouts, userId, garminSync, athlete }) => {
   );
 };
 
-const StravaActivitiesModal = ({ athlete, onClose }) => {
+const StravaActivitiesModal = ({ athlete, onClose, onSelect }) => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -862,7 +911,9 @@ const StravaActivitiesModal = ({ athlete, onClose }) => {
             <div style={{ background: '#FC5200', padding: '8px', borderRadius: '10px' }}>
               <Activity size={20} color="#fff" />
             </div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Atividades Strava</h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+              {onSelect ? 'Vincular Atividade Strava' : 'Atividades Strava'}
+            </h3>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <X size={24} />
@@ -887,11 +938,23 @@ const StravaActivitiesModal = ({ athlete, onClose }) => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {activities.map((activity, idx) => (
-                <div key={idx} style={{ 
-                  padding: '1rem', background: 'var(--surface-accent)', 
-                  borderRadius: '16px', border: '1px solid var(--border-color)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
+                <div 
+                  key={idx} 
+                  onClick={() => onSelect && onSelect(activity)}
+                  style={{ 
+                    padding: '1rem', 
+                    background: 'var(--surface-accent)', 
+                    borderRadius: '16px', 
+                    border: onSelect ? '1px solid rgba(252, 82, 0, 0.4)' : '1px solid var(--border-color)',
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    cursor: onSelect ? 'pointer' : 'default',
+                    transition: 'all 0.2s',
+                    width: '100%'
+                  }}
+                  className={onSelect ? "card-hover" : ""}
+                >
                   <div>
                     <h4 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '4px' }}>{activity.title}</h4>
                     <div style={{ display: 'flex', gap: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
@@ -909,8 +972,8 @@ const StravaActivitiesModal = ({ athlete, onClose }) => {
           )}
         </div>
         
-        <p style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center', fontWeight: 500 }}>
-          Mostrando as últimas 10 atividades sincronizadas.
+        <p style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: onSelect ? '#FC5200' : 'var(--text-secondary)', textAlign: 'center', fontWeight: 700 }}>
+          {onSelect ? '👉 Clique em uma atividade acima para vinculá-la a este treino!' : 'Mostrando as últimas 10 atividades sincronizadas.'}
         </p>
       </motion.div>
     </motion.div>
@@ -920,6 +983,36 @@ const StravaActivitiesModal = ({ athlete, onClose }) => {
 const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor }) => {
   const [selectedWorkout, setSelectedWorkout] = useState(null);
   const [showStravaModal, setShowStravaModal] = useState(false);
+  const [linkingWorkoutId, setLinkingWorkoutId] = useState(null);
+  const [isLinking, setIsLinking] = useState(false);
+
+  const handleLinkStravaActivity = async (activity) => {
+    if (!linkingWorkoutId) return;
+    setIsLinking(true);
+    try {
+      const { error } = await supabase
+        .from('workouts')
+        .update({
+          status: 'completed',
+          effort: activity.effort || 5,
+          metrics: activity.metrics
+        })
+        .eq('id', linkingWorkoutId);
+
+      if (error) throw error;
+
+      setSelectedWorkout(null);
+      setLinkingWorkoutId(null);
+      setShowStravaModal(false);
+      onRefresh();
+      alert('Treino vinculado e concluído com sucesso! 🎉');
+    } catch (err) {
+      console.error('Erro ao vincular treino:', err);
+      alert('Erro ao vincular treino com atividade do Strava.');
+    } finally {
+      setIsLinking(false);
+    }
+  };
 
 
   const garminSync = useGarminSync();
@@ -998,7 +1091,9 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
 
   return (
     <div className="animate-slide-up" style={{ paddingBottom: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      {/* Hide background view elements when workout modal is open to ensure clean mobile overlays */}
+      <div style={{ display: selectedWorkout ? 'none' : 'block' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Minha Planilha</h1>
         </div>
@@ -1147,6 +1242,7 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
           )}
         </div>
       </div>
+      </div>
 
       <AnimatePresence>
         {selectedWorkout && (
@@ -1157,13 +1253,24 @@ const TrainingView = ({ athlete, workouts, onRefresh, isRefreshing, isProfessor 
             onPushToGarmin={handlePushToGarmin}
             garminStatus={garminSync.garminStatus}
             isProfessor={isProfessor}
-            onShowStrava={() => setShowStravaModal(true)}
+            onShowStrava={() => {
+              setLinkingWorkoutId(null);
+              setShowStravaModal(true);
+            }}
+            onLinkClick={() => {
+              setLinkingWorkoutId(selectedWorkout.id);
+              setShowStravaModal(true);
+            }}
           />
         )}
         {showStravaModal && (
           <StravaActivitiesModal 
             athlete={athlete} 
-            onClose={() => setShowStravaModal(false)} 
+            onClose={() => {
+              setShowStravaModal(false);
+              setLinkingWorkoutId(null);
+            }} 
+            onSelect={linkingWorkoutId ? handleLinkStravaActivity : null}
           />
         )}
       </AnimatePresence>
