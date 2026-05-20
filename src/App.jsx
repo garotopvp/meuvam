@@ -157,7 +157,7 @@ const UrlCleanup = ({ onConnected }) => {
 const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthleteRaw, handlePhotoUpload, session, updateProfile, navigate, deferredPrompt, handleInstallApp, theme, setTheme }) => {
   const location = useLocation();
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)', transition: 'background-color 0.3s ease' }}>
+    <div className="ag-page ag-grain" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', transition: 'background-color 0.3s ease' }}>
       <AnimatePresence mode="wait">
         <motion.div
           key={location.pathname}

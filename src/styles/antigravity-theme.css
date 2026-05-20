@@ -157,6 +157,31 @@
   transition: transform 0.2s var(--ag-ease), opacity 0.2s var(--ag-ease);
 }
 
+.auth-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--ag-border);
+  background: var(--ag-surface);
+  color: var(--ag-text);
+  font-size: 0.95rem;
+  outline: none;
+  transition: box-shadow 0.15s var(--ag-ease), border-color 0.15s var(--ag-ease);
+}
+
+.auth-input:focus {
+  box-shadow: 0 6px 18px rgba(26,26,26,0.06);
+  border-color: rgba(26,26,26,0.12);
+}
+
+.ag-btn-primary {
+  background: linear-gradient(90deg, #ff6b6b, #ff3b30);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(255,59,48,0.12);
+}
+
+.ag-card { background: var(--ag-surface); border: 1px solid var(--ag-border); border-radius: var(--ag-radius-card); }
+
 .ag-btn:hover {
   transform: translateY(-1px);
 }
