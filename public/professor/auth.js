@@ -96,6 +96,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         hideProfessorBoot();
     }
+
+    // Exibir mensagens baseadas em parâmetros da URL na página de login/registro
+    const currentPath = window.location.pathname;
+    if (currentPath.includes("login") || currentPath.includes("register")) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('session_expired') === 'true') {
+            showMessage("Sua sessão expirou ou é inválida. Por favor, faça login novamente para restabelecer o acesso.", 'error');
+        } else if (params.get('role_error') === 'true') {
+            showMessage("Acesso negado: Sua conta não está configurada como Professor.", 'error');
+        }
+    }
 });
 
 function hideProfessorBoot() {
