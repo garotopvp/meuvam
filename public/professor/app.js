@@ -1651,9 +1651,11 @@ function renderHistoryCalendar() {
                         <div style="flex:1; display:flex; flex-direction:column; gap:4px; overflow-y:auto; min-height:0; margin-top:2px;">
                             ${cell.workouts.map(wk => {
                                 const isCompleted = wk.status === 'completed';
+                                const wkDist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || null;
+                                const wkRealDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || null;
                                 const metricText = isCompleted 
-                                    ? `${wk.real_distance ? wk.real_distance.toFixed(1) : wk.distance || '0'}km` 
-                                    : `${wk.distance || '—'}km`;
+                                    ? `${wkRealDist ? wkRealDist.toFixed(1) : (wkDist ? wkDist.toFixed(1) : '0')}km` 
+                                    : `${wkDist ? wkDist.toFixed(1) : '—'}km`;
 
                                 // Definir cores vibrantes e esportivas baseadas no tipo de treino
                                 let badgeBg = '#fff9c4'; // Amarelo suave padrão para corrida prescrita
@@ -1723,36 +1725,37 @@ function renderHistoryCalendar() {
             }
         }
         
-        // Calcular a soma da semana
+        // Calcular a soma da semana (usando metrics.distance_value e metrics.real_distance)
         let plannedSum = 0;
         let completedSum = 0;
         for (let d = 0; d < 7; d++) {
             const cell = dayCells[w * 7 + d];
             if (cell && cell.workouts) {
                 cell.workouts.forEach(wk => {
-                    const dist = parseFloat(wk.distance) || 0;
+                    const dist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || 0;
                     plannedSum += dist;
                     if (wk.status === 'completed') {
-                        const realDist = parseFloat(wk.real_distance) || dist;
+                        const realDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || dist;
                         completedSum += realDist;
                     }
                 });
             }
         }
         
-        // Renderizar o 8º card de soma semanal no final da linha
+        // Renderizar o 8º card de soma semanal — design limpo e discreto
+        const hasCompleted = completedSum > 0;
         html += `
             <div class="calendar-weekly-sum-box" 
-                 style="height:100%; min-height:0; background:var(--primary-soft); border: 1px dashed var(--primary); border-radius:8px; padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; transition:all 0.15s; position:relative; overflow:hidden;">
-                <div style="font-size:9px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Soma</div>
-                <div style="font-size:16px; font-weight:900; color:var(--text); line-height:1.2;">
-                    ${plannedSum > 0 ? plannedSum.toFixed(1) : '—'} <span style="font-size:10px; font-weight:700; color:var(--text-muted);">km</span>
-                </div>
-                ${completedSum > 0 ? `
-                <div style="margin-top:6px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; background:var(--success-soft); color:var(--success); padding:2px 6px; border-radius:100px; white-space:nowrap;">
-                    <i class="ri-checkbox-circle-fill" style="font-size:11px;"></i>
-                    <span>${completedSum.toFixed(1)} km</span>
-                </div>
+                 style="height:100%; min-height:0; background:var(--panel); border:1px solid var(--border-strong); border-left:3px solid var(--primary); border-radius:8px; padding:8px 6px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; transition:all 0.15s; gap:4px;">
+                <span style="font-size:9px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px;">Semana</span>
+                <span style="font-size:15px; font-weight:900; color:var(--text); letter-spacing:-0.5px; line-height:1;">
+                    ${plannedSum > 0 ? plannedSum.toFixed(1) : '—'}
+                </span>
+                <span style="font-size:10px; font-weight:600; color:var(--text-muted); margin-top:-2px;">km</span>
+                ${hasCompleted ? `
+                <div style="width:100%; height:1px; background:var(--border); margin:2px 0;"></div>
+                <span style="font-size:10px; font-weight:700; color:var(--success);">✓ ${completedSum.toFixed(1)}</span>
+                <span style="font-size:9px; font-weight:500; color:var(--text-muted);">realizado</span>
                 ` : ''}
             </div>
         `;
