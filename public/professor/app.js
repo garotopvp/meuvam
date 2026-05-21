@@ -557,11 +557,21 @@ function calculateVAM(){
     const t=parseFloat($('calc-time').value);const res=$('calc-result'),zones=$('calc-zones');
     if(!t||t<=0){res.style.display='none';if($('calc-distance-table'))$('calc-distance-table').style.display='none';return;}
     const vam=180/t;res.style.display='block';$('calc-vam').textContent=vam.toFixed(1)+' km/h';
-    zones.innerHTML=VAM_ZONES.map(z=>{const spd=vam*(z.pct/100);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:6px;background:var(--bg);border-left:4px solid ${z.color};"><span style="font-size:13px;font-weight:600;">${z.label} (${z.pct}%)</span><span style="font-size:14px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;}).join('');
+    // Highlight the 3km/VAM zone visually to simulate athlete zone during the 3km test
+    const vamZone = VAM_ZONES.find(z=>z.pct===100) || VAM_ZONES[VAM_ZONES.length-1];
+    zones.innerHTML=VAM_ZONES.map(z=>{const spd=vam*(z.pct/100);const isVam = z.pct===vamZone.pct;const extraStyle = isVam?`box-shadow:0 6px 18px ${z.color}22;border-radius:8px;background:linear-gradient(90deg, ${z.color}11, transparent);`:`background:var(--bg);`;return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-left:4px solid ${z.color};${extraStyle}"><span style="font-size:13px;font-weight:600;color:${isVam?z.color:'inherit'}">${z.label} (${z.pct}%)</span><span style="font-size:14px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;}).join('');
     if($('calc-distance-table'))$('calc-distance-table').style.display='block';
     const thR=`<tr style="background:var(--bg);"><th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Dist.</th><th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">% VAM</th><th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);">Pace</th></tr>`;
     if($('tbl-short'))$('tbl-short').innerHTML=thR+DIST_SHORT.map((d,i)=>`<tr style="${i%2===0?'background:var(--bg);':''}"><td style="padding:10px 16px;font-weight:600;">${d.label}</td><td style="padding:10px 16px;text-align:center;color:#ef4444;font-weight:700;">${d.pct}%</td><td style="padding:10px 16px;text-align:right;font-weight:800;">${vamToPace(vam*(d.pct/100))}</td></tr>`).join('');
-    if($('tbl-long'))$('tbl-long').innerHTML=thR+DIST_LONG.map((d,i)=>`<tr style="${i%2===0?'background:var(--bg);':''}"><td style="padding:10px 16px;font-weight:600;">${d.label}</td><td style="padding:10px 16px;text-align:center;color:#2563eb;font-weight:700;">${d.pct}%</td><td style="padding:10px 16px;text-align:right;font-weight:800;">${vamToPace(vam*(d.pct/100))}</td></tr>`).join('');
+    if($('tbl-long')){
+        $('tbl-long').innerHTML=thR+DIST_LONG.map((d,i)=>{
+            const isVamRow = d.pct===(VAM_ZONES.find(z=>z.pct===100)?.pct || 100);
+            const pctColor = isVamRow ? (VAM_ZONES.find(z=>z.pct===100)?.color || '#2563eb') : '#2563eb';
+            const bg = i%2===0 ? 'background:var(--bg);' : '';
+            const rowStyle = isVamRow ? `background:${pctColor}11;box-shadow:inset 4px 0 0 ${pctColor}22;` : bg;
+            return `<tr style="${rowStyle}"><td style="padding:10px 16px;font-weight:600;">${d.label}</td><td style="padding:10px 16px;text-align:center;color:${pctColor};font-weight:700;">${d.pct}%</td><td style="padding:10px 16px;text-align:right;font-weight:800;">${vamToPace(vam*(d.pct/100))}</td></tr>`;
+        }).join('');
+    }
 }
 function onRaceDistChange(){$('race-dist-custom-wrap').style.display=$('race-dist-select').value==='custom'?'block':'none';calculateRace();}
 function calculateRace(){
@@ -1339,34 +1349,89 @@ function calculateHRZones(athlete) {
 }
 
 function previewAthleteVAM(){
-    const t=parseFloat($('athlete-test').value);
-    const pv=$('athlete-vam-preview');
-    if(!t||t<=0){pv.style.display='none';} else {
-        const vam=180/t;pv.style.display='block';
-        $('athlete-vam-zones').innerHTML=VAM_ZONES.map(z=>{const spd=vam*(z.pct/100);return`<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="font-size:12px;color:#475569;">${z.label} (${z.pct}%)</span><span style="font-size:13px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;}).join('');
-    }
-
-    // Preview de Zonas de FC
-    const tempAthlete = {
-        testHr: parseInt($('athlete-test-hr').value),
-        hrMethod: $('athlete-hr-method').value,
-        restingHr: parseInt($('athlete-resting-hr').value),
-        lthr: parseInt($('athlete-lthr').value)
-    };
-    const hrZones = calculateHRZones(tempAthlete);
-    const hrHtml = `
-        <div style="margin-top:12px; padding-top:12px; border-top:1px dashed #bfdbfe;">
-            <div style="font-size:11px; font-weight:700; color:#2563eb; text-transform:uppercase; margin-bottom:8px;">Zonas de Frequência Cardíaca</div>
-            <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; text-align:center;">
-                <div style="font-size:10px;"><div style="background:#94a3b8; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z1<br><b><${Math.round(hrZones.z1)}</b></div>
-                <div style="font-size:10px;"><div style="background:#3b82f6; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z2<br><b><${Math.round(hrZones.z2)}</b></div>
-                <div style="font-size:10px;"><div style="background:#10b981; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z3<br><b><${Math.round(hrZones.z3)}</b></div>
-                <div style="font-size:10px;"><div style="background:#f59e0b; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z4<br><b><${Math.round(hrZones.z4)}</b></div>
-                <div style="font-size:10px;"><div style="background:#ef4444; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z5<br><b>>${Math.round(hrZones.z4)}</b></div>
+    const val = ($('athlete-test').value || '').toString().replace(',', '.');
+    const t = parseFloat(val);
+    const pv = $('athlete-vam-preview');
+    const card = $('athlete-modal-card');
+    
+    if(!t || t <= 0){
+        pv.style.display = 'none';
+        if(card) card.style.maxWidth = '560px';
+    } else {
+        const vam = 180 / t;
+        pv.style.display = 'flex';
+        if(card) card.style.maxWidth = '1100px';
+        
+        const testTimeEl = $('athlete-modal-test-time');
+        if (testTimeEl) testTimeEl.textContent = `${parseFloat(t.toFixed(2)).toString().replace('.', ',')} min`;
+        
+        const modalVamEl = $('athlete-modal-vam');
+        if (modalVamEl) modalVamEl.textContent = `${vam.toFixed(1)} km/h`;
+        
+        const vamZonesEl = $('athlete-vam-zones');
+        const vamZone = VAM_ZONES.find(z => z.pct === 100) || VAM_ZONES[VAM_ZONES.length - 1];
+        
+        if (vamZonesEl) {
+            vamZonesEl.innerHTML = VAM_ZONES.map(z => {
+                const spd = vam * (z.pct / 100);
+                const isVam = z.pct === vamZone.pct;
+                const extraStyle = isVam ? `box-shadow:0 6px 18px ${z.color}22;border-radius:8px;background:linear-gradient(90deg, ${z.color}11, transparent);` : `background:var(--bg);`;
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-left:4px solid ${z.color};${extraStyle}"><span style="font-size:13px;font-weight:600;color:${isVam ? z.color : 'inherit'}">${z.label} (${z.pct}%)</span><span style="font-size:14px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;
+            }).join('');
+        }
+        
+        const thR = `<tr style="background:var(--bg);"><th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Dist.</th><th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">% VAM</th><th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);">Pace</th></tr>`;
+        
+        const tblShort = $('athlete-tbl-short');
+        if (tblShort) {
+            tblShort.innerHTML = thR + DIST_SHORT.map((d, i) => `
+                <tr style="${i % 2 === 0 ? 'background:var(--bg);' : ''}">
+                    <td style="padding:10px 16px;font-weight:600;color:var(--text);">${d.label}</td>
+                    <td style="padding:10px 16px;text-align:center;color:#ef4444;font-weight:700;">${d.pct}%</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:800;color:var(--text);">${vamToPace(vam * (d.pct / 100))}</td>
+                </tr>
+            `).join('');
+        }
+        
+        const tblLong = $('athlete-tbl-long');
+        if (tblLong) {
+            tblLong.innerHTML = thR + DIST_LONG.map((d, i) => {
+                const isVamRow = d.pct === (VAM_ZONES.find(z => z.pct === 100)?.pct || 100);
+                const pctColor = isVamRow ? (VAM_ZONES.find(z => z.pct === 100)?.color || '#2563eb') : '#2563eb';
+                const bg = i % 2 === 0 ? 'background:var(--bg);' : '';
+                const rowStyle = isVamRow ? `background:${pctColor}11;box-shadow:inset 4px 0 0 ${pctColor}22;` : bg;
+                return `
+                    <tr style="${rowStyle}">
+                        <td style="padding:10px 16px;font-weight:600;color:var(--text);">${d.label}</td>
+                        <td style="padding:10px 16px;text-align:center;color:${pctColor};font-weight:700;">${d.pct}%</td>
+                        <td style="padding:10px 16px;text-align:right;font-weight:800;color:var(--text);">${vamToPace(vam * (d.pct / 100))}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Zonas de Frequência Cardíaca
+        const tempAthlete = {
+            maxHr: parseInt($('athlete-test-hr').value),
+            hrMethod: $('athlete-hr-method').value,
+            restingHr: parseInt($('athlete-resting-hr').value),
+            lthr: parseInt($('athlete-lthr').value)
+        };
+        const hrZones = calculateHRZones(tempAthlete);
+        const hrHtml = `
+            <div style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border-strong);">
+                <div style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; margin-bottom:8px;">Zonas de Frequência Cardíaca</div>
+                <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; text-align:center;">
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#94a3b8; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z1<br><b>&lt;${Math.round(hrZones.z1)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#3b82f6; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z2<br><b>&lt;${Math.round(hrZones.z2)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#10b981; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z3<br><b>&lt;${Math.round(hrZones.z3)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#f59e0b; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z4<br><b>&lt;${Math.round(hrZones.z4)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#ef4444; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z5<br><b>&gt;${Math.round(hrZones.z4)}</b></div>
+                </div>
             </div>
-        </div>
-    `;
-    $('athlete-vam-zones').innerHTML += hrHtml;
+        `;
+        if (vamZonesEl) vamZonesEl.innerHTML += hrHtml;
+    }
 }
 
 function openAthleteModal(id=null){
@@ -1468,6 +1533,88 @@ async function openHistory(aId) {
     
     // Renderizar o histórico de planilhas antigas na parte inferior
     renderHistoryList(aId);
+    
+    // Renderizar a Coluna de Referência VAM/Ritmos se o atleta possuir tempo de teste
+    const pv = $('history-vam-preview');
+    if (pv) {
+        const t = parseFloat((a.testTime || '').toString().replace(',', '.'));
+        if (!t || t <= 0) {
+            pv.style.display = 'none';
+        } else {
+            const vam = 180 / t;
+            pv.style.display = 'flex';
+            
+            const testTimeEl = $('history-modal-test-time');
+            if (testTimeEl) testTimeEl.textContent = `${parseFloat(t.toFixed(2)).toString().replace('.', ',')} min`;
+            
+            const modalVamEl = $('history-modal-vam');
+            if (modalVamEl) modalVamEl.textContent = `${vam.toFixed(1)} km/h`;
+            
+            const vamZonesEl = $('history-vam-zones');
+            const vamZone = VAM_ZONES.find(z => z.pct === 100) || VAM_ZONES[VAM_ZONES.length - 1];
+            
+            if (vamZonesEl) {
+                vamZonesEl.innerHTML = VAM_ZONES.map(z => {
+                    const spd = vam * (z.pct / 100);
+                    const isVam = z.pct === vamZone.pct;
+                    const extraStyle = isVam ? `box-shadow:0 6px 18px ${z.color}22;border-radius:8px;background:linear-gradient(90deg, ${z.color}11, transparent);` : `background:var(--bg);`;
+                    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-left:4px solid ${z.color};${extraStyle}"><span style="font-size:13px;font-weight:600;color:${isVam ? z.color : 'inherit'}">${z.label} (${z.pct}%)</span><span style="font-size:14px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;
+                }).join('');
+            }
+            
+            const thR = `<tr style="background:var(--bg);"><th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Dist.</th><th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">% VAM</th><th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);">Pace</th></tr>`;
+            
+            const tblShort = $('history-tbl-short');
+            if (tblShort) {
+                tblShort.innerHTML = thR + DIST_SHORT.map((d, i) => `
+                    <tr style="${i % 2 === 0 ? 'background:var(--bg);' : ''}">
+                        <td style="padding:10px 16px;font-weight:600;color:var(--text);">${d.label}</td>
+                        <td style="padding:10px 16px;text-align:center;color:#ef4444;font-weight:700;">${d.pct}%</td>
+                        <td style="padding:10px 16px;text-align:right;font-weight:800;color:var(--text);">${vamToPace(vam * (d.pct / 100))}</td>
+                    </tr>
+                `).join('');
+            }
+            
+            const tblLong = $('history-tbl-long');
+            if (tblLong) {
+                tblLong.innerHTML = thR + DIST_LONG.map((d, i) => {
+                    const isVamRow = d.pct === (VAM_ZONES.find(z => z.pct === 100)?.pct || 100);
+                    const pctColor = isVamRow ? (VAM_ZONES.find(z => z.pct === 100)?.color || '#2563eb') : '#2563eb';
+                    const bg = i % 2 === 0 ? 'background:var(--bg);' : '';
+                    const rowStyle = isVamRow ? `background:${pctColor}11;box-shadow:inset 4px 0 0 ${pctColor}22;` : bg;
+                    return `
+                        <tr style="${rowStyle}">
+                            <td style="padding:10px 16px;font-weight:600;color:var(--text);">${d.label}</td>
+                            <td style="padding:10px 16px;text-align:center;color:${pctColor};font-weight:700;">${d.pct}%</td>
+                            <td style="padding:10px 16px;text-align:right;font-weight:800;color:var(--text);">${vamToPace(vam * (d.pct / 100))}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            
+            // Zonas de Frequência Cardíaca
+            const tempAthleteForHR = {
+                maxHr: parseInt(a.maxHr),
+                hrMethod: a.hrMethod || 'max',
+                restingHr: parseInt(a.restingHr),
+                lthr: parseInt(a.lthr)
+            };
+            const hrZones = calculateHRZones(tempAthleteForHR);
+            const hrHtml = `
+                <div style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border-strong);">
+                    <div style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; margin-bottom:8px;">Zonas de Frequência Cardíaca</div>
+                    <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; text-align:center;">
+                        <div style="font-size:10px;color:var(--text);"><div style="background:#94a3b8; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z1<br><b>&lt;${Math.round(hrZones.z1)}</b></div>
+                        <div style="font-size:10px;color:var(--text);"><div style="background:#3b82f6; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z2<br><b>&lt;${Math.round(hrZones.z2)}</b></div>
+                        <div style="font-size:10px;color:var(--text);"><div style="background:#10b981; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z3<br><b>&lt;${Math.round(hrZones.z3)}</b></div>
+                        <div style="font-size:10px;color:var(--text);"><div style="background:#f59e0b; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z4<br><b>&lt;${Math.round(hrZones.z4)}</b></div>
+                        <div style="font-size:10px;color:var(--text);"><div style="background:#ef4444; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z5<br><b>&gt;${Math.round(hrZones.z4)}</b></div>
+                    </div>
+                </div>
+            `;
+            if (vamZonesEl) vamZonesEl.innerHTML += hrHtml;
+        }
+    }
     
     // Exibir o modal
     $('modal-history').classList.add('show');
@@ -2227,6 +2374,7 @@ function renderCalendarWorkoutSteps() {
     `;
 
     initCalendarWorkoutSortable();
+    renderEditWorkoutVamPreview(window._calendarWorkoutPreviewAthleteId);
 }
 
 function initCalendarWorkoutSortable() {
@@ -2615,6 +2763,111 @@ function openEditWorkoutModal(workout = null, defaultDate = null) {
 function closeEditWorkoutModal() {
     const modal = $('modal-edit-workout');
     if (modal) modal.classList.remove('show');
+}
+
+function renderEditWorkoutVamPreview(athleteIdOrSpeed) {
+    const pv = $('edit-workout-vam-preview');
+    if (!pv) return;
+    
+    let a = null;
+    let vam = 14.0;
+    let t = 12.86;
+    
+    if (athleteIdOrSpeed) {
+        const idStr = athleteIdOrSpeed.toString();
+        if (idStr.startsWith('athlete-')) {
+            const cleanId = idStr.replace('athlete-', '');
+            a = athletes.find(x => x.id == cleanId || x.supabaseId == cleanId);
+        } else {
+            a = athletes.find(x => x.id == idStr || x.supabaseId == idStr);
+        }
+    }
+    
+    if (a) {
+        t = parseFloat((a.testTime || '').toString().replace(',', '.'));
+        if (!t || t <= 0) {
+            pv.style.display = 'none';
+            return;
+        }
+        vam = 180 / t;
+    } else {
+        vam = parseFloat(athleteIdOrSpeed) || 14.0;
+        t = 180 / vam;
+    }
+    
+    pv.style.display = 'flex';
+    
+    const testTimeEl = $('edit-workout-modal-test-time');
+    if (testTimeEl) testTimeEl.textContent = `${parseFloat(t.toFixed(2)).toString().replace('.', ',')} min`;
+    
+    const modalVamEl = $('edit-workout-modal-vam');
+    if (modalVamEl) modalVamEl.textContent = `${vam.toFixed(1)} km/h`;
+    
+    const vamZonesEl = $('edit-workout-vam-zones');
+    const vamZone = VAM_ZONES.find(z => z.pct === 100) || VAM_ZONES[VAM_ZONES.length - 1];
+    
+    if (vamZonesEl) {
+        vamZonesEl.innerHTML = VAM_ZONES.map(z => {
+            const spd = vam * (z.pct / 100);
+            const isVam = z.pct === vamZone.pct;
+            const extraStyle = isVam ? `box-shadow:0 6px 18px ${z.color}22;border-radius:8px;background:linear-gradient(90deg, ${z.color}11, transparent);` : `background:var(--bg);`;
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-left:4px solid ${z.color};${extraStyle}"><span style="font-size:13px;font-weight:600;color:${isVam ? z.color : 'inherit'}">${z.label} (${z.pct}%)</span><span style="font-size:14px;font-weight:800;color:${z.color};">${vamToPace(spd)}</span></div>`;
+        }).join('');
+    }
+    
+    const thR = `<tr style="background:var(--bg);"><th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Dist.</th><th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">% VAM</th><th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);">Pace</th></tr>`;
+    
+    const tblShort = $('edit-workout-tbl-short');
+    if (tblShort) {
+        tblShort.innerHTML = thR + DIST_SHORT.map((d, i) => `
+            <tr style="${i % 2 === 0 ? 'background:var(--bg);' : ''}">
+                <td style="padding:10px 16px;font-weight:600;color:var(--text);">${d.label}</td>
+                <td style="padding:10px 16px;text-align:center;color:#ef4444;font-weight:700;">${d.pct}%</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:800;color:var(--text);">${vamToPace(vam * (d.pct / 100))}</td>
+            </tr>
+        `).join('');
+    }
+    
+    const tblLong = $('edit-workout-tbl-long');
+    if (tblLong) {
+        tblLong.innerHTML = thR + DIST_LONG.map((d, i) => {
+            const isVamRow = d.pct === (VAM_ZONES.find(z => z.pct === 100)?.pct || 100);
+            const pctColor = isVamRow ? (VAM_ZONES.find(z => z.pct === 100)?.color || '#2563eb') : '#2563eb';
+            const bg = i % 2 === 0 ? 'background:var(--bg);' : '';
+            const rowStyle = isVamRow ? `background:${pctColor}11;box-shadow:inset 4px 0 0 ${pctColor}22;` : bg;
+            return `
+                <tr style="${rowStyle}">
+                    <td style="padding:10px 16px;font-weight:600;color:var(--text);">${d.label}</td>
+                    <td style="padding:10px 16px;text-align:center;color:${pctColor};font-weight:700;">${d.pct}%</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:800;color:var(--text);">${vamToPace(vam * (d.pct / 100))}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    if (a) {
+        // Zonas de Frequência Cardíaca
+        const tempAthleteForHR = {
+            maxHr: parseInt(a.maxHr),
+            hrMethod: a.hrMethod || 'max',
+            restingHr: parseInt(a.restingHr),
+            lthr: parseInt(a.lthr)
+        };
+        const hrZones = calculateHRZones(tempAthleteForHR);
+        const hrHtml = `
+            <div style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border-strong);">
+                <div style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; margin-bottom:8px;">Zonas de Frequência Cardíaca</div>
+                <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; text-align:center;">
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#94a3b8; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z1<br><b>&lt;${Math.round(hrZones.z1)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#3b82f6; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z2<br><b>&lt;${Math.round(hrZones.z2)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#10b981; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z3<br><b>&lt;${Math.round(hrZones.z3)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#f59e0b; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z4<br><b>&lt;${Math.round(hrZones.z4)}</b></div>
+                    <div style="font-size:10px;color:var(--text);"><div style="background:#ef4444; height:4px; border-radius:2px; margin-bottom:2px;"></div>Z5<br><b>&gt;${Math.round(hrZones.z4)}</b></div>
+                </div>
+            </div>
+        `;
+        if (vamZonesEl) vamZonesEl.innerHTML += hrHtml;
+    }
 }
 
 // ── Pill selector ──────────────────────────────────────────────

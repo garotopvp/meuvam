@@ -357,7 +357,7 @@ const ActivityDetailModal = ({ activity, onClose, currentUser }) => {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="dist" tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} unit=" km" />
-                    <YAxis tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
                     <Area type="monotone" dataKey="elev" stroke="#64748b" strokeWidth={2} fill="url(#elevGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>

@@ -38,7 +38,7 @@
 <body>
     <div id="professor-boot" class="professor-boot">
         <div class="professor-boot-inner">
-            <img src="/assets/logo.png" alt="Superação" width="48" height="48">
+            <img src="/assets/logo.png" alt="Superação" width="96" height="96">
             <p>Carregando painel…</p>
         </div>
     </div>
@@ -48,6 +48,9 @@
 
     <div class="app-layout" style="display: none;">
         <aside class="sidebar" id="sidebar">
+            <button class="collapse-toggle" onclick="toggleCollapse()" id="collapse-btn">
+                <i class="ri-arrow-left-s-line"></i>
+            </button>
             <div class="brand">
                 <div class="brand-logo-wrap">
                     <img src="/assets/logo.png" alt="Superação">
@@ -58,14 +61,12 @@
                 </div>
             </div>
             <nav class="nav-menu">
-                <a href="javascript:void(0)" class="nav-item active" data-view="dashboard"><i class="ri-dashboard-line"></i> Resumo</a>
-                <a href="javascript:void(0)" class="nav-item" data-view="groups"><i class="ri-folder-open-line"></i> Pastas de Treino</a>
-                <a href="javascript:void(0)" class="nav-item" data-view="athletes"><i class="ri-group-line"></i> Atletas</a>
-                <a href="javascript:void(0)" class="nav-item" data-view="chat" style="display:none;"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="staff"><i class="ri-shield-user-line"></i> Equipe</a>
-                <a href="javascript:void(0)" class="nav-item" data-view="strava-feed"><i class="ri-pulse-line" style="color: #fc4c02;"></i> Feed Strava</a>
-                <!-- <a href="javascript:void(0)" class="nav-item" data-view="garmin-feed"><i class="ri-compass-discover-line" style="color: #000;"></i> Feed Garmin</a> -->
-                <a href="javascript:void(0)" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> Calculadoras</a>
+                <a href="javascript:void(0)" class="nav-item active" data-view="dashboard"><i class="ri-dashboard-line"></i> <span>Resumo</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="groups"><i class="ri-folder-open-line"></i> <span>Pastas de Treino</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="athletes"><i class="ri-group-line"></i> <span>Atletas</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="chat" style="display:none;"><i class="ri-chat-3-line"></i> <span>Mensagens</span> <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="strava-feed"><i class="ri-pulse-line" style="color: #fc4c02;"></i> <span>Feed Strava</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> <span>Calculadoras</span></a>
             </nav>
             <div class="sidebar-footer">
                 <button class="theme-toggle" onclick="toggleDarkMode()">
@@ -73,19 +74,19 @@
                     <span id="theme-label">Modo Escuro</span>
                 </button>
                 <button class="btn btn-secondary" onclick="exportAllData()" style="font-size:12px;">
-                    <i class="ri-download-2-line"></i> Exportar Dados
+                    <i class="ri-download-2-line"></i> <span>Exportar Dados</span>
                 </button>
                 <label class="btn btn-secondary" style="font-size:12px;cursor:pointer;">
-                    <i class="ri-upload-2-line"></i> Importar Dados
+                    <i class="ri-upload-2-line"></i> <span>Importar Dados</span>
                     <input type="file" accept=".json" onchange="importAllData(event)" style="display:none;">
                 </label>
                 <button class="btn btn-danger" onclick="logout()" style="font-size:12px;margin-top:4px;">
-                    <i class="ri-logout-box-line"></i> Sair da Conta
+                    <i class="ri-logout-box-line"></i> <span>Sair da Conta</span>
                 </button>
             </div>
         </aside>
 
-        <main class="main-content">
+        <main class="main-content" id="main-content">
             <!-- Breadcrumb Navigation -->
             <div id="breadcrumb" class="breadcrumb"></div>
             
@@ -256,9 +257,9 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:0;margin-bottom:28px;border-bottom:2px solid var(--border);">
-                    <button class="calc-tab active" data-tab="vam" onclick="switchCalcTab('vam')"><i class="ri-speed-line"></i> Zonas VAM</button>
-                    <button class="calc-tab" data-tab="race" onclick="switchCalcTab('race')"><i class="ri-trophy-line"></i> Calculadora de Prova</button>
-                    <button class="calc-tab" data-tab="treadmill" onclick="switchCalcTab('treadmill')"><i class="ri-dashboard-line"></i> Esteira / Pace</button>
+                    <button class="calc-tab active" data-tab="vam" onclick="switchCalcTab('vam')">Zonas VAM</button>
+                    <button class="calc-tab" data-tab="race" onclick="switchCalcTab('race')">Calculadora de Prova</button>
+                    <button class="calc-tab" data-tab="treadmill" onclick="switchCalcTab('treadmill')">Esteira / Pace</button>
                 </div>
 
                 <!-- TAB: VAM -->
@@ -521,60 +522,101 @@
 
     <!-- Athlete Modal -->
     <div class="modal" id="modal-athlete">
-        <div class="modal-card" style="max-width:560px;">
+        <div class="modal-card" id="athlete-modal-card" style="max-width:560px; transition: max-width 0.3s ease;">
             <div class="modal-header"><h3 id="modal-athlete-title">Atleta</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
-            <div class="modal-body">
-                <div style="display:flex; justify-content:center; margin-bottom:20px;">
-                    <div id="athlete-photo-preview" style="width:80px; height:80px; border-radius:24px; overflow:hidden; background:#f1f5f9; border:2px solid var(--primary); display:flex; align-items:center; justify-content:center;">
-                        <i class="ri-user-line" style="font-size:40px; color:var(--text-muted);"></i>
+            <div class="modal-body" style="display: flex; gap: 24px; flex-wrap: wrap;">
+                <!-- Coluna da Esquerda: Formulário -->
+                <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 14px;">
+                    <div style="display:flex; justify-content:center; margin-bottom:10px;">
+                        <div id="athlete-photo-preview" style="width:80px; height:80px; border-radius:24px; overflow:hidden; background:#f1f5f9; border:2px solid var(--primary); display:flex; align-items:center; justify-content:center;">
+                            <i class="ri-user-line" style="font-size:40px; color:var(--text-muted);"></i>
+                        </div>
                     </div>
-                </div>
-                <div class="form-row">
-                    <div class="input-col"><label>Nome</label><input type="text" id="athlete-name"></div>
-                    <div class="input-col"><label>WhatsApp</label><input type="text" id="athlete-phone" placeholder="Ex: 11999999999"></div>
-                </div>
-                <div class="form-row">
-                    <div class="input-col"><label>Data de Nascimento</label><input type="date" id="athlete-dob" onchange="calculateTheoreticalHR()"></div>
-                    <div class="input-col"><label>FC Máx. Teórica</label><input type="text" id="athlete-theo-hr" readonly style="background:var(--bg);border-style:dashed;"></div>
-                </div>
-                <div class="form-row">
-                    <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185" oninput="previewAthleteVAM()"></div>
-                    <div class="input-col"><label>Tempo VAM (min)</label><input type="number" step="0.1" min="0.1" id="athlete-test" placeholder="Ex: 11.5" oninput="previewAthleteVAM()"></div>
-                </div>
-                
-                <div style="margin-top: 16px; padding: 16px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border-strong);">
-                    <h4 style="font-size: 13px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                        <i class="ri-heart-pulse-line" style="color: var(--primary);"></i> Configuração de Zonas de FC
-                    </h4>
                     <div class="form-row">
-                        <div class="input-col">
-                            <label>Método de Cálculo</label>
-                            <select id="athlete-hr-method" onchange="toggleHRFields(); previewAthleteVAM();">
-                                <option value="max">% FC Máxima</option>
-                                <option value="rfc">% FC Reserva (Karvonen)</option>
-                                <option value="lthr">% Limiar de Lactato (LTHR)</option>
-                            </select>
-                        </div>
-                        <div class="input-col" id="col-resting-hr" style="display:none;">
-                            <label>FC Repouso (bpm)</label>
-                            <input type="number" id="athlete-resting-hr" placeholder="Ex: 55" oninput="previewAthleteVAM()">
-                        </div>
-                        <div class="input-col" id="col-lthr" style="display:none;">
-                            <label>FC Limiar (LTHR)</label>
-                            <input type="number" id="athlete-lthr" placeholder="Ex: 172" oninput="previewAthleteVAM()">
+                        <div class="input-col"><label>Nome</label><input type="text" id="athlete-name"></div>
+                        <div class="input-col"><label>WhatsApp</label><input type="text" id="athlete-phone" placeholder="Ex: 11999999999"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="input-col"><label>Data de Nascimento</label><input type="date" id="athlete-dob" onchange="calculateTheoreticalHR()"></div>
+                        <div class="input-col"><label>FC Máx. Teórica</label><input type="text" id="athlete-theo-hr" readonly style="background:var(--bg);border-style:dashed;"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185" oninput="previewAthleteVAM()"></div>
+                        <div class="input-col"><label>Tempo VAM (min)</label><input type="number" step="0.1" min="0.1" id="athlete-test" placeholder="Ex: 11.5" oninput="previewAthleteVAM()"></div>
+                    </div>
+                    
+                    <div style="margin-top: 4px; padding: 14px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border-strong);">
+                        <h4 style="font-size: 12px; font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ri-heart-pulse-line" style="color: var(--primary);"></i> Configuração de Zonas de FC
+                        </h4>
+                        <div class="form-row" style="margin-bottom:0;">
+                            <div class="input-col">
+                                <label>Método de Cálculo</label>
+                                <select id="athlete-hr-method" onchange="toggleHRFields(); previewAthleteVAM();">
+                                    <option value="max">% FC Máxima</option>
+                                    <option value="rfc">% FC Reserva (Karvonen)</option>
+                                    <option value="lthr">% Limiar de Lactato (LTHR)</option>
+                                </select>
+                            </div>
+                            <div class="input-col" id="col-resting-hr" style="display:none;">
+                                <label>FC Repouso (bpm)</label>
+                                <input type="number" id="athlete-resting-hr" placeholder="Ex: 55" oninput="previewAthleteVAM()">
+                            </div>
+                            <div class="input-col" id="col-lthr" style="display:none;">
+                                <label>FC Limiar (LTHR)</label>
+                                <input type="number" id="athlete-lthr" placeholder="Ex: 172" oninput="previewAthleteVAM()">
+                            </div>
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="input-col" style="grid-column:span 2;"><label>Planilha Base</label><select id="athlete-group"></select></div>
+                    </div>
+                    <div class="input-col" style="margin-top:0;">
+                        <label>Notas / Observações</label>
+                        <textarea id="athlete-notes" rows="2" placeholder="Ex: Lesão no joelho direito, preferência por treinos matinais..." style="resize:vertical;"></textarea>
+                    </div>
                 </div>
-                <div id="athlete-vam-preview" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:16px;margin-bottom:16px;">
-                    <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Pré-visualização do VAM</div>
-                    <div id="athlete-vam-zones" style="display:flex;flex-direction:column;gap:4px;"></div>
-                </div>
-                <div class="form-row">
-                    <div class="input-col" style="grid-column:span 2;"><label>Planilha Base</label><select id="athlete-group"></select></div>
-                </div>
-                <div class="input-col" style="margin-top:0;">
-                    <label>Notas / Observações</label>
-                    <textarea id="athlete-notes" rows="3" placeholder="Ex: Lesão no joelho direito, preferência por treinos matinais..." style="resize:vertical;"></textarea>
+
+                <!-- Coluna da Direita: Tabelas de Ritmos baseadas no VAM do Atleta -->
+                <div id="athlete-vam-preview" style="display:none; flex: 1.3; min-width: 450px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 16px; max-height: 72vh; overflow-y: auto;">
+                    <!-- Top Summary Card: Tempo e VAM -->
+                    <div style="display: flex; gap: 12px; align-items: stretch;">
+                        <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                            <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Tempo Teste (3km)</div>
+                            <div id="athlete-modal-test-time" style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-0.5px;">-- min</div>
+                        </div>
+                        <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: linear-gradient(135deg, #1265C2 0%, #1e3a5f 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(18, 101, 194, 0.15);">
+                            <div style="font-size:10px;color:rgba(255,255,255,0.7);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">VAM Calculada</div>
+                            <div id="athlete-modal-vam" style="font-size:20px;font-weight:900;color:white;letter-spacing:-0.5px;">-- km/h</div>
+                        </div>
+                    </div>
+
+                    <!-- Training Zones -->
+                    <div class="stat-card" style="padding: 14px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                        <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ri-radar-line" style="color: #1265C2; font-size: 16px;"></i> Zonas de Treino (VAM)
+                        </h4>
+                        <div id="athlete-vam-zones" style="display:flex;flex-direction:column;gap:6px;"></div>
+                    </div>
+
+                    <!-- Ritmos por Distância -->
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ri-split-cells-vertical" style="color: #1265C2; font-size: 16px;"></i> Ritmos por Distância
+                        </h4>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                            <!-- Tiros Curtos -->
+                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Tiros Curtos (m)</span></div>
+                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="athlete-tbl-short"></table>
+                            </div>
+                            <!-- Provas e Rodagens -->
+                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Provas & Rodagens (km)</span></div>
+                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="athlete-tbl-long"></table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer" style="justify-content: space-between;">
@@ -596,9 +638,49 @@
                 <h3 style="display:flex; align-items:center; gap:8px; font-weight: 800; font-size: 18px;">Histórico e Planilha Individual: <span id="hist-athlete-name" style="color: var(--primary);"></span></h3>
                 <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
             </div>
-            <div class="modal-body" style="background:var(--bg); padding:12px; display:grid; grid-template-columns: 1fr; gap:12px; flex:1; min-height:0; overflow:hidden;">
-                <!-- Coluna Única: Calendário Interativo Expandido -->
-                <div id="history-calendar-container" style="background:var(--panel); border-radius:12px; border:1px solid var(--border-strong); padding:16px; box-shadow:0 4px 6px rgba(0,0,0,0.02); display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden;"></div>
+            <div class="modal-body" style="background:var(--bg); padding:12px; display:flex; gap:12px; flex:1; min-height:0; overflow:hidden;">
+                <!-- Coluna da Esquerda: Calendário Interativo Expandido -->
+                <div id="history-calendar-container" style="flex:1; background:var(--panel); border-radius:12px; border:1px solid var(--border-strong); padding:16px; box-shadow:0 4px 6px rgba(0,0,0,0.02); display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden;"></div>
+                
+                <!-- Coluna da Direita: Referência de Ritmos de VAM do Atleta -->
+                <div id="history-vam-preview" style="display:none; width: 380px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 16px; max-height: 100%; overflow-y: auto; flex-shrink: 0;">
+                    <!-- Top Summary Card: Tempo e VAM -->
+                    <div style="display: flex; gap: 12px; align-items: stretch;">
+                        <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                            <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Tempo Teste (3km)</div>
+                            <div id="history-modal-test-time" style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-0.5px;">-- min</div>
+                        </div>
+                        <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: linear-gradient(135deg, #1265C2 0%, #1e3a5f 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(18, 101, 194, 0.15);">
+                            <div style="font-size:10px;color:rgba(255,255,255,0.7);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">VAM Calculada</div>
+                            <div id="history-modal-vam" style="font-size:20px;font-weight:900;color:white;letter-spacing:-0.5px;">-- km/h</div>
+                        </div>
+                    </div>
+
+                    <!-- Training Zones -->
+                    <div class="stat-card" style="padding: 14px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                        <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ri-radar-line" style="color: #1265C2; font-size: 16px;"></i> Zonas de Treino (VAM)
+                        </h4>
+                        <div id="history-vam-zones" style="display:flex;flex-direction:column;gap:6px;"></div>
+                    </div>
+
+                    <!-- Ritmos por Distância -->
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ri-split-cells-vertical" style="color: #1265C2; font-size: 16px;"></i> Ritmos por Distância
+                        </h4>
+                        <!-- Tiros Curtos -->
+                        <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                            <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Tiros Curtos (m)</span></div>
+                            <table style="width:100%; border-collapse:collapse; font-size:11px;" id="history-tbl-short"></table>
+                        </div>
+                        <!-- Provas e Rodagens -->
+                        <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                            <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Provas & Rodagens (km)</span></div>
+                            <table style="width:100%; border-collapse:collapse; font-size:11px;" id="history-tbl-long"></table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -731,6 +813,46 @@
                             <button id="edit-workout-delete-btn" class="btn btn-danger-solid" onclick="deleteIndividualWorkout()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 8px; font-weight: 700;">
                                 <i class="ri-delete-bin-line"></i> Excluir Treino Permanente
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- Right 2: Referência de Ritmos de VAM do Atleta na Edição -->
+                    <div id="edit-workout-vam-preview" style="display:none; width: 380px; border-left: 1px solid var(--border-strong); padding-left: 20px; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; flex-shrink: 0;">
+                        <!-- Top Summary Card: Tempo e VAM -->
+                        <div style="display: flex; gap: 12px; align-items: stretch;">
+                            <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Tempo Teste (3km)</div>
+                                <div id="edit-workout-modal-test-time" style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-0.5px;">-- min</div>
+                            </div>
+                            <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: linear-gradient(135deg, #1265C2 0%, #1e3a5f 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(18, 101, 194, 0.15);">
+                                <div style="font-size:10px;color:rgba(255,255,255,0.7);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">VAM Calculada</div>
+                                <div id="edit-workout-modal-vam" style="font-size:20px;font-weight:900;color:white;letter-spacing:-0.5px;">-- km/h</div>
+                            </div>
+                        </div>
+
+                        <!-- Training Zones -->
+                        <div class="stat-card" style="padding: 14px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                            <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                                <i class="ri-radar-line" style="color: #1265C2; font-size: 16px;"></i> Zonas de Treino (VAM)
+                            </h4>
+                            <div id="edit-workout-vam-zones" style="display:flex;flex-direction:column;gap:6px;"></div>
+                        </div>
+
+                        <!-- Ritmos por Distância -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+                                <i class="ri-split-cells-vertical" style="color: #1265C2; font-size: 16px;"></i> Ritmos por Distância
+                            </h4>
+                            <!-- Tiros Curtos -->
+                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Tiros Curtos (m)</span></div>
+                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="edit-workout-tbl-short"></table>
+                            </div>
+                            <!-- Provas e Rodagens -->
+                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Provas & Rodagens (km)</span></div>
+                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="edit-workout-tbl-long"></table>
+                            </div>
                         </div>
                     </div>
                 </div>

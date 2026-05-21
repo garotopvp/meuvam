@@ -127,7 +127,7 @@ body {
     left: 0;
     bottom: 0;
     z-index: 50;
-    transition: transform 0.3s var(--ease);
+    transition: transform 0.3s var(--ease), width 0.3s var(--ease), padding 0.3s var(--ease);
 }
 .brand {
     display: flex;
@@ -234,6 +234,7 @@ body {
     position: relative;
     isolation: isolate;
     min-height: 100vh;
+    transition: margin-left 0.3s var(--ease);
 }
 .main-content::before {
     content: '';
@@ -1220,4 +1221,96 @@ i.btn-icon-danger:hover {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Sidebar Collapsed State (Gemini Style) */
+.sidebar.collapsed {
+    width: 80px;
+    padding: 24px 12px;
+}
+
+.sidebar.collapsed .brand h2,
+.sidebar.collapsed .brand .brand-sub,
+.sidebar.collapsed .nav-item span:not(.badge-new),
+.sidebar.collapsed .theme-toggle #theme-label,
+.sidebar.collapsed .sidebar-footer .btn span,
+.sidebar.collapsed .sidebar-footer label span {
+    display: none;
+}
+
+.sidebar.collapsed .brand {
+    justify-content: center;
+    padding-bottom: 12px;
+}
+
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 12px;
+    width: 50px;
+    height: 50px;
+    margin: 0 auto;
+}
+
+.sidebar.collapsed .nav-item i {
+    font-size: 20px;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    align-items: center;
+}
+
+.sidebar.collapsed .sidebar-footer .btn,
+.sidebar.collapsed .sidebar-footer label {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.sidebar.collapsed .sidebar-footer .btn i,
+.sidebar.collapsed .sidebar-footer label i {
+    margin: 0;
+    font-size: 18px;
+}
+
+.main-content.sidebar-collapsed {
+    margin-left: 80px;
+}
+
+/* Desktop Collapse Toggle */
+.collapse-toggle {
+    display: none; /* Hidden by default, shown on desktop */
+    position: absolute;
+    top: 20px;
+    right: -15px;
+    width: 30px;
+    height: 30px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+}
+
+.collapse-toggle:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+@media (min-width: 1024px) {
+    .collapse-toggle {
+        display: flex;
+    }
+}
+
+.sidebar.collapsed .collapse-toggle i {
+    transform: rotate(180deg);
 }
