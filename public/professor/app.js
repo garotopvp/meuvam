@@ -2558,6 +2558,26 @@ function closeEditWorkoutModal() {
     if (modal) modal.classList.remove('show');
 }
 
+let _vamPreviewVisible = true;
+
+function toggleVamPreview() {
+    _vamPreviewVisible = !_vamPreviewVisible;
+    const pv = $('edit-workout-vam-preview');
+    const btn = $('toggle-vam-btn');
+    if (pv) {
+        pv.style.display = _vamPreviewVisible ? 'flex' : 'none';
+    }
+    if (btn) {
+        if (_vamPreviewVisible) {
+            btn.style.background = 'var(--primary)';
+            btn.style.color = 'white';
+        } else {
+            btn.style.background = 'transparent';
+            btn.style.color = 'var(--text)';
+        }
+    }
+}
+
 function renderEditWorkoutVamPreview(athleteIdOrSpeed) {
     const pv = $('edit-workout-vam-preview');
     if (!pv) return;
@@ -2588,7 +2608,7 @@ function renderEditWorkoutVamPreview(athleteIdOrSpeed) {
         t = 180 / vam;
     }
     
-    pv.style.display = 'flex';
+    pv.style.display = _vamPreviewVisible ? 'flex' : 'none';
     
     const testTimeEl = $('edit-workout-modal-test-time');
     if (testTimeEl) testTimeEl.textContent = `${parseFloat(t.toFixed(2)).toString().replace('.', ',')} min`;

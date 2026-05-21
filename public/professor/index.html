@@ -644,7 +644,10 @@
                 </div>
 
                 <!-- Actions -->
-                <div style="display: flex; gap: 12px; flex-shrink: 0;">
+                <div style="display: flex; gap: 12px; flex-shrink: 0; align-items: center;">
+                    <button id="toggle-vam-btn" class="btn btn-secondary" onclick="toggleVamPreview()" style="background: var(--primary); color: white; font-weight: 700; border: 1px solid var(--primary); display: flex; align-items: center; gap: 6px;">
+                        <i class="ri-layout-right-line"></i> Tabelas VAM
+                    </button>
                     <button class="btn btn-secondary" onclick="closeEditWorkoutModal()" style="background: #D8D8D8; color: #101010; font-weight: 700; border: none;">Cancelar</button>
                     <button class="btn btn-primary" onclick="saveIndividualWorkout()" style="font-weight: 700; padding: 10px 24px;">Salvar Treino</button>
                 </div>
