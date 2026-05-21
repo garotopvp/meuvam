@@ -822,60 +822,7 @@ function renderEditorSteps() {
         }
     }
 
-    const sortedAthletes = [...athletes].filter(a => a.testTime && a.role !== 'professor').sort((a,b) => (a.name || '').localeCompare(b.name || ''));
-    let optionsHtml = '';
-    const generics = [10, 12, 14, 16, 18];
-    optionsHtml += '<optgroup label="Velocidade Genérica">';
-    generics.forEach(g => {
-        const selected = (window._previewAthleteId === String(g)) ? 'selected' : '';
-        optionsHtml += `<option value="${g}" ${selected}>${g} km/h (Referência)</option>`;
-    });
-    optionsHtml += '</optgroup>';
-    
-    if (sortedAthletes.length > 0) {
-        optionsHtml += '<optgroup label="Seus Atletas (MeuVAM)">';
-        sortedAthletes.forEach(a => {
-            const vamVal = 180 / a.testTime;
-            const selected = (window._previewAthleteId === `athlete-${a.id}`) ? 'selected' : '';
-            optionsHtml += `<option value="athlete-${a.id}" ${selected}>${a.name} (${vamVal.toFixed(1)} km/h)</option>`;
-        });
-        optionsHtml += '</optgroup>';
-    }
-
-    if (!window.changePreviewVam) {
-        window.changePreviewVam = function(value) {
-            if (value.startsWith('athlete-')) {
-                const aId = parseInt(value.replace('athlete-', ''));
-                const a = athletes.find(x => x.id == aId);
-                if (a && a.testTime) {
-                    window._previewVam = 180 / a.testTime;
-                    window._previewAthleteId = value;
-                }
-            } else {
-                window._previewVam = parseFloat(value) || 14.0;
-                window._previewAthleteId = value;
-            }
-            renderEditorSteps();
-        };
-    }
-
-    const previewHtml = `
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <i class="ri-calculator-line" style="font-size: 24px; color: #1265C2;"></i>
-                <div>
-                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">Calculadora de Estimativas</div>
-                    <div style="font-size: 11px; color: #64748b;">Visualizar tempos e distâncias estimadas da planilha</div>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 12px; font-weight: 600; color: #475569;">Atleta/VAM:</span>
-                <select onchange="window.changePreviewVam(this.value)" style="font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-weight: 700; color: #0f172a; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                    ${optionsHtml}
-                </select>
-            </div>
-        </div>
-    `;
+    const previewHtml = '';
 
     const stepsHtml = day.steps.map((step, idx) => {
         if (step.type === 'repetition') {
@@ -2142,60 +2089,7 @@ function renderCalendarWorkoutSteps() {
         }
     }
 
-    const sortedAthletes = [...athletes].filter(a => a.testTime && a.role !== 'professor').sort((a,b) => (a.name || '').localeCompare(b.name || ''));
-    let optionsHtml = '';
-    const generics = [10, 12, 14, 16, 18];
-    optionsHtml += '<optgroup label="Velocidade Genérica">';
-    generics.forEach(g => {
-        const selected = (window._calendarWorkoutPreviewAthleteId === String(g)) ? 'selected' : '';
-        optionsHtml += `<option value="${g}" ${selected}>${g} km/h (Referência)</option>`;
-    });
-    optionsHtml += '</optgroup>';
-    
-    if (sortedAthletes.length > 0) {
-        optionsHtml += '<optgroup label="Seus Atletas (MeuVAM)">';
-        sortedAthletes.forEach(a => {
-            const vamVal = 180 / a.testTime;
-            const selected = (window._calendarWorkoutPreviewAthleteId === `athlete-${a.id}`) ? 'selected' : '';
-            optionsHtml += `<option value="athlete-${a.id}" ${selected}>${a.name} (${vamVal.toFixed(1)} km/h)</option>`;
-        });
-        optionsHtml += '</optgroup>';
-    }
-
-    if (!window.changeCalendarWorkoutPreviewVam) {
-        window.changeCalendarWorkoutPreviewVam = function(value) {
-            if (value.startsWith('athlete-')) {
-                const aId = parseInt(value.replace('athlete-', ''));
-                const a = athletes.find(x => x.id == aId);
-                if (a && a.testTime) {
-                    window._calendarWorkoutPreviewVam = 180 / a.testTime;
-                    window._calendarWorkoutPreviewAthleteId = value;
-                }
-            } else {
-                window._calendarWorkoutPreviewVam = parseFloat(value) || 14.0;
-                window._calendarWorkoutPreviewAthleteId = value;
-            }
-            renderCalendarWorkoutSteps();
-        };
-    }
-
-    const previewHtml = `
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); flex-shrink: 0; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <i class="ri-calculator-line" style="font-size: 24px; color: #1265C2;"></i>
-                <div>
-                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">Calculadora de Estimativas</div>
-                    <div style="font-size: 11px; color: #64748b;">Visualizar tempos e distâncias estimadas da planilha</div>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 12px; font-weight: 600; color: #475569;">Atleta/VAM:</span>
-                <select onchange="window.changeCalendarWorkoutPreviewVam(this.value)" style="font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-weight: 700; color: #0f172a; cursor: pointer; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                    ${optionsHtml}
-                </select>
-            </div>
-        </div>
-    `;
+    const previewHtml = '';
 
     const stepsHtml = _editingCalendarWorkout.steps.map((step, idx) => {
         if (step.type === 'repetition') {
