@@ -2649,8 +2649,50 @@ async function saveIndividualWorkout() {
     const title = $('edit-workout-title').value.trim() || 'Corrida';
     const type = $('edit-workout-type').value;
     const description = $('edit-workout-desc').value.trim();
-    const distance = parseFloat($('edit-workout-dist').value) || null;
-    const pace = $('edit-workout-pace').value.trim() || null;
+    let distance = parseFloat($('edit-workout-dist').value) || null;
+    let pace = $('edit-workout-pace').value.trim() || null;
+    
+    if (_editingCalendarWorkout && _editingCalendarWorkout.steps && _editingCalendarWorkout.steps.length > 0) {
+        let totalDist = 0;
+        const vamKmh = window._calendarWorkoutPreviewVam || 14.0;
+        
+        const calcDist = (step) => {
+            const durVal = parseFloat(step.duration?.value) || 0;
+            if (durVal <= 0) return 0;
+            if (step.duration.type === 'distance') return durVal;
+            if (step.duration.type === 'time') {
+                const intVal = parseFloat(step.intensity?.value) || 0;
+                if (step.intensity?.type === 'vam' && intVal > 0) {
+                    return (vamKmh * (intVal / 100)) * (durVal / 60);
+                } else if (step.intensity?.type === 'pace' && step.intensity?.value) {
+                    const parts = step.intensity.value.split(':');
+                    if (parts.length === 2) {
+                        const m = parseInt(parts[0]);
+                        const s = parseInt(parts[1]);
+                        const totalMins = m + (s / 60);
+                        if (totalMins > 0) return (60 / totalMins) * (durVal / 60);
+                    }
+                } else {
+                    return 10 * (durVal / 60);
+                }
+            }
+            return 0;
+        };
+
+        _editingCalendarWorkout.steps.forEach(s => {
+            if (s.type === 'repetition' && s.steps && s.repeats) {
+                let repDist = 0;
+                s.steps.forEach(sub => repDist += calcDist(sub));
+                totalDist += repDist * parseInt(s.repeats);
+            } else {
+                totalDist += calcDist(s);
+            }
+        });
+        
+        if (totalDist > 0) {
+            distance = parseFloat(totalDist.toFixed(2));
+        }
+    }
     const status = $('edit-workout-status').value;
     const effort_score = parseInt($('edit-workout-effort').value) || null;
     
