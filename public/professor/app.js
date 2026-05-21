@@ -794,6 +794,65 @@ function toggleEditorDay(idx) {
     if (_selectedDayIdx === idx) renderEditorSteps();
 }
 
+function getWorkoutSummaryHtml(steps, vamKmh) {
+    if (!steps || steps.length === 0) return '';
+    let totalDist = 0;
+    let totalTime = 0;
+    const calcStep = (step) => {
+        const durVal = parseFloat(step.duration?.value) || 0;
+        if (durVal <= 0) return {d: 0, t: 0};
+        let dist = 0, time = 0;
+        if (step.duration.type === 'distance') {
+            dist = durVal;
+            const intVal = parseFloat(step.intensity?.value) || 0;
+            if (step.intensity?.type === 'vam' && intVal > 0) {
+                const speed = vamKmh * (intVal / 100);
+                if (speed > 0) time = (dist / speed) * 60;
+            } else if (step.intensity?.type === 'pace' && step.intensity?.value) {
+                const parts = step.intensity.value.split(':');
+                if (parts.length === 2) {
+                    const totalMins = parseInt(parts[0]) + (parseInt(parts[1]) / 60);
+                    time = dist * totalMins;
+                }
+            } else { time = (dist / 10) * 60; }
+        } else if (step.duration.type === 'time') {
+            time = durVal;
+            const intVal = parseFloat(step.intensity?.value) || 0;
+            if (step.intensity?.type === 'vam' && intVal > 0) {
+                dist = (vamKmh * (intVal / 100)) * (time / 60);
+            } else if (step.intensity?.type === 'pace' && step.intensity?.value) {
+                const parts = step.intensity.value.split(':');
+                if (parts.length === 2) {
+                    const totalMins = parseInt(parts[0]) + (parseInt(parts[1]) / 60);
+                    if (totalMins > 0) dist = (60 / totalMins) * (time / 60);
+                }
+            } else { dist = 10 * (time / 60); }
+        }
+        return {d: dist, t: time};
+    };
+    steps.forEach(s => {
+        if (s.type === 'repetition' && s.steps && s.repeats) {
+            let repD = 0, repT = 0;
+            s.steps.forEach(sub => { const res = calcStep(sub); repD += res.d; repT += res.t; });
+            totalDist += repD * parseInt(s.repeats);
+            totalTime += repT * parseInt(s.repeats);
+        } else {
+            const res = calcStep(s);
+            totalDist += res.d;
+            totalTime += res.t;
+        }
+    });
+    const hours = Math.floor(totalTime / 60);
+    const mins = Math.round(totalTime % 60);
+    const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins} min`;
+    return `
+        <div style="background: var(--bg); border-top: 1px solid var(--border-strong); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-radius: 0 0 8px 8px; font-weight: 600; font-size: 13px; margin-top: 10px;">
+            <div style="color: var(--text-muted);"><i class="ri-ruler-line" style="margin-right: 4px;"></i> Total Est.: <span style="color: var(--primary);">${totalDist.toFixed(2)} km</span></div>
+            <div style="color: var(--text-muted);"><i class="ri-timer-line" style="margin-right: 4px;"></i> Tempo Est.: <span style="color: var(--primary);">${timeStr}</span></div>
+        </div>
+    `;
+}
+
 function renderEditorSteps() {
     const container = $('editor-steps-container');
     const day = _editingPlan[_selectedDayIdx];
@@ -833,9 +892,10 @@ function renderEditorSteps() {
 
     container.innerHTML = `
         ${previewHtml}
-        <div class="steps-list" id="main-steps-list">
+        <div class="steps-list" id="main-steps-list" style="flex: 1; overflow-y: auto; min-height: 0;">
             ${stepsHtml || '<div style="padding:40px; text-align:center; color:var(--text-muted); border:2px dashed #eee; border-radius:8px;">Arraste as etapas para cá ou use os botões ao lado.</div>'}
         </div>
+        ${getWorkoutSummaryHtml(day.steps, window._previewVam)}
     `;
 
     initSortable();
@@ -2103,6 +2163,7 @@ function renderCalendarWorkoutSteps() {
         <div class="steps-list" id="calendar-workout-steps-list" style="flex: 1; overflow-y: auto; min-height: 0; padding-right: 4px; width: 100%;">
             ${stepsHtml || '<div style="padding:40px; text-align:center; color:var(--text-muted); border:2px dashed #eee; border-radius:8px;">Use os botões ao lado para adicionar etapas de aquecimento, corrida, desaquecimento, etc.</div>'}
         </div>
+        ${getWorkoutSummaryHtml(_editingCalendarWorkout.steps, window._calendarWorkoutPreviewVam)}
     `;
 
     initCalendarWorkoutSortable();
