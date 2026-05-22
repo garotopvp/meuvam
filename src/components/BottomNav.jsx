@@ -63,8 +63,8 @@ const BottomNav = () => {
                   gap: '4px',
                   transition: 'var(--transition-smooth)'
                 }}>
-                  <Icon size={22} style={{ strokeWidth: isActive ? 2.5 : 2 }} />
-                  <span style={{ fontSize: '0.65rem', fontWeight: isActive ? 800 : 600, letterSpacing: '0.2px' }}>{tab.label}</span>
+                  <Icon size={22} style={{ strokeWidth: isActive ? 1.5 : 1.2 }} />
+                  <span style={{ fontSize: '0.65rem', fontWeight: isActive ? 700 : 500, letterSpacing: '0.2px' }}>{tab.label}</span>
                 </div>
               </>
             )}

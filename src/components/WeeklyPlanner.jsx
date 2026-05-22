@@ -13,6 +13,14 @@ import { supabase } from '../lib/supabase';
 
 const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
+// Helper para obter string de data YYYY-MM-DD local correta, livre de timezone shift
+const getLocalDateStr = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const WeeklyPlanner = ({ athleteId }) => {
   const [workouts, setWorkouts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,23 +33,23 @@ const WeeklyPlanner = ({ athleteId }) => {
   const fetchWeekWorkouts = async () => {
     setLoading(true);
     try {
-      // Get start and end of week
+      // Obter segunda e domingo locais da semana atual
       const startOfWeek = new Date(currentDate);
       const day = startOfWeek.getDay();
-      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Segunda como início da semana
       startOfWeek.setDate(diff);
-      startOfWeek.setHours(0, 0, 0, 0);
+      const startOfWeekStr = getLocalDateStr(startOfWeek);
 
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
+      const endOfWeekStr = getLocalDateStr(endOfWeek);
 
       const { data, error } = await supabase
         .from('workouts')
         .select('*')
         .eq('athlete_id', athleteId)
-        .gte('date', startOfWeek.toISOString())
-        .lte('date', endOfWeek.toISOString());
+        .gte('date', startOfWeekStr)
+        .lte('date', endOfWeekStr);
 
       if (error) throw error;
       setWorkouts(data || []);
@@ -57,12 +65,26 @@ const WeeklyPlanner = ({ athleteId }) => {
     const day = startOfWeek.getDay();
     const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff + dayIndex);
-    const dayStr = startOfWeek.toISOString().split('T')[0];
+    const dayStr = getLocalDateStr(startOfWeek);
     
     return workouts.filter(w => w.date.split('T')[0] === dayStr);
   };
 
   const moveWorkout = async (workoutId, newDateStr) => {
+    const originalWorkout = workouts.find(w => w.id === workoutId);
+    if (originalWorkout && originalWorkout.date.split('T')[0] === newDateStr) {
+      return; // Já está no dia correto, evita requisição desnecessária
+    }
+
+    const prevWorkouts = [...workouts];
+
+    // Atualização otimista e imutável do estado do React
+    setWorkouts(currentWorkouts => 
+      currentWorkouts.map(w => 
+        w.id === workoutId ? { ...w, date: newDateStr } : w
+      )
+    );
+
     try {
       const { error } = await supabase
         .from('workouts')
@@ -70,9 +92,11 @@ const WeeklyPlanner = ({ athleteId }) => {
         .eq('id', workoutId);
       
       if (error) throw error;
-      fetchWeekWorkouts();
+      fetchWeekWorkouts(); // Recarrega os treinos para garantir integridade
     } catch (err) {
       console.error('Erro ao mover treino:', err);
+      // Reverte para o estado anterior em caso de erro de conexão
+      setWorkouts(prevWorkouts);
     }
   };
 
@@ -82,11 +106,13 @@ const WeeklyPlanner = ({ athleteId }) => {
 
   const handleDrop = (e, dayIndex) => {
     const workoutId = e.dataTransfer.getData('workoutId');
+    if (!workoutId) return;
+
     const startOfWeek = new Date(currentDate);
     const day = startOfWeek.getDay();
     const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff + dayIndex);
-    const newDateStr = startOfWeek.toISOString();
+    const newDateStr = getLocalDateStr(startOfWeek);
     
     moveWorkout(workoutId, newDateStr);
   };

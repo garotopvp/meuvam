@@ -16,9 +16,13 @@ let dbClient = (typeof supabaseClient !== 'undefined' && supabaseClient) ? supab
         .workout-calendar-item:hover {
             box-shadow: 0 4px 10px rgba(0,0,0,0.08) !important;
             transform: translateY(-1px);
+            z-index: 10 !important;
         }
         .workout-calendar-item:hover .workout-actions-overlay {
             display: flex !important;
+        }
+        .workout-calendar-item:hover .workout-metric-text {
+            display: none !important;
         }
         .workout-actions-overlay i {
             transition: all 0.15s ease;
@@ -178,11 +182,32 @@ function updateThemeUI(){
     updateThemeUI();
 })();
 
+// ─── DESKTOP SIDEBAR COLLAPSE ───
+function toggleCollapse(){
+    const sidebar = $('sidebar');
+    const mainContent = $('main-content');
+    if (!sidebar || !mainContent) return;
+    
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    mainContent.classList.toggle('sidebar-collapsed', isCollapsed);
+    localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+}
+(function initCollapse(){
+    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+    const sidebar = $('sidebar');
+    const mainContent = $('main-content');
+    if (sidebar && mainContent && isCollapsed) {
+        sidebar.classList.add('collapsed');
+        mainContent.classList.add('sidebar-collapsed');
+    }
+})();
+
 // ─── MOBILE SIDEBAR ───
 function toggleSidebar(){
     $('sidebar').classList.toggle('open');
     $('sidebar-overlay').classList.toggle('open');
 }
+
 
 // ─── NAVIGATION ───
 const ROUTES = {
@@ -1312,7 +1337,7 @@ function renderAthletes(){
             <td>${noteSnip}</td>
             <td style="text-align:right;white-space:nowrap;">
                 <button class="btn btn-tertiary" onclick="openStravaActivities('${a.id}')" title="Atividades Strava" style="color:#fc4c02;"><i class="ri-strava-line"></i></button>
-                <button class="btn btn-tertiary" onclick="openHistory('${a.id}')" title="Histórico"><i class="ri-history-line"></i></button>
+                <button class="btn btn-tertiary" onclick="openHistory('${a.id}')" title="Calendário de Treinos" style="color:var(--primary);"><i class="ri-calendar-2-line"></i></button>
                 <button class="btn btn-tertiary" onclick="editAthlete('${a.id}')" title="Editar"><i class="ri-edit-line"></i></button>
                 <button class="btn btn-tertiary btn-icon-danger" onclick="deleteAthlete('${a.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
                 <button class="btn btn-primary" onclick="generateAndExport('${a.id}')" style="padding:6px 12px;font-size:12px;margin-left:4px;"><i class="ri-send-plane-2-line"></i> Enviar</button>
@@ -1475,7 +1500,7 @@ async function loadCalendarWorkouts() {
     container.innerHTML = `
         <div style="display:flex; justify-content:center; align-items:center; padding:60px; color:var(--text-muted);">
             <i class="ri-loader-4-line ri-spin" style="font-size:36px; margin-right:8px; color:var(--primary);"></i>
-            <span>Carregando histórico e calendário de treinos...</span>
+            <span>Carregando calendário de treinos...</span>
         </div>
     `;
     
@@ -1544,6 +1569,125 @@ async function forceLogoutAndRedirect() {
     window.location.href = "login.html?session_expired=true";
 }
 
+let calendarViewMode = 'month'; // 'week', 'month', 'year'
+
+function parsePaceToMinutes(paceStr) {
+    if (!paceStr) return 0;
+    const clean = paceStr.replace(/['"]/g, ':').replace(/[^0-9:]/g, '');
+    const parts = clean.split(':');
+    if (parts.length === 1) {
+        const mins = parseFloat(parts[0]);
+        return isNaN(mins) ? 0 : mins;
+    } else if (parts.length >= 2) {
+        const mins = parseFloat(parts[0]) || 0;
+        const secs = parseFloat(parts[1]) || 0;
+        return mins + (secs / 60);
+    }
+    return 0;
+}
+
+function getStepDuration(step, athleteVam) {
+    if (!step) return 0;
+    if (step.type === 'repetition') {
+        const count = parseInt(step.count) || 2;
+        let subDuration = 0;
+        if (Array.isArray(step.steps)) {
+            step.steps.forEach(s => {
+                subDuration += getStepDuration(s, athleteVam);
+            });
+        }
+        return subDuration * count;
+    }
+    
+    const durType = step.duration?.type || 'time';
+    const durVal = parseFloat(step.duration?.value) || 0;
+    
+    if (durType === 'time') {
+        return durVal;
+    } else if (durType === 'distance') {
+        let speedKmh = 12;
+        if (athleteVam && athleteVam > 0) {
+            const intType = step.intensity?.type || 'none';
+            const intVal = parseFloat(step.intensity?.value) || 0;
+            if (intType === 'vam' && intVal > 0) {
+                speedKmh = (intVal / 100) * athleteVam;
+            } else if (intType === 'pace' && intVal > 0) {
+                speedKmh = 60 / intVal;
+            } else {
+                const stepType = step.type || 'run';
+                if (stepType === 'warmup' || stepType === 'cooldown' || stepType === 'recovery') {
+                    speedKmh = 0.65 * athleteVam;
+                } else {
+                    speedKmh = 0.75 * athleteVam;
+                }
+            }
+        }
+        if (speedKmh <= 0) speedKmh = 12;
+        return (durVal / speedKmh) * 60;
+    }
+    return 0;
+}
+
+function getWorkoutPlannedDuration(wk, athleteVam) {
+    if (!wk) return 0;
+    
+    const steps = wk.metrics?.structured_steps || wk.steps;
+    if (Array.isArray(steps) && steps.length > 0) {
+        let durationMinutes = 0;
+        steps.forEach(s => {
+            durationMinutes += getStepDuration(normalizeWorkoutStep(s), athleteVam);
+        });
+        if (durationMinutes > 0) return durationMinutes;
+    }
+    
+    const dist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || 0;
+    const paceStr = wk.metrics?.pace_value || wk.metrics?.duration;
+    if (dist > 0 && paceStr && paceStr !== '--') {
+        const paceMins = parsePaceToMinutes(paceStr);
+        if (paceMins > 0) {
+            return dist * paceMins;
+        }
+    }
+    
+    if (paceStr && paceStr !== '--' && !dist) {
+        const paceMins = parsePaceToMinutes(paceStr);
+        if (paceMins > 0) return paceMins;
+    }
+    
+    if (dist > 0) {
+        const speedKmh = (athleteVam && athleteVam > 0) ? (0.75 * athleteVam) : 12;
+        return (dist / speedKmh) * 60;
+    }
+    
+    return 0;
+}
+
+function formatDurationFromMinutes(mins) {
+    if (!mins || isNaN(mins) || mins <= 0) return '';
+    const totalSeconds = Math.round(mins * 60);
+    const hrs = Math.floor(totalSeconds / 3600);
+    const remainingSecs = totalSeconds % 3600;
+    const m = Math.floor(remainingSecs / 60);
+    const s = remainingSecs % 60;
+    
+    if (hrs > 0) {
+        return `${hrs}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    } else {
+        return `${m}:${String(s).padStart(2, '0')}`;
+    }
+}
+
+function changeCalendarView(mode) {
+    calendarViewMode = mode;
+    renderHistoryCalendar();
+}
+
+function handleYearDayClick(dateStr) {
+    calendarCurrentDate = new Date(dateStr + 'T12:00:00');
+    calendarViewMode = 'month';
+    renderHistoryCalendar();
+}
+
 function renderHistoryCalendar() {
     const container = $('history-calendar-container');
     if (!container) return;
@@ -1557,214 +1701,582 @@ function renderHistoryCalendar() {
     ];
     const monthName = monthNames[month];
     
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const totalDays = lastDay.getDate();
+    // Obter atleta e VAM
+    const athlete = athletes.find(x => x.id == currentHistoryAthleteId);
+    const athleteVam = athlete && athlete.testTime ? (180 / athlete.testTime) : 12;
     
-    // Obter o dia da semana do primeiro dia do mês (0=Dom, 1=Seg...)
-    // Mapear para Segunda como início: 0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom
-    let startDayOfWeek = firstDay.getDay();
-    startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     
-    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    // Título e Datas baseados no modo de visualização
+    let headerTitle = "";
+    if (calendarViewMode === 'week') {
+        const currentDayOfWeek = calendarCurrentDate.getDay();
+        const offsetToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+        const mondayDate = new Date(calendarCurrentDate);
+        mondayDate.setDate(calendarCurrentDate.getDate() + offsetToMonday);
+        
+        const sundayDate = new Date(mondayDate);
+        sundayDate.setDate(mondayDate.getDate() + 6);
+        
+        const mName = mondayDate.getDate();
+        const mMonth = monthNames[mondayDate.getMonth()];
+        const sName = sundayDate.getDate();
+        const sMonth = monthNames[sundayDate.getMonth()];
+        const yName = mondayDate.getFullYear();
+        
+        if (mondayDate.getMonth() === sundayDate.getMonth()) {
+            headerTitle = `${mName} a ${sName} de ${mMonth} de ${yName}`;
+        } else {
+            headerTitle = `${mName} de ${mMonth} a ${sName} de ${sMonth} de ${yName}`;
+        }
+    } else if (calendarViewMode === 'year') {
+        headerTitle = `Ano ${year}`;
+    } else { // 'month'
+        headerTitle = `${monthName} ${year}`;
+    }
     
-    // Calcular a quantidade de linhas necessárias no grid para o mês
-    const totalRenderedCells = startDayOfWeek + totalDays;
-    const remainingCells = 7 - (totalRenderedCells % 7);
-    const paddingNext = remainingCells < 7 ? remainingCells : 0;
-    const totalCellsCount = totalRenderedCells + paddingNext;
-    const numRows = totalCellsCount / 7;
-    
+    // Renderizar o cabeçalho comum
     let html = `
-        <div class="calendar-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px; flex-shrink:0;">
-            <div style="display:flex; align-items:center; gap:8px;">
-                <h3 style="font-size:18px; font-weight:800; color:var(--text); margin:0;">${monthName} ${year}</h3>
+        <div class="calendar-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:12px; flex-shrink:0; border-bottom:1px solid var(--border-strong); padding-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <h3 style="font-size:18px; font-weight:800; color:var(--text); margin:0;">${headerTitle}</h3>
                 <span style="font-size:11px; background:rgba(18,101,194,0.1); color:var(--primary); padding:3px 8px; border-radius:100px; font-weight:700;">
                     ${calendarWorkouts.length} treinos cadastrados
                 </span>
             </div>
+            
+            <!-- Garmin-style Segmented View Switcher -->
+            <div class="calendar-view-switcher" style="display:flex; background:var(--border); padding:2px; border-radius:8px; border:1px solid var(--border-strong); align-items:center;">
+                <button onclick="changeCalendarView('week')" style="background:${calendarViewMode === 'week' ? 'var(--primary)' : 'transparent'}; color:${calendarViewMode === 'week' ? 'white' : 'var(--text-muted)'}; border:none; padding:5px 14px; font-size:11px; font-weight:700; border-radius:6px; cursor:pointer; transition:all 0.2s; outline:none;">Semana</button>
+                <button onclick="changeCalendarView('month')" style="background:${calendarViewMode === 'month' ? 'var(--primary)' : 'transparent'}; color:${calendarViewMode === 'month' ? 'white' : 'var(--text-muted)'}; border:none; padding:5px 14px; font-size:11px; font-weight:700; border-radius:6px; cursor:pointer; transition:all 0.2s; outline:none;">Mês</button>
+                <button onclick="changeCalendarView('year')" style="background:${calendarViewMode === 'year' ? 'var(--primary)' : 'transparent'}; color:${calendarViewMode === 'year' ? 'white' : 'var(--text-muted)'}; border:none; padding:5px 14px; font-size:11px; font-weight:700; border-radius:6px; cursor:pointer; transition:all 0.2s; outline:none;">Ano</button>
+            </div>
+            
             <div style="display:flex; gap:6px;">
                 <button class="btn btn-secondary" onclick="changeCalendarMonth(-1)" style="padding:6px 12px; font-size:12px;"><i class="ri-arrow-left-s-line"></i> Anterior</button>
                 <button class="btn btn-secondary" onclick="changeCalendarMonth(0)" style="padding:6px 12px; font-size:12px;">Hoje</button>
                 <button class="btn btn-secondary" onclick="changeCalendarMonth(1)" style="padding:6px 12px; font-size:12px;">Próximo <i class="ri-arrow-right-s-line"></i></button>
             </div>
         </div>
-        
-        <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(7, 1fr) 90px; grid-template-rows: auto repeat(${numRows}, 1fr); gap:6px; flex:1; min-height:0;">
-            <!-- Headers da semana -->
-            ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom", "Soma"].map(d => `
-                <div style="text-align:center; font-weight:700; font-size:12px; color:${d === 'Soma' ? 'var(--primary)' : 'var(--text-muted)'}; padding:4px 0; border-bottom:2px solid var(--border-strong);">
-                    ${d}
-                </div>
-            `).join('')}
     `;
     
-    // Dias do mês atual e arredores mapeados sequencialmente
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
-    const dayCells = [];
-    for (let i = 0; i < totalCellsCount; i++) {
-        const cellDate = new Date(year, month, 1 - startDayOfWeek + i);
-        const cellYear = cellDate.getFullYear();
-        const cellMonth = cellDate.getMonth();
-        const cellDayNum = cellDate.getDate();
-        const isCurrentMonth = cellMonth === month && cellYear === year;
-        const dateStr = `${cellYear}-${String(cellMonth + 1).padStart(2, '0')}-${String(cellDayNum).padStart(2, '0')}`;
-        const isToday = dateStr === todayStr;
+    // Renderização baseada no modo
+    if (calendarViewMode === 'week') {
+        const currentDayOfWeek = calendarCurrentDate.getDay();
+        const offsetToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+        const mondayDate = new Date(calendarCurrentDate);
+        mondayDate.setDate(calendarCurrentDate.getDate() + offsetToMonday);
+
+        const weekDays = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(mondayDate);
+            d.setDate(mondayDate.getDate() + i);
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const isToday = dateStr === todayStr;
+            const dayWorkouts = calendarWorkouts.filter(w => w.date.split('T')[0] === dateStr);
+            
+            weekDays.push({
+                dateStr,
+                dayNum: d.getDate(),
+                isToday,
+                workouts: dayWorkouts
+            });
+        }
         
-        const dayWorkouts = calendarWorkouts.filter(w => w.date.split('T')[0] === dateStr);
-        
-        dayCells.push({
-            dateStr,
-            dayNum: cellDayNum,
-            isCurrentMonth,
-            isToday,
-            workouts: dayWorkouts
-        });
-    }
-    
-    // Renderizar por semanas (linha por linha, com o card de soma na 8ª coluna)
-    for (let w = 0; w < numRows; w++) {
-        // Renderizar os 7 dias da semana
+        html += `
+            <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(7, 1fr); gap:8px; flex:1; min-height:350px;">
+        `;
+        const weekdaysLabels = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
         for (let d = 0; d < 7; d++) {
-            const cell = dayCells[w * 7 + d];
-            if (!cell.isCurrentMonth) {
+            const cell = weekDays[d];
+            const label = weekdaysLabels[d];
+            
+            html += `
+                <div class="calendar-day-box" 
+                     onclick="handleCalendarDayClick(event, '${cell.dateStr}')" 
+                     ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';" 
+                     ondragleave="this.style.borderColor='${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}';" 
+                     ondrop="this.style.borderColor='${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}'; handleWorkoutDrop(event, '${cell.dateStr}')"
+                     style="height:100%; min-height:300px; background:var(--bg); border: 1px solid ${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}; border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:6px; cursor:pointer; transition:all 0.15s; position:relative; overflow:hidden;">
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-bottom:1px solid var(--border-strong); padding-bottom:4px;">
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">${label}</span>
+                            <span style="font-size:16px; font-weight:800; color:${cell.isToday ? 'var(--primary)' : 'var(--text)'};">${cell.dayNum}</span>
+                        </div>
+                        ${cell.isToday ? `<span style="width:5px; height:5px; background:var(--primary); border-radius:50%;"></span>` : ''}
+                    </div>
+                    
+                    <div style="flex:1; display:flex; flex-direction:column; gap:4px; overflow-y:auto; min-height:0; margin-top:2px;">
+                        ${cell.workouts.map(wk => {
+                            const isCompleted = wk.status === 'completed';
+                            const wkDist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || null;
+                            const wkRealDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || null;
+                            const metricText = isCompleted 
+                                ? `${wkRealDist ? wkRealDist.toFixed(1) : (wkDist ? wkDist.toFixed(1) : '0')}km` 
+                                : `${wkDist ? wkDist.toFixed(1) : '—'}km`;
+
+                            const plannedDur = getWorkoutPlannedDuration(wk, athleteVam);
+                            let realDur = null;
+                            if (isCompleted) {
+                                realDur = wk.metrics?.real_duration;
+                                if (!realDur) {
+                                    const realDistVal = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance);
+                                    const realPaceStr = wk.metrics?.real_pace || wk.real_pace;
+                                    if (realDistVal > 0 && realPaceStr) {
+                                        const realPaceMins = parsePaceToMinutes(realPaceStr);
+                                        if (realPaceMins > 0) realDur = realDistVal * realPaceMins;
+                                    }
+                                }
+                                if (!realDur) realDur = plannedDur;
+                            }
+                            const durationText = isCompleted
+                                ? (realDur ? formatDurationFromMinutes(realDur) : '')
+                                : (plannedDur ? formatDurationFromMinutes(plannedDur) : '');
+
+                            let badgeBg = '#fff9c4'; 
+                            let borderStroke = '#fdd835'; 
+                            let textColor = '#1e293b'; 
+                            let typeIcon = '<i class="ri-run-line" style="font-size:12px;"></i>';
+
+                            if (wk.type === 'Natação') {
+                                badgeBg = '#e0f2fe'; borderStroke = '#7dd3fc'; textColor = '#0369a1';
+                                typeIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M2 21v-2q.95 0 1.425-.5T5.3 18t1.925.5t1.425.5t1.425-.5T12 18t1.925.5t1.425.5t1.425-.5T18.7 18t1.875.5T22 19v2q-1.475 0-1.937-.5T18.7 20t-1.425.5t-1.925.5t-1.925-.5T12 20t-1.425.5t-1.925.5t-1.925-.5T5.3 20t-1.363.5T2 21m0-4.5v-2q.95 0 1.425-.5t1.875-.5t1.938.5t1.412.5q.9 0 1.425-.5T12 13.5t1.925.5t1.425.5t1.425-.5t1.925-.5t1.875.5t1.425.5v2q-1.475 0-1.937-.5t-1.363-.5t-1.388.5t-1.962.5q-1.425 0-1.937-.5T12 15.5q-.95 0-1.412.5t-1.938.5t-1.963-.5t-1.387-.5t-1.362.5T2 16.5m4.9-5.1l3.325-3.325l-1-1q-.825-.825-1.75-1.2T5.2 5.5V3q1.875 0 3.1.413T10.7 5l6.4 6.4q-.425.275-.825.438T15.35 12q-.9 0-1.425-.5T12 11t-1.925.5t-1.425.5q-.525 0-.925-.162T6.9 11.4m11.575-7.663q.725.738.725 1.763q0 1.05-.725 1.775T16.7 8t-1.775-.725T14.2 5.5q0-1.025.725-1.763T16.7 3t1.775.738"/></svg>';
+                            } else if (wk.type === 'Ciclismo') {
+                                badgeBg = '#ecfdf5'; borderStroke = '#6ee7b7'; textColor = '#047857';
+                                typeIcon = '<i class="ri-riding-line" style="font-size:12px;"></i>';
+                            } else if (wk.type === 'Fortalecimento') {
+                                badgeBg = '#f5f3ff'; borderStroke = '#c084fc'; textColor = '#6d28d9';
+                                typeIcon = '<i class="ri-focus-3-line" style="font-size:12px;"></i>';
+                            } else if (wk.type === 'Outros') {
+                                badgeBg = '#f8fafc'; borderStroke = '#cbd5e1'; textColor = '#475569';
+                                typeIcon = '<i class="ri-file-list-3-line" style="font-size:12px;"></i>';
+                            }
+
+                            if (isCompleted) {
+                                borderStroke = '#10b981';
+                                typeIcon = '<i class="ri-checkbox-circle-fill" style="font-size:12px; color:#10b981;"></i>';
+                            }
+
+                            return `
+                                <div draggable="true" 
+                                     ondragstart="handleWorkoutDragStart(event, '${wk.id}')" 
+                                     onclick="handleCalendarWorkoutClick(event, '${wk.id}')" 
+                                     oncontextmenu="handleWorkoutContextMenu(event, '${wk.id}')"
+                                     class="workout-calendar-item"
+                                     style="background:${badgeBg}; color:${textColor}; padding:6px 8px; border-radius:6px; font-size:11px; font-weight:500; display:flex; flex-direction:column; gap:2px; border:1px solid ${borderStroke}; cursor:grab; position:relative; box-shadow:0 1px 3px rgba(0,0,0,0.05); transition:all 0.15s;" 
+                                     title="Clique para editar\nArraste para mover/copiar (Ctrl)\nBotão direito para copiar/excluir\n\n${wk.title}\n${wk.description || ''}">
+                                    
+                                    <div style="display:flex; align-items:center; gap:4px; width:100%;">
+                                        <span style="display:inline-flex; align-items:center; opacity:0.8;">${typeIcon}</span>
+                                        <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-weight:600;">${wk.title}</span>
+                                    </div>
+
+                                    <div class="workout-metric-text" style="font-size:9.5px; opacity:0.7; display:flex; align-items:center; flex-wrap:wrap; gap:4px; font-weight:450; margin-top:2px;">
+                                        <span>${metricText}</span>
+                                        ${durationText ? `<span style="display:flex; align-items:center; gap:2px; opacity:0.8;"><i class="ri-time-line" style="font-size:10px;"></i> ${durationText}</span>` : ''}
+                                    </div>
+
+                                    <div class="workout-actions-overlay" style="display:none; gap:10px; align-items:center; justify-content:center; border-radius:4px; margin-top:2px; width:100%;">
+                                        <i class="ri-file-copy-line" onclick="event.stopPropagation(); event.preventDefault(); quickDuplicateWorkout('${wk.id}')" title="Duplicar neste dia" style="cursor:pointer; font-size:12px; color:#f59e0b;"></i>
+                                        <i class="ri-send-plane-line" onclick="event.stopPropagation(); event.preventDefault(); openSendWorkoutToAthleteModal('${wk.id}')" title="Copiar p/ Outro Aluno" style="cursor:pointer; font-size:12px; color:#3b82f6;"></i>
+                                        <i class="ri-folder-add-line" onclick="event.stopPropagation(); event.preventDefault(); openSendWorkoutToFolderModal('${wk.id}')" title="Salvar como Modelo" style="cursor:pointer; font-size:12px; color:#0891b2;"></i>
+                                        <i class="ri-delete-bin-line btn-icon-danger" onclick="event.stopPropagation(); event.preventDefault(); quickDeleteWorkout('${wk.id}')" title="Excluir" style="cursor:pointer; font-size:12px;"></i>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        html += `</div>`; // Fechar a grid
+
+        // Barra de Totais semanais premium
+        let plannedSum = 0;
+        let completedSum = 0;
+        let plannedDurationSum = 0;
+        let completedDurationSum = 0;
+        
+        weekDays.forEach(cell => {
+            if (cell.workouts) {
+                cell.workouts.forEach(wk => {
+                    const dist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || 0;
+                    plannedSum += dist;
+                    const plannedDur = getWorkoutPlannedDuration(wk, athleteVam);
+                    plannedDurationSum += plannedDur;
+                    
+                    if (wk.status === 'completed') {
+                        const realDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || dist;
+                        completedSum += realDist;
+                        
+                        let realDur = wk.metrics?.real_duration;
+                        if (!realDur) {
+                            const realDistVal = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance);
+                            const realPaceStr = wk.metrics?.real_pace || wk.real_pace;
+                            if (realDistVal > 0 && realPaceStr) {
+                                const realPaceMins = parsePaceToMinutes(realPaceStr);
+                                if (realPaceMins > 0) realDur = realDistVal * realPaceMins;
+                            }
+                        }
+                        if (!realDur) realDur = plannedDur;
+                        completedDurationSum += realDur;
+                    }
+                });
+            }
+        });
+
+        const pDurText = plannedDurationSum > 0 ? formatDurationFromMinutes(plannedDurationSum) : '';
+        const cDurText = completedDurationSum > 0 ? formatDurationFromMinutes(completedDurationSum) : '';
+
+        html += `
+            <div style="background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:12px 16px; display:flex; justify-content:space-around; align-items:center; margin-top:12px; box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                <div style="display:flex; flex-direction:column; gap:2px; text-align:center;">
+                    <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Distância Planejada</span>
+                    <span style="font-size:16px; font-weight:800; color:var(--text);">${plannedSum.toFixed(1)} km</span>
+                </div>
+                
+                <div style="width:1px; height:24px; background:var(--border-strong);"></div>
+                
+                <div style="display:flex; flex-direction:column; gap:2px; text-align:center;">
+                    <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Tempo Planejado</span>
+                    <span style="font-size:16px; font-weight:800; color:var(--text);"><i class="ri-time-line" style="color:var(--primary); margin-right:3px;"></i>${pDurText || '—'}</span>
+                </div>
+                
+                <div style="width:1px; height:24px; background:var(--border-strong);"></div>
+                
+                <div style="display:flex; flex-direction:column; gap:2px; text-align:center;">
+                    <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Distância Realizada</span>
+                    <span style="font-size:16px; font-weight:800; color:var(--success);">${completedSum.toFixed(1)} km</span>
+                </div>
+                
+                <div style="width:1px; height:24px; background:var(--border-strong);"></div>
+                
+                <div style="display:flex; flex-direction:column; gap:2px; text-align:center;">
+                    <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Tempo Realizado</span>
+                    <span style="font-size:16px; font-weight:800; color:var(--success);"><i class="ri-time-line" style="margin-right:3px;"></i>${cDurText || '—'}</span>
+                </div>
+            </div>
+        `;
+        
+    } else if (calendarViewMode === 'year') {
+        html += `
+            <div class="calendar-grid-year" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:12px; flex:1; min-height:0; overflow-y:auto; padding:2px;">
+        `;
+
+        for (let m = 0; m < 12; m++) {
+            const firstDay = new Date(year, m, 1);
+            const lastDay = new Date(year, m + 1, 0);
+            const totalDays = lastDay.getDate();
+            
+            let startDayOfWeek = firstDay.getDay();
+            startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+            
+            html += `
+                <div style="background:var(--panel); border:1px solid var(--border-strong); border-radius:10px; padding:10px; transition:all 0.15s; display:flex; flex-direction:column; gap:4px;" class="mini-month-card">
+                    <h4 style="font-size:12.5px; font-weight:800; color:var(--primary); margin:0 0 4px 0; text-align:center;">${monthNames[m]}</h4>
+                    
+                    <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; text-align:center; font-size:9px; font-weight:700; color:var(--text-muted); border-bottom:1px solid var(--border-strong); padding-bottom:3px; opacity:0.8;">
+                        ${["S", "T", "Q", "Q", "S", "S", "D"].map(d => `<div>${d}</div>`).join('')}
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:4px 2px; text-align:center; font-size:10px; margin-top:2px;">
+            `;
+            
+            for (let empty = 0; empty < startDayOfWeek; empty++) {
+                html += `<div></div>`;
+            }
+            
+            for (let day = 1; day <= totalDays; day++) {
+                const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayWorkouts = calendarWorkouts.filter(w => w.date.split('T')[0] === dateStr);
+                const isToday = dateStr === todayStr;
+                
+                let hasWorkout = dayWorkouts.length > 0;
+                let cellStyle = `display:flex; justify-content:center; align-items:center; height:24px; width:24px; border-radius:50%; font-size:10.5px; cursor:pointer; transition:all 0.15s; margin:auto;`;
+                let titleAttr = "";
+                let textStyle = "";
+                
+                if (hasWorkout) {
+                    const completed = dayWorkouts.some(w => w.status === 'completed');
+                    let color = '#fbbf24'; // default yellow
+                    let bgColor = '#fef9c3'; // light yellow
+                    let textColor = '#92400e';
+                    
+                    if (completed) {
+                        color = '#10b981';
+                        bgColor = '#d1fae5';
+                        textColor = '#065f46';
+                    } else {
+                        const firstType = dayWorkouts[0].type;
+                        if (firstType === 'Natação') {
+                            color = '#0284c7';
+                            bgColor = '#e0f2fe';
+                            textColor = '#075985';
+                        } else if (firstType === 'Ciclismo') {
+                            color = '#10b981';
+                            bgColor = '#d1fae5';
+                            textColor = '#065f46';
+                        } else if (firstType === 'Fortalecimento') {
+                            color = '#8b5cf6';
+                            bgColor = '#f3e8ff';
+                            textColor = '#5b21b6';
+                        } else if (firstType === 'Outros') {
+                            color = '#64748b';
+                            bgColor = '#f1f5f9';
+                            textColor = '#334155';
+                        }
+                    }
+                    
+                    if (isToday) {
+                        cellStyle += ` background:${bgColor}; border:1.5px solid var(--primary); font-weight:800;`;
+                    } else {
+                        cellStyle += ` background:${bgColor}; font-weight:800;`;
+                    }
+                    textStyle = `color:${textColor};`;
+                    titleAttr = `title="${dayWorkouts.map(w => w.title).join(', ')}"`;
+                } else if (isToday) {
+                    cellStyle += ` border:1.5px solid var(--primary); font-weight:800;`;
+                    textStyle = `color:var(--primary);`;
+                } else {
+                    cellStyle += ` font-weight:500;`;
+                    textStyle = `color:var(--text);`;
+                }
+                
                 html += `
-                    <div style="height:100%; min-height:0; background:var(--bg); border:1px solid var(--border-strong); border-radius:8px; padding:6px; opacity:0.35; cursor:not-allowed; overflow:hidden;">
-                        <span style="font-size:11px; font-weight:600; color:var(--text-muted);">${cell.dayNum}</span>
+                    <div onclick="event.stopPropagation(); handleYearDayClick('${dateStr}')" 
+                         style="${cellStyle} ${textStyle}" 
+                         ${titleAttr}>
+                        ${day}
                     </div>
                 `;
-            } else {
-                html += `
-                    <div class="calendar-day-box" 
-                         onclick="handleCalendarDayClick(event, '${cell.dateStr}')" 
-                         ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';" 
-                         ondragleave="this.style.borderColor='${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}';" 
-                         ondrop="this.style.borderColor='${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}'; handleWorkoutDrop(event, '${cell.dateStr}')"
-                         style="height:100%; min-height:0; background:var(--bg); border: 1px solid ${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}; border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:4px; cursor:pointer; transition:all 0.15s; position:relative; overflow:hidden; ${cell.isToday ? 'box-shadow: 0 0 0 1px var(--primary);' : ''}">
-                        <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
-                            <span style="font-size:11px; font-weight:800; color:${cell.isToday ? 'var(--primary)' : 'var(--text)'};">${cell.dayNum}</span>
-                            ${cell.isToday ? `<span style="width:5px; height:5px; background:var(--primary); border-radius:50%;"></span>` : ''}
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        
+    } else { // 'month'
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const totalDays = lastDay.getDate();
+        
+        let startDayOfWeek = firstDay.getDay();
+        startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+        
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
+        const totalRenderedCells = startDayOfWeek + totalDays;
+        const remainingCells = 7 - (totalRenderedCells % 7);
+        const paddingNext = remainingCells < 7 ? remainingCells : 0;
+        const totalCellsCount = totalRenderedCells + paddingNext;
+        const numRows = totalCellsCount / 7;
+        
+        html += `
+            <div class="calendar-grid" style="display:grid; grid-template-columns: repeat(7, 1fr) 90px; grid-template-rows: auto repeat(${numRows}, 1fr); gap:6px; flex:1; min-height:0;">
+                <!-- Headers da semana -->
+                ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom", "Soma"].map(d => `
+                    <div style="text-align:center; font-weight:700; font-size:12px; color:${d === 'Soma' ? 'var(--primary)' : 'var(--text-muted)'}; padding:4px 0; border-bottom:2px solid var(--border-strong);">
+                        ${d}
+                    </div>
+                `).join('')}
+        `;
+        
+        const dayCells = [];
+        for (let i = 0; i < totalCellsCount; i++) {
+            const cellDate = new Date(year, month, 1 - startDayOfWeek + i);
+            const cellYear = cellDate.getFullYear();
+            const cellMonth = cellDate.getMonth();
+            const cellDayNum = cellDate.getDate();
+            const isCurrentMonth = cellMonth === month && cellYear === year;
+            const dateStr = `${cellYear}-${String(cellMonth + 1).padStart(2, '0')}-${String(cellDayNum).padStart(2, '0')}`;
+            const isToday = dateStr === todayStr;
+            
+            const dayWorkouts = calendarWorkouts.filter(w => w.date.split('T')[0] === dateStr);
+            
+            dayCells.push({
+                dateStr,
+                dayNum: cellDayNum,
+                isCurrentMonth,
+                isToday,
+                workouts: dayWorkouts
+            });
+        }
+        
+        for (let w = 0; w < numRows; w++) {
+            for (let d = 0; d < 7; d++) {
+                const cell = dayCells[w * 7 + d];
+                if (!cell.isCurrentMonth) {
+                    html += `
+                        <div style="height:100%; min-height:0; background:var(--bg); border:1px solid var(--border-strong); border-radius:8px; padding:6px; opacity:0.35; cursor:not-allowed; overflow:hidden;">
+                            <span style="font-size:11px; font-weight:600; color:var(--text-muted);">${cell.dayNum}</span>
                         </div>
-                        
-                        <div style="flex:1; display:flex; flex-direction:column; gap:4px; overflow-y:auto; min-height:0; margin-top:2px;">
-                            ${cell.workouts.map(wk => {
-                                const isCompleted = wk.status === 'completed';
-                                const wkDist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || null;
-                                const wkRealDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || null;
-                                const metricText = isCompleted 
-                                    ? `${wkRealDist ? wkRealDist.toFixed(1) : (wkDist ? wkDist.toFixed(1) : '0')}km` 
-                                    : `${wkDist ? wkDist.toFixed(1) : '—'}km`;
+                    `;
+                } else {
+                    html += `
+                        <div class="calendar-day-box" 
+                             onclick="handleCalendarDayClick(event, '${cell.dateStr}')" 
+                             ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';" 
+                             ondragleave="this.style.borderColor='${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}';" 
+                             ondrop="this.style.borderColor='${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}'; handleWorkoutDrop(event, '${cell.dateStr}')"
+                             style="height:100%; min-height:0; background:var(--bg); border: 1px solid ${cell.isToday ? 'var(--primary)' : 'var(--border-strong)'}; border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:4px; cursor:pointer; transition:all 0.15s; position:relative; overflow:hidden;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+                                <span style="font-size:11px; font-weight:600; color:${cell.isToday ? 'var(--primary)' : 'var(--text)'};">${cell.dayNum}</span>
+                                ${cell.isToday ? `<span style="width:5px; height:5px; background:var(--primary); border-radius:50%;"></span>` : ''}
+                            </div>
+                            
+                            <div style="flex:1; display:flex; flex-direction:column; gap:4px; overflow-y:auto; min-height:0; margin-top:2px;">
+                                ${cell.workouts.map(wk => {
+                                    const isCompleted = wk.status === 'completed';
+                                    const wkDist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || null;
+                                    const wkRealDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || null;
+                                    const metricText = isCompleted 
+                                        ? `${wkRealDist ? wkRealDist.toFixed(1) : (wkDist ? wkDist.toFixed(1) : '0')}km` 
+                                        : `${wkDist ? wkDist.toFixed(1) : '—'}km`;
 
-                                // Definir cores vibrantes e esportivas baseadas no tipo de treino
-                                let badgeBg = '#fff9c4'; // Amarelo suave padrão para corrida prescrita
-                                let borderStroke = '#fdd835'; // Borda amarela forte
-                                let textColor = '#1e293b'; // Slate gray escuro para excelente contraste
-                                let typeIcon = '<i class="ri-run-line" style="font-size:12px;"></i>';
+                                    const plannedDur = getWorkoutPlannedDuration(wk, athleteVam);
+                                    let realDur = null;
+                                    if (isCompleted) {
+                                        realDur = wk.metrics?.real_duration;
+                                        if (!realDur) {
+                                            const realDistVal = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance);
+                                            const realPaceStr = wk.metrics?.real_pace || wk.real_pace;
+                                            if (realDistVal > 0 && realPaceStr) {
+                                                const realPaceMins = parsePaceToMinutes(realPaceStr);
+                                                if (realPaceMins > 0) realDur = realDistVal * realPaceMins;
+                                            }
+                                        }
+                                        if (!realDur) realDur = plannedDur;
+                                    }
+                                    const durationText = isCompleted
+                                        ? (realDur ? formatDurationFromMinutes(realDur) : '')
+                                        : (plannedDur ? formatDurationFromMinutes(plannedDur) : '');
 
-                                if (wk.type === 'Natação') {
-                                    badgeBg = '#e0f2fe';
-                                    borderStroke = '#7dd3fc';
-                                    textColor = '#0369a1';
-                                    typeIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M2 21v-2q.95 0 1.425-.5T5.3 18t1.925.5t1.425.5t1.425-.5T12 18t1.925.5t1.425.5t1.425-.5T18.7 18t1.875.5T22 19v2q-1.475 0-1.937-.5T18.7 20t-1.425.5t-1.925.5t-1.925-.5T12 20t-1.425.5t-1.925.5t-1.925-.5T5.3 20t-1.363.5T2 21m0-4.5v-2q.95 0 1.425-.5t1.875-.5t1.938.5t1.412.5q.9 0 1.425-.5T12 13.5t1.925.5t1.425.5t1.425-.5t1.925-.5t1.875.5t1.425.5v2q-1.475 0-1.937-.5t-1.363-.5t-1.388.5t-1.962.5q-1.425 0-1.937-.5T12 15.5q-.95 0-1.412.5t-1.938.5t-1.963-.5t-1.387-.5t-1.362.5T2 16.5m4.9-5.1l3.325-3.325l-1-1q-.825-.825-1.75-1.2T5.2 5.5V3q1.875 0 3.1.413T10.7 5l6.4 6.4q-.425.275-.825.438T15.35 12q-.9 0-1.425-.5T12 11t-1.925.5t-1.425.5q-.525 0-.925-.162T6.9 11.4m11.575-7.663q.725.738.725 1.763q0 1.05-.725 1.775T16.7 8t-1.775-.725T14.2 5.5q0-1.025.725-1.763T16.7 3t1.775.738"/></svg>';
-                                } else if (wk.type === 'Ciclismo') {
-                                    badgeBg = '#ecfdf5';
-                                    borderStroke = '#6ee7b7';
-                                    textColor = '#047857';
-                                    typeIcon = '<i class="ri-riding-line" style="font-size:12px;"></i>';
-                                } else if (wk.type === 'Fortalecimento') {
-                                    badgeBg = '#f5f3ff';
-                                    borderStroke = '#c084fc';
-                                    textColor = '#6d28d9';
-                                    typeIcon = '<i class="ri-focus-3-line" style="font-size:12px;"></i>';
-                                } else if (wk.type === 'Outros') {
-                                    badgeBg = '#f8fafc';
-                                    borderStroke = '#cbd5e1';
-                                    textColor = '#475569';
-                                    typeIcon = '<i class="ri-file-list-3-line" style="font-size:12px;"></i>';
-                                }
+                                    let badgeBg = '#fff9c4'; 
+                                    let borderStroke = '#fdd835'; 
+                                    let textColor = '#1e293b'; 
+                                    let typeIcon = '<i class="ri-run-line" style="font-size:12px;"></i>';
 
-                                // Se concluído, borda verde esmeralda destacada e ícone de checkmark
-                                if (isCompleted) {
-                                    borderStroke = '#10b981';
-                                    typeIcon = '<i class="ri-checkbox-circle-fill" style="font-size:12px; color:#10b981;"></i>';
-                                }
+                                    if (wk.type === 'Natação') {
+                                        badgeBg = '#e0f2fe'; borderStroke = '#7dd3fc'; textColor = '#0369a1';
+                                        typeIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path d="M2 21v-2q.95 0 1.425-.5T5.3 18t1.925.5t1.425.5t1.425-.5T12 18t1.925.5t1.425.5t1.425-.5T18.7 18t1.875.5T22 19v2q-1.475 0-1.937-.5T18.7 20t-1.425.5t-1.925.5t-1.925-.5T12 20t-1.425.5t-1.925.5t-1.925-.5T5.3 20t-1.363.5T2 21m0-4.5v-2q.95 0 1.425-.5t1.875-.5t1.938.5t1.412.5q.9 0 1.425-.5T12 13.5t1.925.5t1.425.5t1.425-.5t1.925-.5t1.875.5t1.425.5v2q-1.475 0-1.937-.5t-1.363-.5t-1.388.5t-1.962.5q-1.425 0-1.937-.5T12 15.5q-.95 0-1.412.5t-1.938.5t-1.963-.5t-1.387-.5t-1.362.5T2 16.5m4.9-5.1l3.325-3.325l-1-1q-.825-.825-1.75-1.2T5.2 5.5V3q1.875 0 3.1.413T10.7 5l6.4 6.4q-.425.275-.825.438T15.35 12q-.9 0-1.425-.5T12 11t-1.925.5t-1.425.5q-.525 0-.925-.162T6.9 11.4m11.575-7.663q.725.738.725 1.763q0 1.05-.725 1.775T16.7 8t-1.775-.725T14.2 5.5q0-1.025.725-1.763T16.7 3t1.775.738"/></svg>';
+                                    } else if (wk.type === 'Ciclismo') {
+                                        badgeBg = '#ecfdf5'; borderStroke = '#6ee7b7'; textColor = '#047857';
+                                        typeIcon = '<i class="ri-riding-line" style="font-size:12px;"></i>';
+                                    } else if (wk.type === 'Fortalecimento') {
+                                        badgeBg = '#f5f3ff'; borderStroke = '#c084fc'; textColor = '#6d28d9';
+                                        typeIcon = '<i class="ri-focus-3-line" style="font-size:12px;"></i>';
+                                    } else if (wk.type === 'Outros') {
+                                        badgeBg = '#f8fafc'; borderStroke = '#cbd5e1'; textColor = '#475569';
+                                        typeIcon = '<i class="ri-file-list-3-line" style="font-size:12px;"></i>';
+                                    }
 
-                                return `
-                                    <div draggable="true" 
-                                         ondragstart="handleWorkoutDragStart(event, '${wk.id}')" 
-                                         onclick="handleCalendarWorkoutClick(event, '${wk.id}')" 
-                                         oncontextmenu="handleWorkoutContextMenu(event, '${wk.id}')"
-                                         class="workout-calendar-item"
-                                         style="background:${badgeBg}; color:${textColor}; padding:6px 8px; border-radius:6px; font-size:11px; font-weight:700; display:flex; flex-direction:column; gap:2px; border:1px solid ${borderStroke}; cursor:grab; position:relative; box-shadow:0 1px 3px rgba(0,0,0,0.05); transition:all 0.15s;" 
-                                         title="Clique para editar\nArraste para mover/copiar (Ctrl)\nBotão direito para copiar/excluir\n\n${wk.title}\n${wk.description || ''}">
-                                        
-                                        <div style="display:flex; align-items:center; gap:4px; width:100%;">
-                                            <span style="display:inline-flex; align-items:center; opacity:0.8;">${typeIcon}</span>
-                                            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-weight:800;">${wk.title}</span>
+                                    if (isCompleted) {
+                                        borderStroke = '#10b981';
+                                        typeIcon = '<i class="ri-checkbox-circle-fill" style="font-size:12px; color:#10b981;"></i>';
+                                    }
+
+                                    return `
+                                        <div draggable="true" 
+                                             ondragstart="handleWorkoutDragStart(event, '${wk.id}')" 
+                                             onclick="handleCalendarWorkoutClick(event, '${wk.id}')" 
+                                             oncontextmenu="handleWorkoutContextMenu(event, '${wk.id}')"
+                                             class="workout-calendar-item"
+                                             style="background:${badgeBg}; color:${textColor}; padding:6px 8px; border-radius:6px; font-size:11px; font-weight:500; display:flex; flex-direction:column; gap:2px; border:1px solid ${borderStroke}; cursor:grab; position:relative; box-shadow:0 1px 2px rgba(0,0,0,0.03); transition:all 0.15s;" 
+                                             title="${wk.title}">
                                             
-                                            <!-- Hover overlay de ações rápidas -->
-                                            <div class="workout-actions-overlay" style="display:none; gap:6px; align-items:center; position:absolute; right:4px; top:4px; background:${badgeBg}; padding-left:6px; border-radius:4px; box-shadow:-4px 0 8px ${badgeBg};">
+                                            <div style="display:flex; align-items:center; gap:4px; width:100%;">
+                                                <span style="display:inline-flex; align-items:center; opacity:0.8;">${typeIcon}</span>
+                                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; font-weight:800;">${wk.title}</span>
+                                            </div>
+
+                                            <div class="workout-metric-text" style="font-size:9.5px; opacity:0.8; display:flex; align-items:center; flex-wrap:wrap; gap:4px; font-weight:600; margin-top:2px;">
+                                                <span>${metricText}</span>
+                                                ${durationText ? `<span style="display:flex; align-items:center; gap:2px; opacity:0.8;"><i class="ri-time-line" style="font-size:10px;"></i> ${durationText}</span>` : ''}
+                                            </div>
+
+                                            <div class="workout-actions-overlay" style="display:none; gap:10px; align-items:center; justify-content:center; border-radius:4px; margin-top:2px; width:100%;">
                                                 <i class="ri-file-copy-line" onclick="event.stopPropagation(); event.preventDefault(); quickDuplicateWorkout('${wk.id}')" title="Duplicar neste dia" style="cursor:pointer; font-size:12px; color:#f59e0b;"></i>
                                                 <i class="ri-send-plane-line" onclick="event.stopPropagation(); event.preventDefault(); openSendWorkoutToAthleteModal('${wk.id}')" title="Copiar p/ Outro Aluno" style="cursor:pointer; font-size:12px; color:#3b82f6;"></i>
                                                 <i class="ri-folder-add-line" onclick="event.stopPropagation(); event.preventDefault(); openSendWorkoutToFolderModal('${wk.id}')" title="Salvar como Modelo" style="cursor:pointer; font-size:12px; color:#0891b2;"></i>
                                                 <i class="ri-delete-bin-line btn-icon-danger" onclick="event.stopPropagation(); event.preventDefault(); quickDeleteWorkout('${wk.id}')" title="Excluir" style="cursor:pointer; font-size:12px;"></i>
                                             </div>
                                         </div>
-
-                                        <div class="workout-metric-text" style="font-size:9.5px; opacity:0.8; display:flex; align-items:center; gap:4px; font-weight:600; margin-top:2px;">
-                                            ${metricText}
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('')}
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
+                    `;
+                }
+            }
+            
+            let plannedSum = 0;
+            let completedSum = 0;
+            let plannedDurationSum = 0;
+            let completedDurationSum = 0;
+            for (let d = 0; d < 7; d++) {
+                const cell = dayCells[w * 7 + d];
+                if (cell && cell.workouts) {
+                    cell.workouts.forEach(wk => {
+                        const dist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || 0;
+                        plannedSum += dist;
+                        const plannedDur = getWorkoutPlannedDuration(wk, athleteVam);
+                        plannedDurationSum += plannedDur;
+                        
+                        if (wk.status === 'completed') {
+                            const realDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || dist;
+                            completedSum += realDist;
+                            
+                            let realDur = wk.metrics?.real_duration;
+                            if (!realDur) {
+                                const realDistVal = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance);
+                                const realPaceStr = wk.metrics?.real_pace || wk.real_pace;
+                                if (realDistVal > 0 && realPaceStr) {
+                                    const realPaceMins = parsePaceToMinutes(realPaceStr);
+                                    if (realPaceMins > 0) realDur = realDistVal * realPaceMins;
+                                }
+                            }
+                            if (!realDur) realDur = plannedDur;
+                            completedDurationSum += realDur;
+                        }
+                    });
+                }
+            }
+            
+            const hasCompleted = completedSum > 0;
+            const plannedDurText = plannedDurationSum > 0 ? formatDurationFromMinutes(plannedDurationSum) : '';
+            const completedDurText = completedDurationSum > 0 ? formatDurationFromMinutes(completedDurationSum) : '';
+
+            html += `
+                <div class="calendar-weekly-sum-box" 
+                     style="height:100%; min-height:0; background:var(--panel); border:1px solid var(--border-strong); border-left:3px solid var(--primary); border-radius:8px; padding:6px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; transition:all 0.15s; gap:2px;">
+                    <span style="font-size:9px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">Soma</span>
+                    
+                    <div style="display:flex; flex-direction:column; gap:1px;">
+                        <span style="font-size:13px; font-weight:800; color:var(--text);">${plannedSum > 0 ? plannedSum.toFixed(1) + ' km' : '—'}</span>
+                        ${plannedDurText ? `<span style="font-size:10px; color:var(--text-muted); font-weight:600;"><i class="ri-time-line" style="font-size:9.5px;"></i> ${plannedDurText}</span>` : ''}
                     </div>
-                `;
-            }
+                    
+                    ${hasCompleted ? `
+                        <div style="width:80%; height:1px; background:var(--border-strong); margin:4px 0;"></div>
+                        <div style="display:flex; flex-direction:column; gap:1px;">
+                            <span style="font-size:11px; font-weight:800; color:var(--success);">✓ ${completedSum.toFixed(1)} km</span>
+                            ${completedDurText ? `<span style="font-size:9.5px; color:var(--success); font-weight:700;"><i class="ri-time-line" style="font-size:9px;"></i> ${completedDurText}</span>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
         }
         
-        // Calcular a soma da semana (usando metrics.distance_value e metrics.real_distance)
-        let plannedSum = 0;
-        let completedSum = 0;
-        for (let d = 0; d < 7; d++) {
-            const cell = dayCells[w * 7 + d];
-            if (cell && cell.workouts) {
-                cell.workouts.forEach(wk => {
-                    const dist = parseFloat(wk.metrics?.distance_value) || parseFloat(wk.distance) || 0;
-                    plannedSum += dist;
-                    if (wk.status === 'completed') {
-                        const realDist = parseFloat(wk.metrics?.real_distance) || parseFloat(wk.real_distance) || dist;
-                        completedSum += realDist;
-                    }
-                });
-            }
-        }
-        
-        // Renderizar o 8º card de soma semanal — design limpo e discreto
-        const hasCompleted = completedSum > 0;
-        html += `
-            <div class="calendar-weekly-sum-box" 
-                 style="height:100%; min-height:0; background:var(--panel); border:1px solid var(--border-strong); border-left:3px solid var(--primary); border-radius:8px; padding:8px 6px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; transition:all 0.15s; gap:4px;">
-                <span style="font-size:9px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px;">Semana</span>
-                <span style="font-size:15px; font-weight:900; color:var(--text); letter-spacing:-0.5px; line-height:1;">
-                    ${plannedSum > 0 ? plannedSum.toFixed(1) : '—'}
-                </span>
-                <span style="font-size:10px; font-weight:600; color:var(--text-muted); margin-top:-2px;">km</span>
-                ${hasCompleted ? `
-                <div style="width:100%; height:1px; background:var(--border); margin:2px 0;"></div>
-                <span style="font-size:10px; font-weight:700; color:var(--success);">✓ ${completedSum.toFixed(1)}</span>
-                <span style="font-size:9px; font-weight:500; color:var(--text-muted);">realizado</span>
-                ` : ''}
-            </div>
-        `;
+        html += `</div>`;
     }
     
-    html += `</div>`;
     container.innerHTML = html;
     
-    // Adicionar estilos de hover de forma limpa e otimizada
     if (!document.getElementById('calendar-hover-styles')) {
         const styleEl = document.createElement('style');
         styleEl.id = 'calendar-hover-styles';
@@ -1782,11 +2294,21 @@ function renderHistoryCalendar() {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.06);
                 background: var(--panel) !important;
             }
+            .workout-calendar-item:hover {
+                box-shadow: 0 4px 10px rgba(0,0,0,0.08) !important;
+                transform: translateY(-1px);
+                z-index: 10 !important;
+            }
             .workout-calendar-item:hover .workout-actions-overlay {
                 display: flex !important;
             }
             .workout-calendar-item:hover .workout-metric-text {
                 display: none !important;
+            }
+            .mini-month-card:hover {
+                transform: translateY(-2px);
+                border-color: var(--primary) !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.06);
             }
         `;
         document.head.appendChild(styleEl);
@@ -1797,7 +2319,13 @@ function changeCalendarMonth(offset) {
     if (offset === 0) {
         calendarCurrentDate = new Date();
     } else {
-        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + offset);
+        if (calendarViewMode === 'week') {
+            calendarCurrentDate.setDate(calendarCurrentDate.getDate() + offset * 7);
+        } else if (calendarViewMode === 'year') {
+            calendarCurrentDate.setFullYear(calendarCurrentDate.getFullYear() + offset);
+        } else { // 'month'
+            calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + offset);
+        }
     }
     renderHistoryCalendar();
 }
@@ -1814,7 +2342,7 @@ async function handleWorkoutDrop(e, targetDateStr) {
     const wId = e.dataTransfer.getData('text/plain');
     if (!wId) return;
     
-    const isCopy = e.ctrlKey || e.metaKey || e.altKey;
+    const isCopy = e.ctrlKey; // Apenas copia se a tecla Ctrl estiver ativamente pressionada
     const workout = calendarWorkouts.find(x => String(x.id) === String(wId));
     if (!workout) return;
     
@@ -1838,12 +2366,24 @@ async function handleWorkoutDrop(e, targetDateStr) {
         else { showToast('Treino copiado!'); loadCalendarWorkouts(); }
     } else {
         const oldDate = workout.date;
-        workout.date = targetDateStr + 'T12:00:00';
+        
+        // Atualiza a lista de treinos do calendário de forma imutável
+        calendarWorkouts = calendarWorkouts.map(x => 
+            String(x.id) === String(wId) ? { ...x, date: targetDateStr + 'T12:00:00' } : x
+        );
         renderHistoryCalendar();
         
         const { error } = await dbClient.from('workouts').update({ date: targetDateStr }).eq('id', wId);
-        if (error) { workout.date = oldDate; renderHistoryCalendar(); showToast('Erro ao mover treino.'); }
-        else { showToast('Treino movido!'); }
+        if (error) { 
+            // Reverte a alteração em caso de falha de conexão/banco
+            calendarWorkouts = calendarWorkouts.map(x => 
+                String(x.id) === String(wId) ? { ...x, date: oldDate } : x
+            );
+            renderHistoryCalendar(); 
+            showToast('Erro ao mover treino.'); 
+        } else { 
+            showToast('Treino movido!'); 
+        }
     }
 }
 
@@ -1860,25 +2400,25 @@ function handleWorkoutContextMenu(e, wId) {
     menu.style.left = e.clientX + 'px';
     menu.style.top = e.clientY + 'px';
     menu.style.background = 'var(--panel)';
-    menu.style.border = '1px solid var(--border-strong)';
-    menu.style.borderRadius = '8px';
-    menu.style.padding = '4px 0';
-    menu.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
+    menu.style.border = '1px solid var(--border)';
+    menu.style.borderRadius = '12px';
+    menu.style.padding = '6px 0';
+    menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.02)';
     menu.style.zIndex = '1050';
-    menu.style.minWidth = '140px';
+    menu.style.minWidth = '160px';
     
     menu.innerHTML = `
-        <div onclick="quickDuplicateWorkout('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--text); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
-            <i class="ri-file-copy-line" style="font-size:16px;"></i> Duplicar Treino
+        <div onclick="quickDuplicateWorkout('${wId}')" style="padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; display:flex; gap:10px; align-items:center; color:var(--text); transition:all 0.15s ease;" onmouseover="this.style.background='var(--bg)'; this.style.color='var(--primary)';" onmouseout="this.style.background='transparent'; this.style.color='var(--text)';">
+            <i class="ri-file-copy-line" style="font-size:15px; opacity:0.75;"></i> Duplicar Treino
         </div>
-        <div onclick="openSendWorkoutToAthleteModal('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--text); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
-            <i class="ri-send-plane-line" style="font-size:16px;"></i> Copiar p/ Aluno
+        <div onclick="openSendWorkoutToAthleteModal('${wId}')" style="padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; display:flex; gap:10px; align-items:center; color:var(--text); transition:all 0.15s ease;" onmouseover="this.style.background='var(--bg)'; this.style.color='var(--primary)';" onmouseout="this.style.background='transparent'; this.style.color='var(--text)';">
+            <i class="ri-send-plane-line" style="font-size:15px; opacity:0.75;"></i> Copiar p/ Aluno
         </div>
-        <div onclick="openSendWorkoutToFolderModal('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--text); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
-            <i class="ri-folder-add-line" style="font-size:16px;"></i> Salvar na Biblioteca
+        <div onclick="openSendWorkoutToFolderModal('${wId}')" style="padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; display:flex; gap:10px; align-items:center; color:var(--text); transition:all 0.15s ease;" onmouseover="this.style.background='var(--bg)'; this.style.color='var(--primary)';" onmouseout="this.style.background='transparent'; this.style.color='var(--text)';">
+            <i class="ri-folder-add-line" style="font-size:15px; opacity:0.75;"></i> Salvar na Biblioteca
         </div>
-        <div onclick="quickDeleteWorkout('${wId}')" style="padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; display:flex; gap:10px; align-items:center; color:var(--danger); transition:background 0.2s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
-            <i class="ri-delete-bin-line" style="font-size:16px;"></i> Excluir Treino
+        <div onclick="quickDeleteWorkout('${wId}')" style="padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; display:flex; gap:10px; align-items:center; color:var(--danger); transition:all 0.15s ease;" onmouseover="this.style.background='var(--bg)'; this.style.color='var(--danger)';" onmouseout="this.style.background='transparent'; this.style.color='var(--danger)';">
+            <i class="ri-delete-bin-line" style="font-size:15px; opacity:0.75;"></i> Excluir Treino
         </div>
     `;
     
@@ -2562,6 +3102,15 @@ function openEditWorkoutModal(workout = null, defaultDate = null) {
     const modal = $('modal-edit-workout');
     if (!modal) return;
 
+    // Reset VAM preview state to hidden by default when opening
+    _vamPreviewVisible = false;
+    const vamBtn = $('toggle-vam-btn');
+    if (vamBtn) {
+        vamBtn.style.background = 'transparent';
+        vamBtn.style.color = 'var(--text)';
+        vamBtn.style.borderColor = 'var(--border-strong)';
+    }
+
     const idEl            = $('edit-workout-id');
     const dateEl          = $('edit-workout-date');
     const titleInput      = $('edit-workout-title');
@@ -2638,7 +3187,7 @@ function closeEditWorkoutModal() {
     if (modal) modal.classList.remove('show');
 }
 
-let _vamPreviewVisible = true;
+let _vamPreviewVisible = false;
 
 function toggleVamPreview() {
     _vamPreviewVisible = !_vamPreviewVisible;
@@ -2651,9 +3200,11 @@ function toggleVamPreview() {
         if (_vamPreviewVisible) {
             btn.style.background = 'var(--primary)';
             btn.style.color = 'white';
+            btn.style.borderColor = 'var(--primary)';
         } else {
             btn.style.background = 'transparent';
             btn.style.color = 'var(--text)';
+            btn.style.borderColor = 'var(--border-strong)';
         }
     }
 }
