@@ -1314,5 +1314,63 @@ i.btn-icon-danger:hover {
 .sidebar.collapsed .collapse-toggle i {
     transform: rotate(180deg);
 }
-# e d i t - w o r k o u t - v a m - p r e v i e w : : - w e b k i t - s c r o l l b a r   {   d i s p l a y :   n o n e ;   }  
- 
+#edit-workout-vam-preview::-webkit-scrollbar { display: none; }
+
+/* Custom Premium Tooltips (Google Gemini Style) */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%) scale(0.92);
+    background: #131314;
+    color: #ffffff;
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.15s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.1);
+    z-index: 99999;
+    font-family: var(--font, 'Inter', sans-serif);
+    letter-spacing: 0.2px;
+}
+
+[data-tooltip]::before {
+    content: '';
+    position: absolute;
+    left: calc(100% + 4px);
+    top: 50%;
+    transform: translateY(-50%) scale(0.92);
+    border-width: 4px;
+    border-style: solid;
+    border-color: transparent #131314 transparent transparent;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.15s;
+    z-index: 99999;
+}
+
+/* Activate tooltips for collapsed sidebar navigation items and the theme toggles */
+.sidebar.collapsed [data-tooltip]:hover::after,
+#collapse-btn:hover::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) scale(1);
+}
+
+.sidebar.collapsed [data-tooltip]:hover::before,
+#collapse-btn:hover::before {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) scale(1);
+}

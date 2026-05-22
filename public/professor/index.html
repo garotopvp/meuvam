@@ -48,7 +48,7 @@
 
     <div class="app-layout" style="display: none;">
         <aside class="sidebar" id="sidebar">
-            <button class="collapse-toggle" onclick="toggleCollapse()" id="collapse-btn">
+            <button class="collapse-toggle" onclick="toggleCollapse()" id="collapse-btn" data-tooltip="Recolher Menu">
                 <i class="ri-arrow-left-s-line"></i>
             </button>
             <div class="brand">
@@ -61,26 +61,26 @@
                 </div>
             </div>
             <nav class="nav-menu">
-                <a href="javascript:void(0)" class="nav-item active" data-view="dashboard"><i class="ri-dashboard-line"></i> <span>Resumo</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="groups"><i class="ri-folder-open-line"></i> <span>Pastas de Treino</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="athletes"><i class="ri-group-line"></i> <span>Atletas</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="chat" style="display:none;"><i class="ri-chat-3-line"></i> <span>Mensagens</span> <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="strava-feed"><i class="ri-pulse-line" style="color: #fc4c02;"></i> <span>Feed Strava</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> <span>Calculadoras</span></a>
+                <a href="javascript:void(0)" class="nav-item active" data-view="dashboard" data-tooltip="Resumo"><i class="ri-dashboard-line"></i> <span>Resumo</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="groups" data-tooltip="Pastas de Treino"><i class="ri-folder-open-line"></i> <span>Pastas de Treino</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="athletes" data-tooltip="Atletas"><i class="ri-group-line"></i> <span>Atletas</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="chat" data-tooltip="Mensagens" style="display:none;"><i class="ri-chat-3-line"></i> <span>Mensagens</span> <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="strava-feed" data-tooltip="Feed Strava"><i class="ri-pulse-line" style="color: #fc4c02;"></i> <span>Feed Strava</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="calculator" data-tooltip="Calculadoras"><i class="ri-calculator-line"></i> <span>Calculadoras</span></a>
             </nav>
             <div class="sidebar-footer">
-                <button class="theme-toggle" onclick="toggleDarkMode()">
+                <button class="theme-toggle" onclick="toggleDarkMode()" data-tooltip="Modo Escuro">
                     <i class="ri-moon-line" id="theme-icon"></i>
                     <span id="theme-label">Modo Escuro</span>
                 </button>
-                <button class="btn btn-secondary" onclick="exportAllData()" style="font-size:12px;">
+                <button class="btn btn-secondary" onclick="exportAllData()" style="font-size:12px;" data-tooltip="Exportar Dados">
                     <i class="ri-download-2-line"></i> <span>Exportar Dados</span>
                 </button>
-                <label class="btn btn-secondary" style="font-size:12px;cursor:pointer;">
+                <label class="btn btn-secondary" style="font-size:12px;cursor:pointer;" data-tooltip="Importar Dados">
                     <i class="ri-upload-2-line"></i> <span>Importar Dados</span>
                     <input type="file" accept=".json" onchange="importAllData(event)" style="display:none;">
                 </label>
-                <button class="btn btn-danger" onclick="logout()" style="font-size:12px;margin-top:4px;">
+                <button class="btn btn-danger" onclick="logout()" style="font-size:12px;margin-top:4px;" data-tooltip="Sair da Conta">
                     <i class="ri-logout-box-line"></i> <span>Sair da Conta</span>
                 </button>
             </div>

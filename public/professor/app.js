@@ -175,6 +175,8 @@ function updateThemeUI(){
     const icon=$('theme-icon'),label=$('theme-label');
     if(icon)icon.className=isDark?'ri-sun-line':'ri-moon-line';
     if(label)label.textContent=isDark?'Modo Claro':'Modo Escuro';
+    const themeBtn=document.querySelector('.theme-toggle');
+    if(themeBtn)themeBtn.setAttribute('data-tooltip',isDark?'Modo Claro':'Modo Escuro');
 }
 (function initTheme(){
     const t=localStorage.getItem('vdot_theme');
@@ -191,6 +193,9 @@ function toggleCollapse(){
     const isCollapsed = sidebar.classList.toggle('collapsed');
     mainContent.classList.toggle('sidebar-collapsed', isCollapsed);
     localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+    
+    const btn = $('collapse-btn');
+    if(btn) btn.setAttribute('data-tooltip', isCollapsed ? 'Expandir Menu' : 'Recolher Menu');
 }
 (function initCollapse(){
     const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
@@ -200,6 +205,8 @@ function toggleCollapse(){
         sidebar.classList.add('collapsed');
         mainContent.classList.add('sidebar-collapsed');
     }
+    const btn = $('collapse-btn');
+    if(btn) btn.setAttribute('data-tooltip', isCollapsed ? 'Expandir Menu' : 'Recolher Menu');
 })();
 
 // ─── MOBILE SIDEBAR ───
