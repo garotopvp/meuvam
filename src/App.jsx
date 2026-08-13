@@ -223,6 +223,7 @@ const AppContent = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [photoToEdit, setPhotoToEdit] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  const [isImportingStrava, setIsImportingStrava] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -349,6 +350,23 @@ const AppContent = () => {
     }
   }, [session, navigate]);
 
+  const handleStravaConnected = useCallback(async () => {
+    setIsImportingStrava(true);
+    try {
+      console.log('[Strava Onboarding] Iniciando importação retroativa de 90 dias...');
+      const res = await fetch(`/api/strava/activities?userId=${session.user.id}&days=90`);
+      if (res.ok) {
+        console.log('[Strava Onboarding] Histórico de 90 dias importado com sucesso!');
+      }
+    } catch (err) {
+      console.error('[Strava Onboarding] Erro na importação retroativa:', err);
+    } finally {
+      setIsImportingStrava(false);
+      fetchProfile();
+      fetchWorkouts();
+    }
+  }, [session, fetchProfile, fetchWorkouts]);
+
   useEffect(() => {
     if (session) {
         fetchProfile();
@@ -440,7 +458,7 @@ const AppContent = () => {
             </div>
         ) : (
             <>
-                <UrlCleanup onConnected={fetchProfile} />
+                <UrlCleanup onConnected={handleStravaConnected} />
                 <MainLayout 
                     athlete={athlete}
                     workouts={workouts}
@@ -484,6 +502,57 @@ const AppContent = () => {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    {isImportingStrava && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(255, 255, 255, 0.75)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 99999,
+        padding: '2rem',
+        textAlign: 'center',
+        gap: '20px'
+      }}>
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '80px',
+          height: '80px'
+        }}>
+          <Loader2 className="animate-spin" color="var(--primary-color)" size={48} style={{ strokeWidth: 2 }} />
+          <div style={{
+            position: 'absolute',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'var(--primary-color)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            boxShadow: '0 4px 10px rgba(0,122,255,0.3)'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+        </div>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', margin: 0 }}>
+          ⚡ Conectando ao Strava
+        </h2>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500, maxWidth: '320px', lineHeight: '1.5', margin: 0 }}>
+          Importando seu histórico de corridas dos últimos 90 dias para consolidar seus gráficos e treinos! Isso levará apenas alguns segundos...
+        </p>
+      </div>
+    )}
     </>
   );
 };

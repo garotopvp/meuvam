@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TrendingUp, Award, Calendar, Plus, Trash2, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,6 +20,7 @@ import {
 
 const EvolutionView = ({ session }) => {
   const [history, setHistory] = useState([]);
+  const [workouts, setWorkouts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedChartType, setSelectedChartType] = useState('VAM');
@@ -32,10 +33,6 @@ const EvolutionView = ({ session }) => {
 
   const testTypes = ['VAM', '5km', '10km', '21km', '42km', 'Outro'];
 
-  useEffect(() => {
-    if (session?.user) fetchHistory();
-  }, [session]);
-
   const fetchHistory = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -47,6 +44,23 @@ const EvolutionView = ({ session }) => {
     if (!error) setHistory(data || []);
     setLoading(false);
   };
+
+  const fetchWorkouts = async () => {
+    const { data, error } = await supabase
+      .from('workouts')
+      .select('*')
+      .eq('athlete_id', session.user.id)
+      .eq('status', 'completed')
+      .order('date', { ascending: true });
+    if (!error) setWorkouts(data || []);
+  };
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchHistory();
+      fetchWorkouts();
+    }
+  }, [session]);
 
   const handleAdd = async () => {
     if (!newTest.result) return;
@@ -114,14 +128,30 @@ const EvolutionView = ({ session }) => {
       });
     }
 
-    // Aqui poderíamos filtrar treinos reais, mas como estamos em EvolutionView, 
-    // vamos usar uma lógica de exemplo ou puxar de outra tabela se necessário.
-    // Para este exemplo, vamos gerar dados aleatórios baseados na VAM para mostrar o gráfico.
+    // Soma distâncias dos treinos reais completados do Supabase
+    workouts.forEach(wk => {
+      if (!wk.date) return;
+      const d = new Date(wk.date + 'T12:00:00');
+      const wkMonth = d.getMonth();
+      const wkYear = d.getFullYear();
+      
+      const bucket = last6.find(m => m.monthIdx === wkMonth && m.year === wkYear);
+      if (bucket) {
+        let dist = 0;
+        if (wk.metrics?.distance) {
+          dist = parseFloat(wk.metrics.distance.replace(/[^\d.]/g, '')) || 0;
+        } else if (wk.distance) {
+          dist = parseFloat(wk.distance) || 0;
+        }
+        bucket.distancia += dist;
+      }
+    });
+
     return last6.map(m => ({
       ...m,
-      distancia: Math.floor(Math.random() * (120 - 60) + 60) // Mock de volume mensal
+      distancia: Math.round(m.distancia)
     }));
-  }, []);
+  }, [workouts]);
 
   return (
     <div className="animate-slide-up">

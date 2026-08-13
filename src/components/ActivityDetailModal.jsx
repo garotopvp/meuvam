@@ -64,16 +64,6 @@ const ActivityDetailModal = ({ activity, onClose, currentUser }) => {
   const [hrZones, setHrZones] = useState([]);
   const [lapFilter, setLapFilter] = useState('all'); // 'all' | 'sprint' | 'recovery'
 
-  useEffect(() => {
-    if (activity) {
-      fetchFullDetails();
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, [activity]);
-
   const fetchFullDetails = async () => {
     if (!activity) return;
     setLoading(true);
@@ -130,6 +120,16 @@ const ActivityDetailModal = ({ activity, onClose, currentUser }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (activity) {
+      fetchFullDetails();
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [activity]);
 
   const formatPace = (decimalPace) => {
     if (!decimalPace || decimalPace > 20) return '--';

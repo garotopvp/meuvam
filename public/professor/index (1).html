@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeuVAM - by Superação Assessoria Esportiva</title>
+    <meta name="description" content="Plataforma de gestão de treinos personalizados baseados no VAM para assessoria esportiva de corrida.">
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <!-- html2canvas REMOVIDO -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <base href="/professor/">
+    <link rel="stylesheet" href="style.css?v=5.8">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Otimização de URL e Limpeza Básica
+        (function() {
+            const path = window.location.pathname;
+            const search = window.location.search;
+            const hash = window.location.hash;
+            
+            // Remove 'index.html'
+            if (path.includes('index.html')) {
+                window.location.replace(path.replace('index.html', '').replace(/\/\/+/g, '/') + search + hash);
+                return;
+            }
+            
+            // Normaliza a raiz para /resumo apenas se estiver exatamente na pasta raiz
+            if (path === '/professor' || path === '/professor/') {
+                history.replaceState(null, '', '/professor/resumo' + search);
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div id="professor-boot" class="professor-boot">
+        <div class="professor-boot-inner">
+            <img src="/assets/logo.png" alt="Superação" width="96" height="96">
+            <p>Carregando painel…</p>
+        </div>
+    </div>
+    <!-- Mobile toggle -->
+    <button class="mobile-toggle" onclick="toggleSidebar()"><i class="ri-menu-line"></i></button>
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <div class="app-layout" style="display: none;">
+        <aside class="sidebar" id="sidebar">
+            <button class="collapse-toggle" onclick="toggleCollapse()" id="collapse-btn" data-tooltip="Recolher Menu">
+                <i class="ri-arrow-left-s-line"></i>
+            </button>
+            <div class="brand">
+                <div class="brand-logo-wrap">
+                    <img src="/assets/logo.png" alt="Superação">
+                </div>
+                <div>
+                    <h2>MeuVAM</h2>
+                    <span class="brand-sub">by Superação</span>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <a href="javascript:void(0)" class="nav-item active" data-view="dashboard" data-tooltip="Resumo"><i class="ri-dashboard-line"></i> <span>Resumo</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="groups" data-tooltip="Pastas de Treino"><i class="ri-folder-open-line"></i> <span>Pastas de Treino</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="athletes" data-tooltip="Atletas"><i class="ri-group-line"></i> <span>Atletas</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="chat" data-tooltip="Mensagens" style="display:none;"><i class="ri-chat-3-line"></i> <span>Mensagens</span> <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="strava-feed" data-tooltip="Feed Strava"><i class="ri-pulse-line" style="color: #fc4c02;"></i> <span>Feed Strava</span></a>
+                <a href="javascript:void(0)" class="nav-item" data-view="calculator" data-tooltip="Calculadoras"><i class="ri-calculator-line"></i> <span>Calculadoras</span></a>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="theme-toggle" onclick="toggleDarkMode()" data-tooltip="Modo Escuro">
+                    <i class="ri-moon-line" id="theme-icon"></i>
+                    <span id="theme-label">Modo Escuro</span>
+                </button>
+                <button class="btn btn-secondary" onclick="exportAllData()" style="font-size:12px;" data-tooltip="Exportar Dados">
+                    <i class="ri-download-2-line"></i> <span>Exportar Dados</span>
+                </button>
+                <label class="btn btn-secondary" style="font-size:12px;cursor:pointer;" data-tooltip="Importar Dados">
+                    <i class="ri-upload-2-line"></i> <span>Importar Dados</span>
+                    <input type="file" accept=".json" onchange="importAllData(event)" style="display:none;">
+                </label>
+                <button class="btn btn-danger" onclick="logout()" style="font-size:12px;margin-top:4px;" data-tooltip="Sair da Conta">
+                    <i class="ri-logout-box-line"></i> <span>Sair da Conta</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content" id="main-content">
+            <!-- Breadcrumb Navigation -->
+            <div id="breadcrumb" class="breadcrumb"></div>
+            
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view-section active">
+                <div class="page-header">
+                    <div>
+                        <h1>Visão Geral</h1>
+                        <p id="dashboard-greeting">Resumo da sua assessoria.</p>
+                    </div>
+                </div>
+
+                <div id="dashboard-notifs" style="margin-bottom:20px;display:flex;flex-direction:column;gap:8px;"></div>
+
+
+
+                <div class="stats-grid" id="dashboard-stats">
+                    <div class="stat-card stat-card--blue">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <span class="stat-title">Atletas</span>
+                            <span class="stat-icon"><i class="ri-group-line"></i></span>
+                        </div>
+                        <h3 id="stat-athletes">0</h3>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-athletes-sub"></div>
+                    </div>
+                    <div class="stat-card stat-card--green">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <span class="stat-title">Planilhas</span>
+                            <span class="stat-icon"><i class="ri-calendar-check-line"></i></span>
+                        </div>
+                        <h3 id="stat-groups">0</h3>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-groups-sub"></div>
+                    </div>
+                    <div class="stat-card stat-card--amber">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <span class="stat-title">Treinos Gerados</span>
+                            <span class="stat-icon"><i class="ri-image-line"></i></span>
+                        </div>
+                        <h3 id="stat-history">0</h3>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-history-sub"></div>
+                    </div>
+                    <div class="stat-card stat-card--violet">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <span class="stat-title">Pastas</span>
+                            <span class="stat-icon"><i class="ri-folder-open-line"></i></span>
+                        </div>
+                        <h3 id="stat-cats">0</h3>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-cats-sub"></div>
+                    </div>
+                    <div class="stat-card stat-card--blue dashboard-shortcut-card" onclick="openTutorialModal()" style="cursor: pointer; border-top: 3px solid var(--primary); display: flex; flex-direction: column; justify-content: space-between;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <span class="stat-title">Central de Ajuda</span>
+                            <span class="stat-icon" style="background: var(--primary-soft); color: var(--primary);"><i class="ri-book-open-line"></i></span>
+                        </div>
+                        <h3>Guia</h3>
+                        <div style="font-size:12px;color:var(--primary);font-weight:600;margin-top:8px;display:flex;align-items:center;gap:4px;">Abrir Guias <i class="ri-arrow-right-up-line" style="font-size: 11px;"></i></div>
+                    </div>
+                </div>
+
+                <div style="margin-top:32px;">
+                    <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Últimos Treinos Gerados</h2>
+                    <div id="dashboard-recent" class="table-wrapper" style="min-height:300px; overflow-y:auto;"></div>
+                </div>
+
+                <div class="dashboard-shortcuts">
+                    <div class="stat-card dashboard-shortcut-card" onclick="navigate('groups')">
+                        <span class="shortcut-icon"><i class="ri-folder-add-line"></i></span>
+                        <strong>Criar Nova Pasta de Treino</strong>
+                        <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Organize alunos por modalidade ou objetivo.</p>
+                    </div>
+                    <div class="stat-card dashboard-shortcut-card" onclick="navigate('athletes')">
+                        <span class="shortcut-icon shortcut-icon--brand"><i class="ri-user-add-line"></i></span>
+                        <strong>Adicionar Novo Atleta</strong>
+                        <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Cadastre dados e gere treinos personalizados.</p>
+                    </div>
+                </div>
+
+                <!-- Central de Aprendizado — Tours Guiados -->
+            </section>
+
+            <!-- Groups -->
+            <section id="view-groups" class="view-section">
+                <div class="page-header" id="groups-page-header">
+                    <div>
+                        <h1>Pastas de Treino</h1>
+                        <p>Organize por distância. Entre na pasta para ver os treinos.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openCategoryModal()"><i class="ri-add-line"></i> Nova Pasta</button>
+                </div>
+                <div id="groups-list"></div>
+            </section>
+
+            <!-- Athletes -->
+            <section id="view-athletes" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Seus Atletas</h1>
+                        <p>Gerencie alunos, visualize histórico e gere treinos personalizados.</p>
+                    </div>
+                    <div style="display:flex;gap:10px;">
+                        <button class="btn btn-secondary" onclick="exportAthletesCSV()" title="Exportar Planilha CSV">
+                            <i class="ri-file-excel-2-line"></i> Emitir Planilha
+                        </button>
+                        <button class="btn btn-secondary" onclick="syncAthletesFromSupabase(true)"><i class="ri-refresh-line"></i> Sincronizar Alunos</button>
+                        <button class="btn btn-primary" onclick="openAthleteModal()"><i class="ri-user-add-line"></i> Novo Atleta</button>
+                    </div>
+                </div>
+                <div style="margin-bottom:16px;position:relative;">
+                    <i class="ri-search-line" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:16px;"></i>
+                    <input type="text" id="athlete-search" placeholder="Buscar atleta pelo nome..." oninput="renderAthletes()"
+                           style="width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border-strong);border-radius:var(--radius);font-family:var(--font);font-size:14px;outline:none;background:var(--panel);color:var(--text);transition:0.2s;"
+                           onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border-strong)'">
+                </div>
+                <div class="table-wrapper">
+                    <table class="minimal-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortAthletes('name')">Nome <i class="ri-arrow-up-down-line" style="font-size:11px;"></i></th>
+                                <th>E-mail</th>
+                                <th>Planilha</th>
+                                <th class="sortable" onclick="sortAthletes('vam')">VAM <i class="ri-arrow-up-down-line" style="font-size:11px;"></i></th>
+                                <th>Notas</th>
+                                <th style="text-align:right;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="athletes-list"></tbody>
+                    </table>
+                    <div id="athlete-empty" style="display:none;padding:48px;text-align:center;color:var(--text-muted);">
+                        <i class="ri-group-line" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3;"></i>
+                        <strong>Nenhum atleta encontrado</strong>
+                        <span style="font-size:13px;display:block;margin-top:4px;">Tente outro nome ou adicione um novo atleta.</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Feed Strava Global -->
+            <section id="view-strava-feed" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Feed de Atividades</h1>
+                        <p>Acompanhe em tempo real os treinos realizados por todos os seus alunos via Strava.</p>
+                    </div>
+                    <button class="btn btn-secondary" onclick="renderStravaFeed(true)"><i class="ri-refresh-line"></i> Atualizar</button>
+                </div>
+
+                <div id="strava-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
+                    <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #fc4c02;"></i>
+                    Sincronizando atividades de toda a equipe...
+                </div>
+
+                <div id="strava-global-list" style="display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto;"></div>
+            </section>
+
+            <!-- Feed Garmin Global -->
+            <section id="view-garmin-feed" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Feed Garmin Connect</h1>
+                        <p>Acompanhe em tempo real os treinos realizados pelos seus alunos via conexão direta Garmin.</p>
+                    </div>
+                    <button class="btn btn-secondary" onclick="renderGarminFeed(true)"><i class="ri-refresh-line"></i> Atualizar Garmin</button>
+                </div>
+
+                <div id="garmin-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
+                    <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #000;"></i>
+                    Sincronizando atividades do Garmin Connect...
+                </div>
+
+                <div id="garmin-global-list" style="display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto;"></div>
+            </section>
+
+            <!-- Calculadoras -->
+            <section id="view-calculator" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Calculadoras</h1>
+                        <p>Ferramentas de ritmo, prova e zonas baseadas no VAM.</p>
+                    </div>
+                </div>
+                <div style="display:flex;gap:0;margin-bottom:28px;border-bottom:2px solid var(--border);">
+                    <button class="calc-tab active" data-tab="vam" onclick="switchCalcTab('vam')">Zonas VAM</button>
+                    <button class="calc-tab" data-tab="race" onclick="switchCalcTab('race')">Calculadora de Prova</button>
+                    <button class="calc-tab" data-tab="treadmill" onclick="switchCalcTab('treadmill')">Esteira / Pace</button>
+                </div>
+
+                <!-- TAB: VAM -->
+                <div id="calc-tab-vam" class="calc-tab-panel" style="display:block;">
+                    <div class="calc-grid">
+                        <div class="stat-card">
+                            <h3 class="calc-card-title">Tempo de teste VAM (3 km)</h3>
+                            <div class="input-col" style="margin-bottom:16px;">
+                                <label>Tempo de prova 3km (minutos)</label>
+                                <input type="number" id="calc-time" step="0.1" min="0.1" placeholder="Ex: 11.5" oninput="calculateVAM()">
+                            </div>
+                            <div id="calc-result" style="padding:16px;background:var(--bg);border-radius:var(--radius);display:none;">
+                                <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">VAM Calculado</div>
+                                <div id="calc-vam" style="font-size:36px;font-weight:900;color:var(--primary);letter-spacing:-1.5px;"></div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <h3 class="calc-card-title">Zonas de treino</h3>
+                            <div id="calc-zones" style="display:flex;flex-direction:column;gap:8px;"><div style="color:var(--text-muted);font-size:13px;text-align:center;padding:24px 0;"><i class="ri-arrow-left-line"></i> Insira o tempo ao lado</div></div>
+                        </div>
+                    </div>
+                    <div id="calc-distance-table" style="display:none;margin-top:28px;max-width:900px;">
+                        <h3 class="calc-card-title">Tabela de ritmos por distância</h3>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <div class="stat-card" style="padding:0;overflow:hidden;">
+                                <div style="background:#334155;padding:10px 16px;"><span style="font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;">Tiros Curtos (metros)</span></div>
+                                <table style="width:100%;border-collapse:collapse;font-size:13px;" id="tbl-short"></table>
+                            </div>
+                            <div class="stat-card" style="padding:0;overflow:hidden;">
+                                <div style="background:#334155;padding:10px 16px;"><span style="font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;">Provas e Rodagens (km)</span></div>
+                                <table style="width:100%;border-collapse:collapse;font-size:13px;" id="tbl-long"></table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Race -->
+                <div id="calc-tab-race" class="calc-tab-panel" style="display:none;">
+                    <div style="display:grid;grid-template-columns:320px 1fr;gap:24px;max-width:960px;align-items:start;">
+                        <div class="stat-card">
+                            <h3 class="calc-card-title">Dados da prova</h3>
+                            <div class="input-col" style="margin-bottom:14px;">
+                                <label>Distância</label>
+                                <select id="race-dist-select" onchange="onRaceDistChange()">
+                                    <option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option>
+                                    <option value="21.0975">21 km (Meia)</option><option value="42.195">42 km (Maratona)</option>
+                                    <option value="custom">Personalizado...</option>
+                                </select>
+                            </div>
+                            <div class="input-col" id="race-dist-custom-wrap" style="margin-bottom:14px;display:none;">
+                                <label>Distância (km)</label>
+                                <input type="number" id="race-dist-custom" step="0.1" min="0.1" placeholder="Ex: 8.5" oninput="calculateRace()">
+                            </div>
+                            <div class="input-col" style="margin-bottom:16px;">
+                                <label>Tempo Alvo</label>
+                                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                                    <div><input type="number" id="race-h" min="0" placeholder="00" oninput="calculateRace()" style="text-align:center;width:100%;"><div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:3px;">HORAS</div></div>
+                                    <div><input type="number" id="race-m" min="0" max="59" placeholder="00" oninput="calculateRace()" style="text-align:center;width:100%;"><div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:3px;">MIN</div></div>
+                                    <div><input type="number" id="race-s" min="0" max="59" placeholder="00" oninput="calculateRace()" style="text-align:center;width:100%;"><div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:3px;">SEG</div></div>
+                                </div>
+                            </div>
+                            <div id="race-main-result" style="display:none;background:linear-gradient(135deg,#0f172a,#1e3a5f);border-radius:12px;padding:20px;text-align:center;">
+                                <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:2px;text-transform:uppercase;">PACE MÉDIO</div>
+                                <div id="race-pace-result" style="font-size:40px;font-weight:900;color:#fff;letter-spacing:-2px;"></div>
+                                <div id="race-speed-result" style="margin-top:6px;font-size:13px;font-weight:600;color:#93c5fd;"></div>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="padding:0;overflow:hidden;">
+                            <div style="background:#334155;padding:12px 20px;display:flex;justify-content:space-between;"><span style="font-size:13px;font-weight:700;color:#fff;">Splits por Km</span><span id="race-splits-dist" style="font-size:12px;color:rgba(255,255,255,0.5);"></span></div>
+                            <div id="race-splits-body" style="min-height:200px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;padding:32px;"><span><i class="ri-arrow-left-line"></i> Preencha ao lado</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Treadmill -->
+                <div id="calc-tab-treadmill" class="calc-tab-panel" style="display:none;">
+                    <div class="calc-grid-small">
+                        <div class="stat-card">
+                            <h3 class="calc-card-title">Velocidade para pace</h3>
+                            <div class="input-col" style="margin-bottom:16px;">
+                                <label>Velocidade (km/h)</label>
+                                <input type="number" id="tread-speed" step="0.1" min="0.1" placeholder="Ex: 12.0" oninput="calcTreadmill('speed')">
+                            </div>
+                            <div id="tread-speed-result" style="display:none;padding:16px;background:var(--bg);border-radius:10px;text-align:center;">
+                                <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Pace</div>
+                                <div id="tread-pace-out" style="font-size:36px;font-weight:900;color:var(--primary);"></div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <h3 class="calc-card-title">Pace para velocidade</h3>
+                            <div class="input-col" style="margin-bottom:16px;">
+                                <label>Pace (min:seg por km)</label>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input type="number" id="tread-pace-m" min="0" max="30" placeholder="min" oninput="calcTreadmill('pace')" style="width:80px;text-align:center;">
+                                    <span style="font-weight:700;font-size:20px;color:var(--text-muted);">:</span>
+                                    <input type="number" id="tread-pace-s" min="0" max="59" placeholder="seg" oninput="calcTreadmill('pace')" style="width:80px;text-align:center;">
+                                </div>
+                            </div>
+                            <div id="tread-pace-result" style="display:none;padding:16px;background:var(--bg);border-radius:10px;text-align:center;">
+                                <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Velocidade</div>
+                                <div id="tread-speed-out" style="font-size:36px;font-weight:900;color:#10b981;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-card" style="margin-top:24px;max-width:700px;padding:0;overflow:hidden;">
+                        <div style="background:#334155;padding:10px 20px;"><span style="font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;">Tabela Rápida</span></div>
+                        <table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:var(--bg);"><th style="padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--text-muted);">km/h</th><th style="padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--text-muted);">Pace</th></tr></thead><tbody id="tread-quick-table"></tbody></table>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Chat -->
+            <section id="view-chat" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Mensagens</h1>
+                        <p>Converse em tempo real com seus atletas.</p>
+                    </div>
+                </div>
+                
+                <div class="chat-container">
+                    <div class="chat-sidebar">
+                        <div class="chat-search">
+                            <input type="text" placeholder="Buscar conversa..." id="chat-search-input">
+                        </div>
+                        <div id="chat-users-list" class="chat-users-list">
+                            <!-- Lista de atletas será carregada aqui -->
+                        </div>
+                    </div>
+                    <div class="chat-main">
+                        <div id="chat-welcome" class="chat-empty-state">
+                            <i class="ri-chat-smile-2-line"></i>
+                            <h3>Selecione um atleta para conversar</h3>
+                            <p>Suas mensagens são sincronizadas instantaneamente.</p>
+                        </div>
+                        <div id="chat-window" class="chat-window" style="display:none;">
+                            <div class="chat-header">
+                                <img src="" id="chat-current-user-img" class="user-avatar" style="display:none;">
+                                <div>
+                                    <h3 id="chat-current-user-name">Nome do Atleta</h3>
+                                </div>
+                            </div>
+                            <div id="chat-messages" class="chat-messages">
+                                <!-- Mensagens aqui -->
+                            </div>
+                            <div class="chat-input-area">
+                                <input type="text" id="chat-input" placeholder="Escreva uma mensagem...">
+                                <button class="btn btn-primary" id="chat-send-btn" onclick="sendProfessorMessage()"><i class="ri-send-plane-fill"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- VIEW: STAFF (EQUIPE) -->
+            <section id="view-staff" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Equipe Superação</h1>
+                        <p>Administradores e treinadores com acesso ao painel.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrapper" style="margin-top: 24px;">
+                    <table class="minimal-table">
+                        <thead>
+                            <tr>
+                                <th>Nome / Treinador</th>
+                                <th>E-mail de Acesso</th>
+                                <th>Nível de Acesso</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-list">
+                            <!-- Carregado via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Group Modal (Professional Builder) -->
+    <div class="modal" id="modal-group">
+        <div class="modal-card modal-xl" style="max-width: 1400px; width: 95vw; height: 95vh; display: flex; flex-direction: column; background: #f0f2f5;">
+            <!-- Garmin Header -->
+            <div class="garmin-header" style="display: flex; flex-direction: column; gap: 16px; padding: 24px 40px; align-items: flex-start; position: relative;">
+                <button class="btn-text-link" onclick="closeModals()" style="display: flex; align-items: center; gap: 5px; font-size: 14px; padding: 0; border: none; background: transparent; color: var(--primary); cursor: pointer;">
+                    <i class="ri-arrow-left-s-line"></i> Exercícios
+                </button>
+                <div style="display: flex; align-items: center; gap: 20px; width: 100%; justify-content: space-between; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 20px; flex: 1; min-width: 0;">
+                        <div class="garmin-icon" id="group-type-icon-container"><i class="ri-run-line"></i></div>
+                        <div class="garmin-title-wrap" style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <h2><span id="display-group-name">Treino de corrida</span> <i class="ri-pencil-line" style="font-size: 18px; cursor: pointer;" onclick="$('display-group-name').style.display='none'; $('group-name').style.display='inline'; $('group-name').focus()"></i></h2>
+                                <input type="text" id="group-name" style="border: none; background: transparent; font-size: 24px; display: none;" onblur="this.style.display='none'; $('display-group-name').style.display='inline'; $('display-group-name').textContent=this.value" onchange="$('display-group-name').textContent=this.value">
+                            </div>
+                            
+                            <!-- Type Pills for Template -->
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="group-type-pills">
+                                <button onclick="setGroupTypePill('Corrida')" class="group-type-pill" data-type="Corrida" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #fbbf24;background:#fef9c3;color:#92400e;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-run-line"></i> Corrida</button>
+                                <button onclick="setGroupTypePill('Natação')" class="group-type-pill" data-type="Natação" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #bae6fd;background:#f0f9ff;color:#0369a1;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21v-2q.95 0 1.425-.5T5.3 18t1.925.5t1.425.5t1.425-.5T12 18t1.925.5t1.425.5t1.425-.5T18.7 18t1.875.5T22 19v2q-1.475 0-1.937-.5T18.7 20t-1.425.5-1.925.5t-1.925-.5T12 20t-1.425.5-1.925.5t-1.925-.5T5.3 20t-1.363.5T2 21m0-4.5v-2q.95 0 1.425-.5t1.875-.5t1.938.5t1.412.5q.9 0 1.425-.5T12 13.5t1.925.5t1.425.5t1.425-.5t1.925-.5t1.875.5t1.425.5v2q-1.475 0-1.937-.5t-1.363-.5t-1.388.5t-1.962.5q-1.425 0-1.937-.5T12 15.5q-.95 0-1.412.5t-1.938.5t-1.963-.5t-1.387-.5t-1.362.5T2 16.5m4.9-5.1l3.325-3.325l-1-1q-.825-.825-1.75-1.2T5.2 5.5V3q1.875 0 3.1.413T10.7 5l6.4 6.4q-.425.275-.825.438T15.35 12q-.9 0-1.425-.5T12 11t-1.925.5t-1.425.5q-.525 0-.925-.162T6.9 11.4m11.575-7.663q.725.738.725 1.763q0 1.05-.725 1.775T16.7 8t-1.775-.725T14.2 5.5q0-1.025.725-1.763T16.7 3t1.775.738"/></svg> Natação</button>
+                                <button onclick="setGroupTypePill('Ciclismo')" class="group-type-pill" data-type="Ciclismo" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#166534;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-riding-line"></i> Ciclismo</button>
+                                <button onclick="setGroupTypePill('Fortalecimento')" class="group-type-pill" data-type="Fortalecimento" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #ddd6fe;background:#f5f3ff;color:#5b21b6;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M6 5h2v14H6zm10 0h2v14h-2zM3 9h3v6H3zm15 0h3v6h-3zM8 11h8v2H8z"/></svg> Fortalecimento</button>
+                                <button onclick="setGroupTypePill('Outros')" class="group-type-pill" data-type="Outros" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-clipboard-line"></i> Outros</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions on the Right -->
+                    <div style="display: flex; gap: 12px; flex-shrink: 0; align-items: center; margin-left: auto;">
+                        <button class="btn btn-secondary" onclick="closeModals()" style="background: #D8D8D8; color: #101010; font-weight: 700; border: none; cursor: pointer; border-radius: var(--radius); padding: 10px 20px;">Cancelar</button>
+                        <button class="btn btn-primary" onclick="saveGroup()" style="font-weight: 700; padding: 10px 24px; border: none; cursor: pointer; border-radius: var(--radius);">Salvar treino</button>
+                    </div>
+                </div>
+                <input type="hidden" id="group-type" value="Corrida">
+            </div>
+
+            <div class="modal-body" style="flex: 1; overflow: hidden; padding: 0; display: flex;">
+                <!-- Sidebar: Days of Week (MeuVAM specific) -->
+                <div style="width: 180px; border-right: 1px solid var(--border); background: #f0f2f5; display: flex; flex-direction: column;" id="editor-days-sidebar">
+                    <!-- Days will be rendered here -->
+                </div>
+                
+                <!-- Main Content Area -->
+                <div style="flex: 1; display: flex; overflow-y: auto; background: white; padding: 40px;">
+                    <!-- Left: Steps List -->
+                    <div style="flex: 1; display: flex; flex-direction: column;" id="editor-steps-container">
+                        <!-- Steps will be rendered here -->
+                    </div>
+
+                    <!-- Right: Actions & Notes -->
+                    <div style="width: 300px; padding-left: 40px;" id="editor-actions-sidebar">
+                        <div class="sidebar-actions">
+                            <button class="btn-garmin-action" onclick="addEditorStep('run')">
+                                <i class="ri-add-line" style="background: white; color: var(--primary); border-radius: 2px; padding: 1px;"></i> Adicionar etapa
+                            </button>
+                            <button class="btn-garmin-action" onclick="addEditorStep('repetition')">
+                                <i class="ri-repeat-line" style="background: white; color: var(--primary); border-radius: 2px; padding: 1px;"></i> Adicionar repetição
+                            </button>
+
+                            <div style="margin-top: 30px;">
+                                <label style="font-weight: 700; color: #444; margin-bottom: 8px; display: block;">Volume Semanal (km)</label>
+                                <input type="number" id="group-volume" style="width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 10px;" placeholder="Ex: 30">
+                            </div>
+
+                            <div style="margin-top: 30px;">
+                                <label style="font-weight: 700; color: #444; margin-bottom: 8px; display: block;">Notas</label>
+                                <textarea id="group-notes" style="width: 100%; height: 100px; border: 1px solid #ccc; border-radius: 4px; padding: 10px;" placeholder="Adicionar notas"></textarea>
+                                <div style="text-align: right; font-size: 11px; color: #999; margin-top: 4px;">0/512</div>
+                            </div>
+
+                            <div style="margin-top: 20px;">
+                                <label style="font-weight: 700; color: #444; margin-bottom: 8px; display: block;">Nota de áudio</label>
+                                <div id="audio-record-btn" onclick="toggleAudioRecording()" style="border: 1px solid #ccc; border-radius: 4px; padding: 15px; display: flex; align-items: center; gap: 15px; background: #fafafa; cursor: pointer; transition: 0.2s;">
+                                    <i class="ri-mic-line" id="audio-mic-icon" style="font-size: 24px; color: #666;"></i>
+                                    <div>
+                                        <div id="audio-record-status" style="font-weight: 700; font-size: 13px;">Pressione para gravar uma nota.</div>
+                                        <div id="audio-record-timer" style="font-size: 11px; color: #999;">Máx.: 15 segundos.</div>
+                                    </div>
+                                    <div id="audio-playback" style="display: none; margin-left: auto;">
+                                        <i class="ri-play-fill" style="font-size: 20px; color: var(--primary);" onclick="event.stopPropagation(); playRecordedAudio()"></i>
+                                        <i class="ri-delete-bin-line" style="font-size: 18px; color: #999; margin-left: 10px;" onclick="event.stopPropagation(); deleteRecordedAudio()"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p style="margin-top: 30px; font-size: 12px; color: #777; line-height: 1.4;">
+                                O MeuVAM armazenará o seu exercício para que você utilize no dispositivo ou no app e não irá compartilhá-lo com outros.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Athlete Modal -->
+    <div class="modal" id="modal-athlete">
+        <div class="modal-card" id="athlete-modal-card" style="max-width:560px; transition: max-width 0.3s ease;">
+            <div class="modal-header"><h3 id="modal-athlete-title">Atleta</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-body" style="display: flex; gap: 24px; flex-wrap: wrap;">
+                <!-- Coluna da Esquerda: Formulário -->
+                <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 14px;">
+                    <div style="display:flex; justify-content:center; margin-bottom:10px;">
+                        <div id="athlete-photo-preview" style="width:80px; height:80px; border-radius:24px; overflow:hidden; background:#f1f5f9; border:2px solid var(--primary); display:flex; align-items:center; justify-content:center;">
+                            <i class="ri-user-line" style="font-size:40px; color:var(--text-muted);"></i>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="input-col"><label>Nome</label><input type="text" id="athlete-name"></div>
+                        <div class="input-col"><label>WhatsApp</label><input type="text" id="athlete-phone" placeholder="Ex: 11999999999"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="input-col"><label>Data de Nascimento</label><input type="date" id="athlete-dob" onchange="calculateTheoreticalHR()"></div>
+                        <div class="input-col"><label>FC Máx. Teórica</label><input type="text" id="athlete-theo-hr" readonly style="background:var(--bg);border-style:dashed;"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185" oninput="previewAthleteVAM()"></div>
+                        <div class="input-col"><label>Tempo VAM (min)</label><input type="number" step="0.1" min="0.1" id="athlete-test" placeholder="Ex: 11.5" oninput="previewAthleteVAM()"></div>
+                    </div>
+                    
+                    <div style="margin-top: 4px; padding: 14px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border-strong);">
+                        <h4 style="font-size: 12px; font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ri-heart-pulse-line" style="color: var(--primary);"></i> Configuração de Zonas de FC
+                        </h4>
+                        <div class="form-row" style="margin-bottom:0;">
+                            <div class="input-col">
+                                <label>Método de Cálculo</label>
+                                <select id="athlete-hr-method" onchange="toggleHRFields(); previewAthleteVAM();">
+                                    <option value="max">% FC Máxima</option>
+                                    <option value="rfc">% FC Reserva (Karvonen)</option>
+                                    <option value="lthr">% Limiar de Lactato (LTHR)</option>
+                                </select>
+                            </div>
+                            <div class="input-col" id="col-resting-hr" style="display:none;">
+                                <label>FC Repouso (bpm)</label>
+                                <input type="number" id="athlete-resting-hr" placeholder="Ex: 55" oninput="previewAthleteVAM()">
+                            </div>
+                            <div class="input-col" id="col-lthr" style="display:none;">
+                                <label>FC Limiar (LTHR)</label>
+                                <input type="number" id="athlete-lthr" placeholder="Ex: 172" oninput="previewAthleteVAM()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="input-col" style="grid-column:span 2;"><label>Planilha Base</label><select id="athlete-group"></select></div>
+                    </div>
+                    <div class="input-col" style="margin-top:0;">
+                        <label>Notas / Observações</label>
+                        <textarea id="athlete-notes" rows="2" placeholder="Ex: Lesão no joelho direito, preferência por treinos matinais..." style="resize:vertical;"></textarea>
+                    </div>
+                </div>
+
+
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn btn-danger" id="btn-clear-workouts" style="font-size: 12px; display: none;" onclick="clearAthleteWorkouts()">
+                    <i class="ri-delete-bin-7-line"></i> Limpar Treinos no App
+                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="closeModals()">Cancelar</button>
+                    <button class="btn btn-primary" onclick="saveAthlete()">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div class="modal" id="modal-history" style="z-index: 1040; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); padding: 0 !important;">
+        <div class="modal-card modal-xl" style="max-width: 100vw; width: 100vw; height: 100vh; max-height: 100vh; margin: 0; display: flex; flex-direction: column; border-radius: 0; overflow: hidden; border: none; box-shadow: none;">
+            <div class="modal-header" style="flex-shrink: 0; padding: 12px 24px; border-bottom: 1px solid var(--border-strong); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="display:flex; align-items:center; gap:8px; font-weight: 800; font-size: 18px; margin: 0;"><i class="ri-calendar-2-line" style="color:var(--primary);"></i> Calendário de Treinos: <span id="hist-athlete-name" style="color: var(--primary);"></span></h3>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button class="btn btn-secondary" onclick="toggleHistoryLibrary()" style="font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; padding: 8px 14px;">
+                        <i class="ri-book-open-line"></i> <span id="library-toggle-text">Biblioteca de Treinos</span>
+                    </button>
+                    <button class="btn-close" onclick="closeModals()" style="margin: 0;"><i class="ri-close-line"></i></button>
+                </div>
+            </div>
+            <div class="modal-body" style="background:var(--bg); padding:12px; display:flex; gap:12px; flex:1; min-height:0; overflow:hidden;">
+                <!-- Coluna da Esquerda: Calendário Interativo Expandido -->
+                <div id="history-calendar-container" style="flex:1; background:var(--panel); border-radius:12px; border:1px solid var(--border-strong); padding:16px; box-shadow:0 4px 6px rgba(0,0,0,0.02); display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden;"></div>
+                
+                <!-- Coluna da Direita: Biblioteca de Treinos Estilo TrainingPeaks -->
+                <div id="history-library-container" style="width:320px; background:var(--panel); border-radius:12px; border:1px solid var(--border-strong); padding:16px; box-shadow:0 4px 6px rgba(0,0,0,0.02); display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; transition: all 0.3s ease;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h4 style="font-weight: 800; font-size: 15px; margin: 0; color: var(--text);">Biblioteca de Treinos</h4>
+                        <div style="position: relative; display: inline-block;">
+                            <button class="btn btn-primary" onclick="toggleLibraryAddDropdown(event)" style="padding: 6px 10px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; gap: 4px;">
+                                <i class="ri-add-line" style="font-size: 15px;"></i>
+                            </button>
+                            <div id="library-add-dropdown" style="display: none; position: absolute; top: 100%; right: 0; background: var(--panel); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); z-index: 100; min-width: 120px; margin-top: 4px; padding: 4px 0;">
+                                <a href="javascript:void(0)" onclick="openCreateLibraryWorkout(event)" style="display: block; padding: 8px 12px; font-size: 13px; color: var(--text); text-decoration: none; font-weight: 600;" onmouseover="this.style.background='rgba(30,142,62,0.1)'" onmouseout="this.style.background='transparent'">Treino</a>
+                                <a href="javascript:void(0)" onclick="createLibraryFolder(event)" style="display: block; padding: 8px 12px; font-size: 13px; color: var(--text); text-decoration: none; font-weight: 600;" onmouseover="this.style.background='rgba(30,142,62,0.1)'" onmouseout="this.style.background='transparent'">Pasta</a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="position: relative; margin-bottom: 10px;">
+                        <i class="ri-search-line" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 13px;"></i>
+                        <input type="text" id="library-search" placeholder="Pesquisar modelos..." oninput="renderLibraryTemplates()" style="width: 100%; padding: 6px 8px 6px 26px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 12px; outline: none; background: var(--bg); color: var(--text);">
+                    </div>
+                    
+                    <div id="library-folders-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+                        <!-- Folders will render here dynamically -->
+                    </div>
+                    
+                    <div style="margin-top: 10px; padding: 8px; background: rgba(30,142,62, 0.05); border-radius: 6px; text-align: center; border: 1px dashed rgba(30,142,62, 0.2);">
+                        <span style="font-size: 10px; color: var(--text-muted); font-weight: 600;">💡 Arraste e solte o treino no calendário</span>
+                    </div>
+                </div>
+                
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit/Add Individual Workout Modal -->
+    <div class="modal" id="modal-edit-workout" style="z-index: 1050; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);">
+        <div class="modal-card modal-xl" style="max-width: 95vw; width: 1300px; height: 88vh; max-height: 88vh; margin: auto; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); background: #f0f2f5;">
+            <!-- Garmin Header -->
+            <div class="garmin-header" style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: white; border-bottom: 1px solid var(--border-strong); position: relative; gap: 16px;">
+                <!-- Back -->
+                <button class="btn-text-link" onclick="closeEditWorkoutModal()" style="display: flex; align-items: center; gap: 5px; color: #1e293b; border: none; background: transparent; cursor: pointer; font-weight: 700; font-size: 14px; flex-shrink: 0;">
+                    <i class="ri-arrow-left-s-line" style="font-size: 20px;"></i> Calendário
+                </button>
+
+                <!-- Icon + Inline Title + Type Pills -->
+                <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
+                    <!-- Dropdown Trigger Icon Button -->
+                    <div style="position: relative; display: inline-block; flex-shrink: 0; z-index: 100;">
+                        <button id="edit-workout-type-btn" onclick="toggleWorkoutTypeDropdown(event)" style="background: #eff6ff; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" title="Alterar tipo de treino">
+                            <div id="edit-workout-type-icon" style="font-size: 18px; display: flex; align-items: center; justify-content: center; color: white;">
+                                <i class="ri-run-line"></i>
+                            </div>
+                            <i class="ri-arrow-down-s-fill" style="font-size: 8px; margin-top: -2px; color: rgba(255,255,255,0.85);"></i>
+                        </button>
+                        
+                        <!-- Floating Dropdown Menu -->
+                        <div id="workout-type-dropdown-menu" style="display: none; position: absolute; top: 105%; left: 0; background: white; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.12); z-index: 1000; min-width: 170px; padding: 6px 0; font-family: system-ui, sans-serif;">
+                            <button onclick="selectWorkoutType('Corrida', event)" style="width: 100%; padding: 10px 16px; border: none; background: transparent; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                                <i class="ri-run-line" style="color: #fbbf24; font-size: 16px;"></i> Corrida
+                            </button>
+                            <button onclick="selectWorkoutType('Natação', event)" style="width: 100%; padding: 10px 16px; border: none; background: transparent; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="#0ea5e9" style="flex-shrink: 0;"><path d="M2 21v-2q.95 0 1.425-.5T5.3 18t1.925.5t1.425.5t1.425-.5T12 18t1.925.5t1.425.5t1.425-.5T18.7 18t1.875.5T22 19v2q-1.475 0-1.937-.5T18.7 20t-1.425.5-1.925.5-1.925-.5T12 20t-1.425.5-1.925.5-1.925-.5T5.3 20t-1.363.5T2 21m0-4.5v-2q.95 0 1.425-.5t1.875-.5 1.938.5 1.412.5q.9 0 1.425-.5T12 13.5t1.925.5 1.425.5 1.425-.5 1.925-.5 1.875.5 1.425.5v2q-1.475 0-1.937-.5t-1.363-.5-1.388.5-1.962.5q-1.425 0-1.937-.5T12 15.5q-.95 0-1.412.5t-1.938.5-1.963-.5-1.387-.5-1.362.5T2 16.5m4.9-5.1l3.325-3.325l-1-1q-.825-.825-1.75-1.2T5.2 5.5V3q1.875 0 3.1.413T10.7 5l6.4 6.4q-.425.275-.825.438T15.35 12q-.9 0-1.425-.5T12 11t-1.925.5-1.425.5q-.525 0-.925-.162T6.9 11.4m11.575-7.663q.725.738.725 1.763q0 1.05-.725 1.775T16.7 8t-1.775-.725T14.2 5.5q0-1.025.725-1.763T16.7 3t1.775.738"/></svg> Natação
+                            </button>
+                            <button onclick="selectWorkoutType('Ciclismo', event)" style="width: 100%; padding: 10px 16px; border: none; background: transparent; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                                <i class="ri-riding-line" style="color: #22c55e; font-size: 16px;"></i> Ciclismo
+                            </button>
+                            <button onclick="selectWorkoutType('Fortalecimento', event)" style="width: 100%; padding: 10px 16px; border: none; background: transparent; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="#8b5cf6" style="flex-shrink: 0;"><path d="M6 5h2v14H6zm10 0h2v14h-2zM3 9h3v6H3zm15 0h3v6h-3zM8 11h8v2H8z"/></svg> Fortalecimento
+                            </button>
+                            <button onclick="selectWorkoutType('Outros', event)" style="width: 100%; padding: 10px 16px; border: none; background: transparent; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; text-align: left; transition: background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                                <i class="ri-clipboard-line" style="color: #64748b; font-size: 16px;"></i> Outros
+                            </button>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1;">
+                        <!-- Inline title input -->
+                        <input
+                            type="text"
+                            id="edit-workout-title"
+                            placeholder="Nome do treino…"
+                            style="font-weight: 800; font-size: 18px; color: #0f172a; border: none; border-bottom: 2px solid transparent; outline: none; background: transparent; width: 100%; padding: 2px 0; transition: border-color 0.2s;"
+                            onfocus="this.style.borderBottomColor='#1265C2'"
+                            onblur="this.style.borderBottomColor='transparent'"
+                        />
+                        <!-- Current workout type text label -->
+                        <span id="edit-workout-type-text-label" style="font-size: 11px; font-weight: 800; color: #64748b; margin-left: 2px; text-transform: capitalize; user-select: none;">Corrida</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div style="display: flex; gap: 12px; flex-shrink: 0; align-items: center;">
+                    <button id="toggle-vam-btn" class="btn btn-secondary" onclick="toggleVamPreview()" style="background: transparent; color: var(--text); font-weight: 700; border: 1px solid var(--border-strong); display: flex; align-items: center; gap: 6px;">
+                        <i class="ri-layout-right-line"></i> Tabelas VAM
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeEditWorkoutModal()" style="background: #D8D8D8; color: #101010; font-weight: 700; border: none;">Cancelar</button>
+                    <button class="btn btn-primary" onclick="saveIndividualWorkout()" style="font-weight: 700; padding: 10px 24px;">Salvar Treino</button>
+                </div>
+            </div>
+
+            <div class="modal-body" style="flex: 1; overflow: hidden; padding: 0; display: flex; background: #f8fafc; font-family: system-ui, -apple-system, sans-serif;">
+                <!-- 3-Column Container -->
+                <div style="flex: 1; display: flex; height: 100%; overflow: hidden; width: 100%;">
+                    
+                    <!-- COLUMN 1: Stats & Pre-Activity Notes (Left - 25% width) -->
+                    <div id="calendar-workout-stats-sidebar" style="width: 25%; min-width: 280px; border-right: 1px solid #e2e8f0; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: #f8fafc; height: 100%; flex-shrink: 0;">
+                        <input type="hidden" id="edit-workout-id">
+                        <input type="hidden" id="edit-workout-date">
+                        <input type="hidden" id="edit-workout-type">
+
+                        <!-- Stats Grid Planned vs Completed -->
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                            <h4 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 6px;">
+                                <i class="ri-bar-chart-2-line" style="color: #1265C2; font-size: 14px;"></i> Métricas do Treino
+                            </h4>
+                            <div style="display: grid; grid-template-columns: 1fr 65px 65px; gap: 8px 6px; font-size: 11px; align-items: center;">
+                                <div></div>
+                                <div style="text-align: center; color: #64748b; font-weight: 700; border-bottom: 1px solid #cbd5e1; padding-bottom: 2px;">Plan.</div>
+                                <div style="text-align: center; color: #64748b; font-weight: 700; border-bottom: 1px solid #cbd5e1; padding-bottom: 2px;">Exec.</div>
+
+                                <div style="font-weight: 600; color: #334155;">Duração</div>
+                                <input type="text" id="edit-workout-pace" placeholder="--:--" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #0f172a; outline: none; background: #ffffff;">
+                                <input type="text" id="edit-workout-real-duration" placeholder="--:--" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #0f172a; outline: none; background: #ffffff;">
+
+                                <div style="font-weight: 600; color: #334155;">Dist. (km)</div>
+                                <input type="text" id="edit-workout-dist" placeholder="Ex: 8.0" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #0f172a; outline: none; background: #ffffff;">
+                                <input type="text" id="edit-workout-real-dist" placeholder="Ex: 8.2" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #0f172a; outline: none; background: #ffffff;">
+
+                                <div style="font-weight: 600; color: #334155;">Ritmo (/km)</div>
+                                <div style="width: 100%; background: #f1f5f9; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #64748b;" id="edit-workout-calc-pace">--:--</div>
+                                <input type="text" id="edit-workout-real-pace" placeholder="--:--" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #0f172a; outline: none; background: #ffffff;">
+
+                                <div style="font-weight: 600; color: #334155;">Esforço RPE</div>
+                                <div style="width: 100%; background: #f1f5f9; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #64748b;">--</div>
+                                <input type="number" id="edit-workout-effort" min="1" max="10" placeholder="1-10" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 11px; text-align: center; font-weight: 700; color: #0f172a; outline: none; background: #ffffff;">
+                            </div>
+                        </div>
+
+                        <!-- Status Field -->
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                            <label style="font-weight: 700; font-size: 10px; display: block; margin-bottom: 6px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Status do Treino</label>
+                            <select id="edit-workout-status" onchange="toggleEditWorkoutCompletedFields()" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 700; color: #334155; background: white; outline: none; cursor: pointer;">
+                                <option value="pending">Pendente (Prescrito)</option>
+                                <option value="completed">Concluído (Executado)</option>
+                            </select>
+                        </div>
+
+                        <!-- Pre-Activity notes -->
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); flex: 1; display: flex; flex-direction: column;">
+                            <label style="font-weight: 700; font-size: 10px; display: block; margin-bottom: 6px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Comentários Pré-Atividade</label>
+                            <textarea id="edit-workout-desc" style="width: 100%; flex: 1; min-height: 120px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; font-size: 12px; background: white; color: #334155; outline: none; resize: none; font-family: inherit;" placeholder="Notas ou instruções gerais do treino..."></textarea>
+                        </div>
+
+                        <!-- Delete button -->
+                        <button id="edit-workout-delete-btn" class="btn btn-danger-solid" onclick="deleteIndividualWorkout()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 12px; background: #ef4444; color: white; border: none; cursor: pointer; transition: background 0.15s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                            <i class="ri-delete-bin-line"></i> Excluir Treino Permanente
+                        </button>
+                    </div>
+
+                    <!-- COLUMN 2: Graph, Dynamic Summary & Steps Compact List (Middle - 50% width) -->
+                    <div id="calendar-workout-steps-container" style="width: 50%; display: flex; flex-direction: column; overflow: hidden; background: white; height: 100%; border-right: 1px solid #e2e8f0;">
+                        <!-- Tab Bar for Completed Workouts -->
+                        <div id="workout-modal-tabs" style="display: none; gap: 8px; border-bottom: 2px solid #e2e8f0; padding: 12px 16px; flex-shrink: 0; background: white;">
+                            <button id="tab-workout-presc" class="btn btn-secondary active" onclick="switchWorkoutModalTab('presc')" style="padding: 6px 14px; font-weight: 700; font-size: 12px; cursor: pointer; border-radius: 6px; transition: all 0.2s;">Planilha Prescrita</button>
+                            <button id="tab-workout-comp" class="btn btn-secondary" onclick="switchWorkoutModalTab('comp')" style="padding: 6px 14px; font-weight: 700; font-size: 12px; cursor: pointer; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; gap: 6px; border-color: #10b981; color: #10b981; background: #f0fdf4;"><i class="ri-pulse-line"></i> Comparativo de Execução</button>
+                        </div>
+                        
+                        <!-- Content: Steps Editor -->
+                        <div id="calendar-workout-steps-editor-wrap" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; width: 100%;">
+                            <!-- Graph visual, compact step cards list and summary render dynamically here -->
+                        </div>
+                        
+                        <!-- Content: Comparison Panel -->
+                        <div id="calendar-workout-comparison-wrap" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto; width: 100%; display: none; padding: 16px; gap: 20px;">
+                            <!-- Comparison content will be rendered here dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- COLUMN 3: Block Creator & Selected Step Detail (Right - 25% width) -->
+                    <div id="calendar-workout-right-sidebar" style="width: 25%; min-width: 280px; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: #f8fafc; height: 100%; flex-shrink: 0;">
+                        
+                        <!-- Block Creator (Aesthetics TP) -->
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                            <h4 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 10px 0; display: flex; align-items: center; gap: 6px;">
+                                <i class="ri-add-box-line" style="color: #1265C2; font-size: 14px;"></i> Adicionar Bloco
+                            </h4>
+                            <!-- Visual block creation grid -->
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                                <div onclick="addCalendarWorkoutStep('warmup')" style="aspect-ratio: 16/9; background: #d5e0ee; border-bottom: 4px solid #a5bed9; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s;" title="Aquecimento" class="tp-creator-block-warmup" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    <span style="font-size: 8px; font-weight: 800; color: #475569;">AQU</span>
+                                </div>
+                                <div onclick="addCalendarWorkoutStep('run')" style="aspect-ratio: 16/9; background: #0c3886; border-bottom: 4px solid #072a66; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s;" title="Corrida / Trabalho" class="tp-creator-block-work" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    <span style="font-size: 8px; font-weight: 800; color: white;">COR</span>
+                                </div>
+                                <div onclick="addCalendarWorkoutStep('recovery')" style="aspect-ratio: 16/9; background: #d5e0ee; border-bottom: 4px solid #a5bed9; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s;" title="Recuperação" class="tp-creator-block-rec" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    <span style="font-size: 8px; font-weight: 800; color: #475569;">REC</span>
+                                </div>
+                                <div onclick="addCalendarWorkoutStep('cooldown')" style="aspect-ratio: 16/9; background: #0c3886; border-bottom: 4px solid #072a66; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s;" title="Desaquecimento" class="tp-creator-block-cool" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    <span style="font-size: 8px; font-weight: 800; color: white;">DES</span>
+                                </div>
+                            </div>
+                            <button onclick="addCalendarWorkoutStep('repetition')" style="margin-top: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; background: #eff6ff; color: #1265C2; border: 1px dashed #bae6fd; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+                                <i class="ri-repeat-line"></i> Adicionar Repetição (x)
+                            </button>
+                        </div>
+
+                        <!-- Selected Step Details Panel -->
+                        <div id="tp-selected-step-editor" style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+                            <!-- Will be rendered dynamically based on selected step index -->
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+                    <!-- Right 2: Referência de Ritmos de VAM do Atleta na Edição -->
+                    <div id="edit-workout-vam-preview" style="display:none; width: 380px; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; flex-shrink: 0; padding-left: 10px; scrollbar-width: none; -ms-overflow-style: none;">
+                        <!-- Top Summary Card: Tempo e VAM -->
+                        <div style="display: flex; gap: 12px; align-items: stretch;">
+                            <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Tempo Teste (3km)</div>
+                                <div id="edit-workout-modal-test-time" style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-0.5px;">-- min</div>
+                            </div>
+                            <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: linear-gradient(135deg, #1265C2 0%, #1e3a5f 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(18, 101, 194, 0.15);">
+                                <div style="font-size:10px;color:rgba(255,255,255,0.7);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">VAM Calculada</div>
+                                <div id="edit-workout-modal-vam" style="font-size:20px;font-weight:900;color:white;letter-spacing:-0.5px;">-- km/h</div>
+                            </div>
+                        </div>
+
+                        <!-- Training Zones -->
+                        <div class="stat-card" style="padding: 14px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
+                            <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                                <i class="ri-radar-line" style="color: #1265C2; font-size: 16px;"></i> Zonas de Treino (VAM)
+                            </h4>
+                            <div id="edit-workout-vam-zones" style="display:flex;flex-direction:column;gap:6px;"></div>
+                        </div>
+
+                        <!-- Ritmos por Distância -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+                                <i class="ri-split-cells-vertical" style="color: #1265C2; font-size: 16px;"></i> Ritmos por Distância
+                            </h4>
+                            <!-- Tiros Curtos -->
+                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Tiros Curtos (m)</span></div>
+                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="edit-workout-tbl-short"></table>
+                            </div>
+                            <!-- Provas e Rodagens -->
+                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
+                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Provas & Rodagens (km)</span></div>
+                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="edit-workout-tbl-long"></table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assign Modal -->
+    <div class="modal" id="modal-assign">
+        <div class="modal-card" style="max-width:420px;">
+            <div class="modal-header"><h3 id="modal-assign-title">Atribuir</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-body">
+                <p style="margin-bottom:12px;font-size:14px;color:var(--text-muted);">Selecione os alunos:</p>
+                <div id="assign-athlete-list" style="max-height:350px;overflow-y:auto;border:1px solid var(--border-strong);border-radius:var(--radius);padding:8px;display:flex;flex-direction:column;gap:4px;background:var(--bg);"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModals()">Cancelar</button><button class="btn btn-primary" onclick="saveAssign()">Confirmar</button></div>
+        </div>
+    </div>
+
+    <!-- Duplicate Modal -->
+    <div class="modal" id="modal-duplicate">
+        <div class="modal-card" style="max-width:400px;">
+            <div class="modal-header"><h3>Duplicar Treino</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-body">
+                <p style="margin-bottom:12px;font-size:14px;color:var(--text-muted);">Escolha a pasta de destino:</p>
+                <div id="dup-folder-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModals()">Cancelar</button></div>
+        </div>
+    </div>
+
+    <!-- Strava Activities Modal -->
+    <div class="modal" id="modal-strava">
+        <div class="modal-card" style="max-width:600px;">
+            <div class="modal-header">
+                <h3>Atividades Strava: <span id="strava-athlete-name"></span></h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="padding:0; background:var(--bg);">
+                <div id="strava-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
+                    <i class="ri-loader-4-line ri-spin" style="font-size:32px; display:block; margin-bottom:8px;"></i>
+                    Buscando atividades no Strava...
+                </div>
+                <div id="strava-list" class="history-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Zoom de Gráfico (Garmin Style) -->
+    <div class="modal" id="modal-zoom-chart" style="z-index: 110;">
+        <div class="modal-card modal-xl" style="height: 85vh; max-width: 1400px; width: 95vw; background: #fff; color: #333; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 12px 20px;">
+                <h3 id="zoom-chart-title" style="font-size: 14px; font-weight: 700; color: #495057; text-transform: uppercase; letter-spacing: 1px;">Análise de Atividade</h3>
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #6c757d;">Visualização:</span>
+                        <select id="zoom-hr-mode" onchange="applyZoomOverlay()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
+                            <option value="zones">Zonas de Intensidade</option>
+                            <option value="classic">Clássico (Vermelho)</option>
+                        </select>
+                    </div>
+                    <div id="overlay-control" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #6c757d;">Sobreposição:</span>
+                        <select id="zoom-overlay-select" onchange="applyZoomOverlay()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
+                            <option value="">Nenhuma</option>
+                            <option value="pace">Ritmo</option>
+                            <option value="heartrate">Frequência Cardíaca</option>
+                            <option value="altitude">Elevação</option>
+                        </select>
+                    </div>
+                    <button class="btn-close" onclick="closeZoomModal()" style="background: none; border: none; font-size: 20px; color: #adb5bd; cursor: pointer;"><i class="ri-close-line"></i></button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding: 30px 40px; display: flex; flex-direction: column; background: #fff; height: calc(85vh - 60px);">
+                <div style="flex: 1; min-height: 0; position: relative; width: 100%;">
+                    <canvas id="zoomCanvas"></canvas>
+                </div>
+                <div style="display: flex; justify-content: center; padding-top: 15px; border-top: 1px solid #f1f3f5;">
+                    <select id="zoom-xaxis-select" onchange="applyZoomXAxis()" style="padding: 4px 12px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
+                        <option value="distance">De acordo com a distância</option>
+                        <option value="time">De acordo com o tempo</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Garmin Details Modal -->
+    <div class="modal" id="modal-garmin-details">
+        <div class="modal-card" style="max-width: 600px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin</h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="garmin-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
+                    Extraindo dados da Garmin...
+                </div>
+                <div id="garmin-error" style="padding:40px; text-align:center; color:#fc4c02; display:none; font-weight: bold;">
+                </div>
+                <div id="garmin-details-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 16px 0;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Detail Modal -->
+    <div class="modal" id="modal-activity-detail">
+        <div class="modal-card modal-xl" style="max-width: 1000px; height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3 id="act-detail-title">Detalhes da Atividade</h3>
+                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0;">
+                <div id="act-detail-map" style="height: 45vh; width: 100%; background: #eee;"></div>
+                <div style="padding: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div id="act-detail-avatar" style="width: 48px; height: 48px; border-radius: 12px; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px;">
+                                A
+                            </div>
+                            <div>
+                                <div id="act-detail-athlete" style="font-size: 18px; font-weight: 800;">Nome do Atleta</div>
+                                <div id="act-detail-date" style="font-size: 13px; color: var(--text-muted);">Data da atividade</div>
+                            </div>
+                        </div>
+                        <div id="act-detail-type" style="display: none; background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 100px; font-size: 13px; font-weight: 800; text-transform: uppercase;">
+                        </div>
+                    </div>
+
+                    <div id="act-detail-metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                        <!-- Métricas serão inseridas aqui -->
+                    </div>
+
+
+                    <div id="act-detail-charts" style="display: none; border-top: 1px solid var(--border); padding-top: 24px;">
+                        <div class="chart-controls-bar">
+                            <h4 style="font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                                <i class="ri-line-chart-line" style="color: #fc4c02;"></i> Análise de Telemetria
+                            </h4>
+                            <div class="chart-toggle-group">
+                                <button id="btn-xaxis-distance" class="chart-toggle-btn active" onclick="setChartXAxis('distance')">Distância</button>
+                                <button id="btn-xaxis-time" class="chart-toggle-btn" onclick="setChartXAxis('time')">Tempo</button>
+                            </div>
+                        </div>
+                        
+                        <div class="premium-chart-stack" id="detail-charts-stack">
+                            <!-- Gráfico de Ritmo -->
+                            <div class="premium-chart-container">
+                                <div class="chart-label-wrap">
+                                    <div class="chart-title"><i class="ri-speed-up-line" style="color:#007aff;"></i> Ritmo</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <div id="avg-pace-tag" class="chart-avg-tag">Média: --</div>
+                                        <button class="chart-zoom-btn" onclick="openZoomModal('pace')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
+                                    </div>
+                                </div>
+                                <div class="chart-wrapper" style="height: 180px; position: relative;">
+                                    <canvas id="detailChartPace"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Gráfico de FC -->
+                            <div class="premium-chart-container">
+                                <div class="chart-label-wrap">
+                                    <div class="chart-title"><i class="ri-pulse-line" style="color:#ff2d55;"></i> Frequência Cardíaca</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <div id="avg-hr-tag" class="chart-avg-tag">Média: --</div>
+                                        <button class="chart-zoom-btn" onclick="openZoomModal('heartrate')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
+                                    </div>
+                                </div>
+                                <div class="chart-wrapper" style="height: 150px; position: relative;">
+                                    <canvas id="detailChartHR"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Gráfico de Elevação -->
+                            <div class="premium-chart-container">
+                                <div class="chart-label-wrap">
+                                    <div class="chart-title"><i class="ri-landscape-line" style="color:#64748b;"></i> Elevação</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <div id="avg-elev-tag" class="chart-avg-tag">-- m</div>
+                                        <button class="chart-zoom-btn" onclick="openZoomModal('altitude')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
+                                    </div>
+                                </div>
+                                <div class="chart-wrapper" style="height: 120px; position: relative;">
+                                    <canvas id="detailChartElevation"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p style="font-size: 11px; color: var(--text-muted); text-align: center; margin-top: -10px; margin-bottom: 20px;">
+                            <i class="ri-information-line"></i> Passe o mouse sobre os gráficos para ver detalhes e sincronizar com o mapa.
+                        </p>
+                    </div>
+
+
+                    <div id="act-detail-extra" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; padding-top: 20px; border-top: 1px solid var(--border); margin-top: 20px;">
+                        <!-- Mais detalhes -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal" id="modal-export" style="z-index:1100;">
+        <div class="modal-card modal-lg" style="height:90vh;display:flex;flex-direction:column;background:var(--bg);">
+            <div class="modal-header"><h3>Visualizar Treino</h3><div style="display:flex;gap:10px;"><button class="btn btn-primary" onclick="sendToAnotherAthlete()" id="btn-send-another" style="display:none;"><i class="ri-send-plane-line"></i> Re-enviar para outro</button><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div></div>
+            <div class="modal-body" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
+                <div style="flex:1;overflow-y:auto;padding:20px;display:flex;justify-content:center;background:#cbd5e1;">
+                    <div id="export-loading" style="padding:40px;text-align:center;display:none;flex-direction:column;align-items:center;"><div class="loader"></div><p style="margin-top:12px;font-weight:700;color:#475569;">Gerando visualização...</p></div>
+                    <img id="export-img-preview" style="max-width:100%;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1),0 10px 10px -5px rgba(0,0,0,0.04);border-radius:8px;">
+                    <div id="export-wrapper" style="position:absolute;left:-9999px;top:0;background:#f1f5f9;padding:20px;">
+                        <div id="export-template" class="vdot-card">
+                            <div class="vdot-header">
+                                <div class="vdot-title">TREINAMENTO PROFISSIONAL</div>
+                                <h2 id="tpl-name">Atleta</h2>
+                                <div class="vdot-metrics" id="tpl-objective"></div>
+                                <div class="vdot-metrics" style="margin-top:8px;" id="tpl-vol"></div>
+                                <div class="vdot-metrics" style="margin-top:8px;" id="tpl-date"></div>
+                            </div>
+                            <div class="vdot-body" id="tpl-days"></div>
+                            <div class="vdot-footer">MEUVAM — CONSULTORIA ESPORTIVA</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="background:#fff;border-top:1px solid var(--border);padding:12px 20px;justify-content:center;gap:12px;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="copyImageToClipboard()" style="padding:10px 20px;"><i class="ri-file-copy-line"></i> Copiar Imagem</button>
+                    <button class="btn btn-secondary" onclick="downloadImage()" style="padding:10px 20px;"><i class="ri-download-line"></i> Baixar PNG</button>
+                    <button class="btn btn-secondary" onclick="sendToWhatsApp()" style="padding:10px 20px;background:#25D366;color:white;border:none;"><i class="ri-whatsapp-line"></i> Enviar WhatsApp</button>
+                    <button class="btn btn-primary" onclick="shareImage()" style="padding:10px 20px;"><i class="ri-share-line"></i> Compartilhar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+    <!-- Modal Tutorial (Guia de Treinamento) -->
+    <div class="modal" id="modal-tutorial">
+        <div class="modal-card modal-xl" style="max-width: 1100px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+            <div class="modal-header" style="background: var(--panel); border-bottom: 1px solid var(--border); padding: 20px 24px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="background: var(--primary-soft); color: var(--primary); padding: 8px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="ri-compass-3-line"></i>
+                    </span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--text);">Central de Ajuda & Guia Interativo</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted);">Aprenda a dominar o MeuVAM passo a passo</p>
+                    </div>
+                </div>
+                <button class="btn-close" onclick="closeTutorialModal()"><i class="ri-close-line"></i></button>
+            </div>
+            
+            <div class="modal-body" style="padding: 24px; overflow-y: auto; background: var(--bg); display: flex; flex-direction: column; gap: 24px;">
+                <!-- Hero Banner -->
+                <div style="background: linear-gradient(135deg, var(--primary) 0%, #1557b0 100%); border-radius: 12px; padding: 24px 32px; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <div style="max-width: 600px;">
+                        <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 20px;">Interativo & Prático</span>
+                        <h2 style="font-size: 22px; font-weight: 800; margin: 8px 0; color: white;">Como podemos ajudar você hoje?</h2>
+                        <p style="font-size: 13px; color: rgba(255,255,255,0.85); line-height: 1.5; margin: 0;">Selecione um dos guias temáticos abaixo. O MeuVAM irá direcionar você automaticamente para a tela correspondente e destacar cada elemento importante do sistema!</p>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: center; font-size: 70px; color: rgba(255,255,255,0.15); font-weight: 900;">
+                        <i class="ri-lightbulb-line"></i>
+                    </div>
+                </div>
+
+                <!-- Grid de Módulos (6 cards) -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
+                    <!-- Card 1: Visão Geral -->
+                    <div class="stat-card dashboard-shortcut-card" onclick="startThematicTour('dashboard')" style="border-left: 4px solid #1a73e8; display: flex; flex-direction: column; justify-content: space-between; min-height: 160px; margin: 0; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span class="shortcut-icon" style="background: rgba(26, 115, 232, 0.1); color: #1a73e8; margin-bottom: 0; width: 38px; height: 38px; font-size: 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="ri-dashboard-line"></i></span>
+                                <span style="font-size: 11px; font-weight: 700; color: #1a73e8; background: rgba(26, 115, 232, 0.1); padding: 2px 8px; border-radius: 12px;">5 passos</span>
+                            </div>
+                            <strong style="font-size: 15px; color: var(--text); display: block;">1. Visão Geral & Painel</strong>
+                            <p style="color: var(--text-muted); font-size: 12px; margin-top: 6px; line-height: 1.4; font-weight: normal;">Conheça os indicadores globais, menu lateral e configurações de preferência.</p>
+                        </div>
+                        <span style="font-size: 12px; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 16px;">
+                            <i class="ri-play-circle-line" style="font-size: 15px;"></i> Iniciar Tour
+                        </span>
+                    </div>
+
+                    <!-- Card 2: Pastas & Templates -->
+                    <div class="stat-card dashboard-shortcut-card" onclick="startThematicTour('templates')" style="border-left: 4px solid #10b981; display: flex; flex-direction: column; justify-content: space-between; min-height: 160px; margin: 0; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span class="shortcut-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981; margin-bottom: 0; width: 38px; height: 38px; font-size: 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="ri-folder-open-line"></i></span>
+                                <span style="font-size: 11px; font-weight: 700; color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 12px;">7 passos</span>
+                            </div>
+                            <strong style="font-size: 15px; color: var(--text); display: block;">2. Pastas & Biblioteca de Treinos</strong>
+                            <p style="color: var(--text-muted); font-size: 12px; margin-top: 6px; line-height: 1.4; font-weight: normal;">Monte uma biblioteca de templates inteligentes para ganhar tempo.</p>
+                        </div>
+                        <span style="font-size: 12px; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 16px;">
+                            <i class="ri-play-circle-line" style="font-size: 15px;"></i> Iniciar Tour
+                        </span>
+                    </div>
+
+                    <!-- Card 3: Gestão de Atletas -->
+                    <div class="stat-card dashboard-shortcut-card" onclick="startThematicTour('athletes')" style="border-left: 4px solid #f59e0b; display: flex; flex-direction: column; justify-content: space-between; min-height: 160px; margin: 0; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span class="shortcut-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; margin-bottom: 0; width: 38px; height: 38px; font-size: 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="ri-group-line"></i></span>
+                                <span style="font-size: 11px; font-weight: 700; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 2px 8px; border-radius: 12px;">5 passos</span>
+                            </div>
+                            <strong style="font-size: 15px; color: var(--text); display: block;">3. Gestão de Alunos & VAM</strong>
+                            <p style="color: var(--text-muted); font-size: 12px; margin-top: 6px; line-height: 1.4; font-weight: normal;">Cadastre atletas, calcule a VAM e ajuste as 7 zonas automáticas.</p>
+                        </div>
+                        <span style="font-size: 12px; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 16px;">
+                            <i class="ri-play-circle-line" style="font-size: 15px;"></i> Iniciar Tour
+                        </span>
+                    </div>
+
+                    <!-- Card 4: Prescrição de Treinos -->
+                    <div class="stat-card dashboard-shortcut-card" onclick="startThematicTour('calendar')" style="border-left: 4px solid #ef4444; display: flex; flex-direction: column; justify-content: space-between; min-height: 160px; margin: 0; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span class="shortcut-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; margin-bottom: 0; width: 38px; height: 38px; font-size: 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="ri-calendar-event-line"></i></span>
+                                <span style="font-size: 11px; font-weight: 700; color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 12px;">8 passos</span>
+                            </div>
+                            <strong style="font-size: 15px; color: var(--text); display: block;">4. Prescrição & Calendário</strong>
+                            <p style="color: var(--text-muted); font-size: 12px; margin-top: 6px; line-height: 1.4; font-weight: normal;">Domine a planilha semanal, arraste blocos e aplique seus templates.</p>
+                        </div>
+                        <span style="font-size: 12px; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 16px;">
+                            <i class="ri-play-circle-line" style="font-size: 15px;"></i> Iniciar Tour
+                        </span>
+                    </div>
+
+                    <!-- Card 5: Telemetria & Strava -->
+                    <div class="stat-card dashboard-shortcut-card" onclick="startThematicTour('telemetry')" style="border-left: 4px solid #fc4c02; display: flex; flex-direction: column; justify-content: space-between; min-height: 160px; margin: 0; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span class="shortcut-icon" style="background: rgba(252, 76, 2, 0.1); color: #fc4c02; margin-bottom: 0; width: 38px; height: 38px; font-size: 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="ri-pulse-line"></i></span>
+                                <span style="font-size: 11px; font-weight: 700; color: #fc4c02; background: rgba(252, 76, 2, 0.1); padding: 2px 8px; border-radius: 12px;">6 passos</span>
+                            </div>
+                            <strong style="font-size: 15px; color: var(--text); display: block;">5. Telemetria GPS & Match Score</strong>
+                            <p style="color: var(--text-muted); font-size: 12px; margin-top: 6px; line-height: 1.4; font-weight: normal;">Compare os treinos propostos com os realizados via Strava/Garmin.</p>
+                        </div>
+                        <span style="font-size: 12px; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 16px;">
+                            <i class="ri-play-circle-line" style="font-size: 15px;"></i> Iniciar Tour
+                        </span>
+                    </div>
+
+                    <!-- Card 6: Calculadoras de Ritmo -->
+                    <div class="stat-card dashboard-shortcut-card" onclick="startThematicTour('calculator')" style="border-left: 4px solid var(--primary); display: flex; flex-direction: column; justify-content: space-between; min-height: 160px; margin: 0; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span class="shortcut-icon" style="background: var(--primary-soft); color: var(--primary); margin-bottom: 0; width: 38px; height: 38px; font-size: 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="ri-calculator-line"></i></span>
+                                <span style="font-size: 11px; font-weight: 700; color: var(--primary); background: var(--primary-soft); padding: 2px 8px; border-radius: 12px;">4 passos</span>
+                            </div>
+                            <strong style="font-size: 15px; color: var(--text); display: block;">6. Calculadoras Integradas</strong>
+                            <p style="color: var(--text-muted); font-size: 12px; margin-top: 6px; line-height: 1.4; font-weight: normal;">Converta VAM para pace real e pace de esteira sem planilhas externas.</p>
+                        </div>
+                        <span style="font-size: 12px; color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 16px;">
+                            <i class="ri-play-circle-line" style="font-size: 15px;"></i> Iniciar Tour
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Dica Rápida -->
+                <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; display: flex; gap: 16px; align-items: flex-start;">
+                    <span style="font-size: 24px; color: var(--warning); display: flex;"><i class="ri-information-line"></i></span>
+                    <div>
+                        <strong style="color: var(--text); font-size: 14px; display: block; margin-bottom: 4px;">Dica do MeuVAM</strong>
+                        <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0;">Você pode sair de qualquer tour antes de concluí-lo simplesmente clicando no botão de fechar "X" no cartão do tour que aparecerá na tela. Todos os dados permanecem intactos.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="background: var(--panel); border-top: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 12px; color: var(--text-muted);">Suporte MeuVAM — Sempre aqui por você</span>
+                <button class="btn btn-secondary" onclick="closeTutorialModal()">Fechar Guia</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"><span id="toast-msg">Sucesso!</span></div>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+    <!-- Floating Chat Widget -->
+    <div id="chat-balloon" class="chat-balloon" onclick="toggleFloatingChat()">
+        <i class="ri-message-3-line"></i>
+        <span id="chat-notif-count" class="badge" style="display:none;">0</span>
+    </div>
+
+    <div id="floating-chat" class="floating-chat-window">
+        <div class="floating-chat-header">
+            <h4 style="margin:0; font-size:14px;">Chat</h4>
+            <div class="chat-header-actions" style="display:flex; gap:15px; align-items:center;">
+                <button onclick="syncAthletesFromSupabase(true)" style="background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-refresh-line"></i> Sync</button>
+                <button id="btn-expand-chat" onclick="expandChat()" style="background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-fullscreen-line"></i> Expandir</button>
+                <button onclick="toggleFloatingChat()" style="background:rgba(255,255,255,0.2); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-close-line"></i> Fechar</button>
+            </div>
+        </div>
+        <div class="floating-chat-body">
+            <div id="floating-chat-users"></div>
+            <div class="floating-chat-content">
+                <div id="floating-chat-header-name" style="padding:10px 15px; background:white; border-bottom:1px solid var(--border); font-size:12px; font-weight:700; color:var(--text);">
+                    Selecione um atleta
+                </div>
+                <div id="floating-chat-messages" class="floating-chat-messages"></div>
+                <div class="floating-chat-input">
+                    <input type="text" id="floating-chat-input-text" placeholder="Escreva uma mensagem..." onkeydown="if(event.key==='Enter') sendFloatingMessage()">
+                    <button onclick="sendFloatingMessage()"><i class="ri-send-plane-fill"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multipurpose Custom Library Modal -->
+    <div class="modal" id="modal-library-create" style="z-index: 1100; background: rgba(0,0,0,0.55); display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+        <div class="modal-card" style="max-width: 500px; width: 90%; background: white; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); border: none; padding: 24px; display: flex; flex-direction: column; gap: 20px; margin: auto; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: none; padding-bottom: 0;">
+                <h3 id="library-modal-title" style="font-weight: 700; font-size: 18px; margin: 0; color: #1f2937; font-family: system-ui, sans-serif;">Adicionar Pasta</h3>
+                <button onclick="closeLibraryCreateModal()" style="margin: 0; background: transparent; border: none; font-size: 24px; cursor: pointer; color: #9ca3af; display: flex; align-items: center; justify-content: center;"><i class="ri-close-line"></i></button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="input-col" id="library-modal-input-group-title" style="margin-bottom:0;">
+                    <label style="font-weight: 600; font-size: 13px; margin-bottom: 6px; display: block; color: #6b7280; font-family: system-ui, sans-serif;" id="library-modal-label-title">Nome da Pasta</label>
+                    <input type="text" id="library-modal-input-title" placeholder="Nova Pasta de Treino" style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; color: #1f2937; outline: none; font-size: 14px; font-family: system-ui, sans-serif;">
+                </div>
+                <div class="input-col" id="library-modal-input-group-desc" style="display: none; margin-bottom:0;">
+                    <label style="font-weight: 600; font-size: 13px; margin-bottom: 6px; display: block; color: #6b7280; font-family: system-ui, sans-serif;">Observações / Descrição</label>
+                    <textarea id="library-modal-input-desc" style="width: 100%; height: 80px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; color: #1f2937; outline: none; resize: none; font-size: 14px; font-family: system-ui, sans-serif;"></textarea>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: none; padding-top: 0; margin-top: 8px;">
+                <button class="btn btn-secondary" onclick="closeLibraryCreateModal()" style="background: #aeaeae; color: white; font-weight: 700; border: none; cursor: pointer; border-radius: 6px; padding: 10px 20px; font-size: 13px; font-family: system-ui, sans-serif;">Cancelar</button>
+                <button class="btn btn-primary" id="library-modal-confirm-btn" style="background: #2563eb; color: white; font-weight: 700; border: none; cursor: pointer; border-radius: 6px; padding: 10px 20px; font-size: 13px; font-family: system-ui, sans-serif;">Adicionar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth.js?v=3.1"></script>
+    <script src="app.js?v=3.9"></script>
+</body>
+</html>

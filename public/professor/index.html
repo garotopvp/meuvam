@@ -6,132 +6,96 @@
     <title>MeuVAM - by Superação Assessoria Esportiva</title>
     <meta name="description" content="Plataforma de gestão de treinos personalizados baseados no VAM para assessoria esportiva de corrida.">
     <link rel="manifest" href="manifest.json">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-    <!-- html2canvas REMOVIDO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <base href="/professor/">
-    <link rel="stylesheet" href="style.css?v=5.1">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        // Otimização de URL e Limpeza Básica
-        (function() {
-            const path = window.location.pathname;
-            const search = window.location.search;
-            const hash = window.location.hash;
-            
-            // Remove 'index.html'
-            if (path.includes('index.html')) {
-                window.location.replace(path.replace('index.html', '').replace(/\/\/+/g, '/') + search + hash);
-                return;
-            }
-            
-            // Normaliza a raiz para /resumo apenas se estiver exatamente na pasta raiz
-            if (path === '/professor' || path === '/professor/') {
-                history.replaceState(null, '', '/professor/resumo' + search);
-            }
-        })();
-    </script>
+    <base href="/paineldoprofessor/">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="professor-boot" class="professor-boot">
-        <div class="professor-boot-inner">
-            <img src="/assets/logo.png" alt="Superação" width="96" height="96">
-            <p>Carregando painel…</p>
-        </div>
-    </div>
     <!-- Mobile toggle -->
     <button class="mobile-toggle" onclick="toggleSidebar()"><i class="ri-menu-line"></i></button>
     <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
-    <div class="app-layout" style="display: none;">
+    <div class="app-layout">
         <aside class="sidebar" id="sidebar">
-            <button class="collapse-toggle" onclick="toggleCollapse()" id="collapse-btn" data-tooltip="Recolher Menu">
-                <i class="ri-arrow-left-s-line"></i>
-            </button>
             <div class="brand">
-                <div class="brand-logo-wrap">
-                    <img src="/assets/logo.png" alt="Superação">
-                </div>
+                <i class="ri-run-fill logo-icon"></i>
                 <div>
                     <h2>MeuVAM</h2>
-                    <span class="brand-sub">by Superação</span>
+                    <span style="font-size:10px;color:var(--text-muted);font-weight:500;">by Superação</span>
                 </div>
             </div>
             <nav class="nav-menu">
-                <a href="javascript:void(0)" class="nav-item active" data-view="dashboard" data-tooltip="Resumo"><i class="ri-dashboard-line"></i> <span>Resumo</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="groups" data-tooltip="Pastas de Treino"><i class="ri-folder-open-line"></i> <span>Pastas de Treino</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="athletes" data-tooltip="Atletas"><i class="ri-group-line"></i> <span>Atletas</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="chat" data-tooltip="Mensagens" style="display:none;"><i class="ri-chat-3-line"></i> <span>Mensagens</span> <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="strava-feed" data-tooltip="Feed Strava"><i class="ri-pulse-line" style="color: #fc4c02;"></i> <span>Feed Strava</span></a>
-                <a href="javascript:void(0)" class="nav-item" data-view="calculator" data-tooltip="Calculadoras"><i class="ri-calculator-line"></i> <span>Calculadoras</span></a>
+                <a href="#" class="nav-item active" data-view="dashboard"><i class="ri-dashboard-line"></i> Resumo</a>
+                <a href="#" class="nav-item" data-view="groups"><i class="ri-folder-open-line"></i> Pastas de Treino</a>
+                <a href="#" class="nav-item" data-view="athletes"><i class="ri-group-line"></i> Atletas</a>
+                <a href="#" class="nav-item" data-view="chat"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
+                <a href="#" class="nav-item" data-view="staff"><i class="ri-shield-user-line"></i> Equipe</a>
+                <a href="#" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> Calculadoras</a>
             </nav>
             <div class="sidebar-footer">
-                <button class="theme-toggle" onclick="toggleDarkMode()" data-tooltip="Modo Escuro">
+                <button class="theme-toggle" onclick="toggleDarkMode()">
                     <i class="ri-moon-line" id="theme-icon"></i>
                     <span id="theme-label">Modo Escuro</span>
                 </button>
-                <button class="btn btn-secondary" onclick="exportAllData()" style="font-size:12px;" data-tooltip="Exportar Dados">
-                    <i class="ri-download-2-line"></i> <span>Exportar Dados</span>
+                <button class="btn btn-secondary" onclick="exportAllData()" style="font-size:12px;">
+                    <i class="ri-download-2-line"></i> Exportar Dados
                 </button>
-                <label class="btn btn-secondary" style="font-size:12px;cursor:pointer;" data-tooltip="Importar Dados">
-                    <i class="ri-upload-2-line"></i> <span>Importar Dados</span>
+                <label class="btn btn-secondary" style="font-size:12px;cursor:pointer;">
+                    <i class="ri-upload-2-line"></i> Importar Dados
                     <input type="file" accept=".json" onchange="importAllData(event)" style="display:none;">
                 </label>
-                <button class="btn btn-danger" onclick="logout()" style="font-size:12px;margin-top:4px;" data-tooltip="Sair da Conta">
-                    <i class="ri-logout-box-line"></i> <span>Sair da Conta</span>
+                <button class="btn btn-danger" onclick="logout()" style="font-size:12px;margin-top:8px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">
+                    <i class="ri-logout-box-line"></i> Sair da Conta
                 </button>
             </div>
         </aside>
 
-        <main class="main-content" id="main-content">
-            <!-- Breadcrumb Navigation -->
-            <div id="breadcrumb" class="breadcrumb"></div>
-            
-            <!-- Dashboard View -->
+        <main class="main-content">
+
+            <!-- Dashboard -->
             <section id="view-dashboard" class="view-section active">
                 <div class="page-header">
                     <div>
                         <h1>Visão Geral</h1>
-                        <p id="dashboard-greeting">Resumo da sua assessoria.</p>
+                        <p id="dashboard-greeting">Bem-vindo ao MeuVAM.</p>
                     </div>
                 </div>
 
+                <!-- Notifications -->
                 <div id="dashboard-notifs" style="margin-bottom:20px;display:flex;flex-direction:column;gap:8px;"></div>
 
-
-
                 <div class="stats-grid" id="dashboard-stats">
-                    <div class="stat-card stat-card--blue">
+                    <div class="stat-card">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <span class="stat-title">Atletas</span>
-                            <span class="stat-icon"><i class="ri-group-line"></i></span>
+                            <i class="ri-group-line" style="font-size:20px;color:var(--primary);opacity:0.5;"></i>
                         </div>
                         <h3 id="stat-athletes">0</h3>
                         <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-athletes-sub"></div>
                     </div>
-                    <div class="stat-card stat-card--green">
+                    <div class="stat-card">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <span class="stat-title">Planilhas</span>
-                            <span class="stat-icon"><i class="ri-calendar-check-line"></i></span>
+                            <i class="ri-calendar-check-line" style="font-size:20px;color:#10b981;opacity:0.5;"></i>
                         </div>
                         <h3 id="stat-groups">0</h3>
                         <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-groups-sub"></div>
                     </div>
-                    <div class="stat-card stat-card--amber">
+                    <div class="stat-card">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <span class="stat-title">Treinos Gerados</span>
-                            <span class="stat-icon"><i class="ri-image-line"></i></span>
+                            <i class="ri-image-line" style="font-size:20px;color:#f59e0b;opacity:0.5;"></i>
                         </div>
                         <h3 id="stat-history">0</h3>
                         <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-history-sub"></div>
                     </div>
-                    <div class="stat-card stat-card--violet">
+                    <div class="stat-card">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <span class="stat-title">Pastas</span>
-                            <span class="stat-icon"><i class="ri-folder-open-line"></i></span>
+                            <i class="ri-folder-open-line" style="font-size:20px;color:#8b5cf6;opacity:0.5;"></i>
                         </div>
                         <h3 id="stat-cats">0</h3>
                         <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="stat-cats-sub"></div>
@@ -140,17 +104,19 @@
 
                 <div style="margin-top:32px;">
                     <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Últimos Treinos Gerados</h2>
-                    <div id="dashboard-recent" class="table-wrapper" style="min-height:300px; overflow-y:auto;"></div>
+                    <div id="dashboard-recent" class="table-wrapper"></div>
                 </div>
 
-                <div class="dashboard-shortcuts">
-                    <div class="stat-card dashboard-shortcut-card" onclick="navigate('groups')">
-                        <span class="shortcut-icon"><i class="ri-folder-add-line"></i></span>
+                <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div class="stat-card" style="cursor:pointer;transition:0.2s;" onclick="navigate('groups')"
+                         onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+                        <i class="ri-folder-add-line" style="font-size:28px;color:var(--primary);margin-bottom:12px;display:block;"></i>
                         <strong>Criar Nova Pasta de Treino</strong>
                         <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Organize alunos por modalidade ou objetivo.</p>
                     </div>
-                    <div class="stat-card dashboard-shortcut-card" onclick="navigate('athletes')">
-                        <span class="shortcut-icon shortcut-icon--brand"><i class="ri-user-add-line"></i></span>
+                    <div class="stat-card" style="cursor:pointer;transition:0.2s;" onclick="navigate('athletes')"
+                         onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+                        <i class="ri-user-add-line" style="font-size:28px;color:var(--primary);margin-bottom:12px;display:block;"></i>
                         <strong>Adicionar Novo Atleta</strong>
                         <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">Cadastre dados e gere treinos personalizados.</p>
                     </div>
@@ -177,9 +143,6 @@
                         <p>Gerencie alunos, visualize histórico e gere treinos personalizados.</p>
                     </div>
                     <div style="display:flex;gap:10px;">
-                        <button class="btn btn-secondary" onclick="exportAthletesCSV()" title="Exportar Planilha CSV">
-                            <i class="ri-file-excel-2-line"></i> Emitir Planilha
-                        </button>
                         <button class="btn btn-secondary" onclick="syncAthletesFromSupabase(true)"><i class="ri-refresh-line"></i> Sincronizar Alunos</button>
                         <button class="btn btn-primary" onclick="openAthleteModal()"><i class="ri-user-add-line"></i> Novo Atleta</button>
                     </div>
@@ -212,42 +175,6 @@
                 </div>
             </section>
 
-            <!-- Feed Strava Global -->
-            <section id="view-strava-feed" class="view-section">
-                <div class="page-header">
-                    <div>
-                        <h1>Feed de Atividades</h1>
-                        <p>Acompanhe em tempo real os treinos realizados por todos os seus alunos via Strava.</p>
-                    </div>
-                    <button class="btn btn-secondary" onclick="renderStravaFeed(true)"><i class="ri-refresh-line"></i> Atualizar</button>
-                </div>
-
-                <div id="strava-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
-                    <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #fc4c02;"></i>
-                    Sincronizando atividades de toda a equipe...
-                </div>
-
-                <div id="strava-global-list" style="display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto;"></div>
-            </section>
-
-            <!-- Feed Garmin Global -->
-            <section id="view-garmin-feed" class="view-section">
-                <div class="page-header">
-                    <div>
-                        <h1>Feed Garmin Connect</h1>
-                        <p>Acompanhe em tempo real os treinos realizados pelos seus alunos via conexão direta Garmin.</p>
-                    </div>
-                    <button class="btn btn-secondary" onclick="renderGarminFeed(true)"><i class="ri-refresh-line"></i> Atualizar Garmin</button>
-                </div>
-
-                <div id="garmin-global-loading" style="padding:60px; text-align:center; color:var(--text-muted); display:none;">
-                    <i class="ri-loader-4-line ri-spin" style="font-size:40px; display:block; margin-bottom:12px; color: #000;"></i>
-                    Sincronizando atividades do Garmin Connect...
-                </div>
-
-                <div id="garmin-global-list" style="display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto;"></div>
-            </section>
-
             <!-- Calculadoras -->
             <section id="view-calculator" class="view-section">
                 <div class="page-header">
@@ -257,16 +184,16 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:0;margin-bottom:28px;border-bottom:2px solid var(--border);">
-                    <button class="calc-tab active" data-tab="vam" onclick="switchCalcTab('vam')">Zonas VAM</button>
-                    <button class="calc-tab" data-tab="race" onclick="switchCalcTab('race')">Calculadora de Prova</button>
-                    <button class="calc-tab" data-tab="treadmill" onclick="switchCalcTab('treadmill')">Esteira / Pace</button>
+                    <button class="calc-tab active" data-tab="vam" onclick="switchCalcTab('vam')"><i class="ri-speed-line"></i> Zonas VAM</button>
+                    <button class="calc-tab" data-tab="race" onclick="switchCalcTab('race')"><i class="ri-trophy-line"></i> Calculadora de Prova</button>
+                    <button class="calc-tab" data-tab="treadmill" onclick="switchCalcTab('treadmill')"><i class="ri-dashboard-line"></i> Esteira ↔ Pace</button>
                 </div>
 
                 <!-- TAB: VAM -->
                 <div id="calc-tab-vam" class="calc-tab-panel" style="display:block;">
-                    <div class="calc-grid">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:900px;">
                         <div class="stat-card">
-                            <h3 class="calc-card-title">Tempo de teste VAM (3 km)</h3>
+                            <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;">⏱ Tempo de Teste VAM (3km)</h3>
                             <div class="input-col" style="margin-bottom:16px;">
                                 <label>Tempo de prova 3km (minutos)</label>
                                 <input type="number" id="calc-time" step="0.1" min="0.1" placeholder="Ex: 11.5" oninput="calculateVAM()">
@@ -277,12 +204,12 @@
                             </div>
                         </div>
                         <div class="stat-card">
-                            <h3 class="calc-card-title">Zonas de treino</h3>
+                            <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;">🏃 Zonas de Treino</h3>
                             <div id="calc-zones" style="display:flex;flex-direction:column;gap:8px;"><div style="color:var(--text-muted);font-size:13px;text-align:center;padding:24px 0;"><i class="ri-arrow-left-line"></i> Insira o tempo ao lado</div></div>
                         </div>
                     </div>
                     <div id="calc-distance-table" style="display:none;margin-top:28px;max-width:900px;">
-                        <h3 class="calc-card-title">Tabela de ritmos por distância</h3>
+                        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;">📊 Tabela de Ritmos por Distância</h3>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                             <div class="stat-card" style="padding:0;overflow:hidden;">
                                 <div style="background:#334155;padding:10px 16px;"><span style="font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;">Tiros Curtos (metros)</span></div>
@@ -300,7 +227,7 @@
                 <div id="calc-tab-race" class="calc-tab-panel" style="display:none;">
                     <div style="display:grid;grid-template-columns:320px 1fr;gap:24px;max-width:960px;align-items:start;">
                         <div class="stat-card">
-                            <h3 class="calc-card-title">Dados da prova</h3>
+                            <h3 style="font-size:16px;font-weight:700;margin-bottom:20px;">🏆 Calculadora de Prova</h3>
                             <div class="input-col" style="margin-bottom:14px;">
                                 <label>Distância</label>
                                 <select id="race-dist-select" onchange="onRaceDistChange()">
@@ -336,9 +263,9 @@
 
                 <!-- TAB: Treadmill -->
                 <div id="calc-tab-treadmill" class="calc-tab-panel" style="display:none;">
-                    <div class="calc-grid-small">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:700px;">
                         <div class="stat-card">
-                            <h3 class="calc-card-title">Velocidade para pace</h3>
+                            <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;">⚡ Velocidade → Pace</h3>
                             <div class="input-col" style="margin-bottom:16px;">
                                 <label>Velocidade (km/h)</label>
                                 <input type="number" id="tread-speed" step="0.1" min="0.1" placeholder="Ex: 12.0" oninput="calcTreadmill('speed')">
@@ -349,7 +276,7 @@
                             </div>
                         </div>
                         <div class="stat-card">
-                            <h3 class="calc-card-title">Pace para velocidade</h3>
+                            <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;">🕐 Pace → Velocidade</h3>
                             <div class="input-col" style="margin-bottom:16px;">
                                 <label>Pace (min:seg por km)</label>
                                 <div style="display:flex;gap:8px;align-items:center;">
@@ -442,346 +369,63 @@
         </main>
     </div>
 
-    <!-- Group Modal (Professional Builder) -->
+    <!-- Group Modal -->
     <div class="modal" id="modal-group">
-        <div class="modal-card modal-xl" style="max-width: 1100px; height: 95vh; display: flex; flex-direction: column; background: #f0f2f5;">
-            <!-- Garmin Header -->
-            <div class="garmin-header">
-                <button class="btn-text-link" onclick="closeModals()" style="position: absolute; top: 20px; left: 40px; display: flex; align-items: center; gap: 5px;">
-                    <i class="ri-arrow-left-s-line"></i> Exercícios
-                </button>
-                <div class="garmin-icon"><i class="ri-run-line"></i></div>
-                <div class="garmin-title-wrap">
-                    <h2><span id="display-group-name">Treino de corrida</span> <i class="ri-pencil-line" style="font-size: 18px; cursor: pointer;" onclick="$('display-group-name').style.display='none'; $('group-name').style.display='inline'; $('group-name').focus()"></i></h2>
-                    <input type="text" id="group-name" style="border: none; background: transparent; font-size: 24px; display: none;" onblur="this.style.display='none'; $('display-group-name').style.display='inline'; $('display-group-name').textContent=this.value" onchange="$('display-group-name').textContent=this.value">
+        <div class="modal-card modal-xl">
+            <div class="modal-header"><h3 id="modal-group-title">Padrão de Grupo</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="input-col"><label>Nome do Ciclo</label><input type="text" id="group-name" placeholder="Ex: Base 1"></div>
+                    <div class="input-col"><label>Volume Alvo (km/sem)</label><input type="number" id="group-volume" min="0" placeholder="Ex: 30"></div>
                 </div>
-                <div style="display: flex; gap: 12px;">
-                    <button class="btn btn-secondary" onclick="closeModals()" style="background: #D8D8D8; color: #101010; font-weight: 700;">Cancelar</button>
-                    <button class="btn btn-primary" onclick="saveGroup()" style="font-weight: 700; padding: 10px 24px;">Salvar treino</button>
+                <div class="week-setup">
+                    <h4>Distribuição da Semana</h4>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:24px;">Fases com % Vol = 0 não aparecem na imagem.</p>
+                    <div id="planner-container" style="display:flex;flex-direction:column;gap:16px;"></div>
                 </div>
             </div>
-
-            <div class="modal-body" style="flex: 1; overflow: hidden; padding: 0; display: flex;">
-                <!-- Sidebar: Days of Week (MeuVAM specific) -->
-                <div style="width: 180px; border-right: 1px solid var(--border); background: #f0f2f5; display: flex; flex-direction: column;" id="editor-days-sidebar">
-                    <!-- Days will be rendered here -->
-                </div>
-                
-                <!-- Main Content Area -->
-                <div style="flex: 1; display: flex; overflow-y: auto; background: white; padding: 40px;">
-                    <!-- Left: Steps List -->
-                    <div style="flex: 1; max-width: 700px;" id="editor-steps-container">
-                        <!-- Steps will be rendered here -->
-                    </div>
-
-                    <!-- Right: Actions & Notes -->
-                    <div style="width: 300px; padding-left: 40px;" id="editor-actions-sidebar">
-                        <div class="sidebar-actions">
-                            <button class="btn-garmin-action" onclick="addEditorStep('run')">
-                                <i class="ri-add-line" style="background: white; color: var(--primary); border-radius: 2px; padding: 1px;"></i> Adicionar etapa
-                            </button>
-                            <button class="btn-garmin-action" onclick="addEditorStep('repetition')">
-                                <i class="ri-repeat-line" style="background: white; color: var(--primary); border-radius: 2px; padding: 1px;"></i> Adicionar repetição
-                            </button>
-
-                            <div style="margin-top: 30px;">
-                                <label style="font-weight: 700; color: #444; margin-bottom: 8px; display: block;">Volume Semanal (km)</label>
-                                <input type="number" id="group-volume" style="width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 10px;" placeholder="Ex: 30">
-                            </div>
-
-                            <div style="margin-top: 30px;">
-                                <label style="font-weight: 700; color: #444; margin-bottom: 8px; display: block;">Notas</label>
-                                <textarea id="group-notes" style="width: 100%; height: 100px; border: 1px solid #ccc; border-radius: 4px; padding: 10px;" placeholder="Adicionar notas"></textarea>
-                                <div style="text-align: right; font-size: 11px; color: #999; margin-top: 4px;">0/512</div>
-                            </div>
-
-                            <div style="margin-top: 20px;">
-                                <label style="font-weight: 700; color: #444; margin-bottom: 8px; display: block;">Nota de áudio</label>
-                                <div id="audio-record-btn" onclick="toggleAudioRecording()" style="border: 1px solid #ccc; border-radius: 4px; padding: 15px; display: flex; align-items: center; gap: 15px; background: #fafafa; cursor: pointer; transition: 0.2s;">
-                                    <i class="ri-mic-line" id="audio-mic-icon" style="font-size: 24px; color: #666;"></i>
-                                    <div>
-                                        <div id="audio-record-status" style="font-weight: 700; font-size: 13px;">Pressione para gravar uma nota.</div>
-                                        <div id="audio-record-timer" style="font-size: 11px; color: #999;">Máx.: 15 segundos.</div>
-                                    </div>
-                                    <div id="audio-playback" style="display: none; margin-left: auto;">
-                                        <i class="ri-play-fill" style="font-size: 20px; color: var(--primary);" onclick="event.stopPropagation(); playRecordedAudio()"></i>
-                                        <i class="ri-delete-bin-line" style="font-size: 18px; color: #999; margin-left: 10px;" onclick="event.stopPropagation(); deleteRecordedAudio()"></i>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <p style="margin-top: 30px; font-size: 12px; color: #777; line-height: 1.4;">
-                                O MeuVAM armazenará o seu exercício para que você utilize no dispositivo ou no app e não irá compartilhá-lo com outros.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModals()">Cancelar</button><button class="btn btn-primary" onclick="saveGroup()">Salvar</button></div>
         </div>
     </div>
 
     <!-- Athlete Modal -->
     <div class="modal" id="modal-athlete">
-        <div class="modal-card" id="athlete-modal-card" style="max-width:560px; transition: max-width 0.3s ease;">
+        <div class="modal-card" style="max-width:560px;">
             <div class="modal-header"><h3 id="modal-athlete-title">Atleta</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
-            <div class="modal-body" style="display: flex; gap: 24px; flex-wrap: wrap;">
-                <!-- Coluna da Esquerda: Formulário -->
-                <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 14px;">
-                    <div style="display:flex; justify-content:center; margin-bottom:10px;">
-                        <div id="athlete-photo-preview" style="width:80px; height:80px; border-radius:24px; overflow:hidden; background:#f1f5f9; border:2px solid var(--primary); display:flex; align-items:center; justify-content:center;">
-                            <i class="ri-user-line" style="font-size:40px; color:var(--text-muted);"></i>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="input-col"><label>Nome</label><input type="text" id="athlete-name"></div>
-                        <div class="input-col"><label>WhatsApp</label><input type="text" id="athlete-phone" placeholder="Ex: 11999999999"></div>
-                    </div>
-                    <div class="form-row">
-                        <div class="input-col"><label>Data de Nascimento</label><input type="date" id="athlete-dob" onchange="calculateTheoreticalHR()"></div>
-                        <div class="input-col"><label>FC Máx. Teórica</label><input type="text" id="athlete-theo-hr" readonly style="background:var(--bg);border-style:dashed;"></div>
-                    </div>
-                    <div class="form-row">
-                        <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185" oninput="previewAthleteVAM()"></div>
-                        <div class="input-col"><label>Tempo VAM (min)</label><input type="number" step="0.1" min="0.1" id="athlete-test" placeholder="Ex: 11.5" oninput="previewAthleteVAM()"></div>
-                    </div>
-                    
-                    <div style="margin-top: 4px; padding: 14px; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border-strong);">
-                        <h4 style="font-size: 12px; font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                            <i class="ri-heart-pulse-line" style="color: var(--primary);"></i> Configuração de Zonas de FC
-                        </h4>
-                        <div class="form-row" style="margin-bottom:0;">
-                            <div class="input-col">
-                                <label>Método de Cálculo</label>
-                                <select id="athlete-hr-method" onchange="toggleHRFields(); previewAthleteVAM();">
-                                    <option value="max">% FC Máxima</option>
-                                    <option value="rfc">% FC Reserva (Karvonen)</option>
-                                    <option value="lthr">% Limiar de Lactato (LTHR)</option>
-                                </select>
-                            </div>
-                            <div class="input-col" id="col-resting-hr" style="display:none;">
-                                <label>FC Repouso (bpm)</label>
-                                <input type="number" id="athlete-resting-hr" placeholder="Ex: 55" oninput="previewAthleteVAM()">
-                            </div>
-                            <div class="input-col" id="col-lthr" style="display:none;">
-                                <label>FC Limiar (LTHR)</label>
-                                <input type="number" id="athlete-lthr" placeholder="Ex: 172" oninput="previewAthleteVAM()">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="input-col" style="grid-column:span 2;"><label>Planilha Base</label><select id="athlete-group"></select></div>
-                    </div>
-                    <div class="input-col" style="margin-top:0;">
-                        <label>Notas / Observações</label>
-                        <textarea id="athlete-notes" rows="2" placeholder="Ex: Lesão no joelho direito, preferência por treinos matinais..." style="resize:vertical;"></textarea>
-                    </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="input-col"><label>Nome</label><input type="text" id="athlete-name"></div>
+                    <div class="input-col"><label>WhatsApp</label><input type="text" id="athlete-phone" placeholder="Ex: 11999999999"></div>
                 </div>
-
-
-            </div>
-            <div class="modal-footer" style="justify-content: space-between;">
-                <button class="btn btn-danger" id="btn-clear-workouts" style="font-size: 12px; display: none;" onclick="clearAthleteWorkouts()">
-                    <i class="ri-delete-bin-7-line"></i> Limpar Treinos no App
-                </button>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-secondary" onclick="closeModals()">Cancelar</button>
-                    <button class="btn btn-primary" onclick="saveAthlete()">Salvar</button>
+                <div class="form-row">
+                    <div class="input-col"><label>Data de Nascimento</label><input type="date" id="athlete-dob" onchange="calculateTheoreticalHR()"></div>
+                    <div class="input-col"><label>FC Máx. Teórica</label><input type="text" id="athlete-theo-hr" readonly style="background:var(--bg);border-style:dashed;"></div>
+                </div>
+                <div class="form-row">
+                    <div class="input-col"><label>FC Máx. no Teste (bpm)</label><input type="number" id="athlete-test-hr" min="0" placeholder="Ex: 185"></div>
+                    <div class="input-col"><label>Tempo VAM (min)</label><input type="number" step="0.1" min="0.1" id="athlete-test" placeholder="Ex: 11.5" oninput="previewAthleteVAM()"></div>
+                </div>
+                <div id="athlete-vam-preview" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:16px;margin-bottom:16px;">
+                    <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Pré-visualização do VAM</div>
+                    <div id="athlete-vam-zones" style="display:flex;flex-direction:column;gap:4px;"></div>
+                </div>
+                <div class="form-row">
+                    <div class="input-col" style="grid-column:span 2;"><label>Planilha Base</label><select id="athlete-group"></select></div>
+                </div>
+                <div class="input-col" style="margin-top:0;">
+                    <label>Notas / Observações</label>
+                    <textarea id="athlete-notes" rows="3" placeholder="Ex: Lesão no joelho direito, preferência por treinos matinais..." style="resize:vertical;"></textarea>
                 </div>
             </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModals()">Cancelar</button><button class="btn btn-primary" onclick="saveAthlete()">Salvar</button></div>
         </div>
     </div>
 
     <!-- History Modal -->
-    <div class="modal" id="modal-history" style="z-index: 1040; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); padding: 0 !important;">
-        <div class="modal-card modal-xl" style="max-width: 100vw; width: 100vw; height: 100vh; max-height: 100vh; margin: 0; display: flex; flex-direction: column; border-radius: 0; overflow: hidden; border: none; box-shadow: none;">
-            <div class="modal-header" style="flex-shrink: 0; padding: 12px 24px; border-bottom: 1px solid var(--border-strong);">
-                <h3 style="display:flex; align-items:center; gap:8px; font-weight: 800; font-size: 18px;"><i class="ri-calendar-2-line" style="color:var(--primary);"></i> Calendário de Treinos: <span id="hist-athlete-name" style="color: var(--primary);"></span></h3>
-                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
-            </div>
-            <div class="modal-body" style="background:var(--bg); padding:12px; display:flex; gap:12px; flex:1; min-height:0; overflow:hidden;">
-                <!-- Coluna da Esquerda: Calendário Interativo Expandido -->
-                <div id="history-calendar-container" style="flex:1; background:var(--panel); border-radius:12px; border:1px solid var(--border-strong); padding:16px; box-shadow:0 4px 6px rgba(0,0,0,0.02); display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden;"></div>
-                
-
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit/Add Individual Workout Modal -->
-    <div class="modal" id="modal-edit-workout" style="z-index: 1050; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);">
-        <div class="modal-card modal-xl" style="max-width: 95vw; width: 1300px; height: 88vh; max-height: 88vh; margin: auto; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); background: #f0f2f5;">
-            <!-- Garmin Header -->
-            <div class="garmin-header" style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: white; border-bottom: 1px solid var(--border-strong); position: relative; gap: 16px;">
-                <!-- Back -->
-                <button class="btn-text-link" onclick="closeEditWorkoutModal()" style="display: flex; align-items: center; gap: 5px; color: #1e293b; border: none; background: transparent; cursor: pointer; font-weight: 700; font-size: 14px; flex-shrink: 0;">
-                    <i class="ri-arrow-left-s-line" style="font-size: 20px;"></i> Calendário
-                </button>
-
-                <!-- Icon + Inline Title + Type Pills -->
-                <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
-                    <div id="edit-workout-type-icon" style="background: #fbbf24; color: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; transition: background 0.2s;">
-                        <i class="ri-run-line"></i>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1;">
-                        <!-- Inline title input -->
-                        <input
-                            type="text"
-                            id="edit-workout-title"
-                            placeholder="Nome do treino…"
-                            style="font-weight: 800; font-size: 18px; color: #0f172a; border: none; border-bottom: 2px solid transparent; outline: none; background: transparent; width: 100%; padding: 2px 0; transition: border-color 0.2s;"
-                            onfocus="this.style.borderBottomColor='#1265C2'"
-                            onblur="this.style.borderBottomColor='transparent'"
-                        />
-                        <!-- Type pills -->
-                        <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="workout-type-pills">
-                            <button onclick="setWorkoutTypePill('Corrida')"    class="workout-type-pill" data-type="Corrida"       style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #fbbf24;background:#fef9c3;color:#92400e;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-run-line"></i> Corrida</button>
-                            <button onclick="setWorkoutTypePill('Natação')"    class="workout-type-pill" data-type="Natação"       style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #bae6fd;background:#f0f9ff;color:#0369a1;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21v-2q.95 0 1.425-.5T5.3 18t1.925.5t1.425.5t1.425-.5T12 18t1.925.5t1.425.5t1.425-.5T18.7 18t1.875.5T22 19v2q-1.475 0-1.937-.5T18.7 20t-1.425.5t-1.925.5t-1.925-.5T12 20t-1.425.5t-1.925.5t-1.925-.5T5.3 20t-1.363.5T2 21m0-4.5v-2q.95 0 1.425-.5t1.875-.5t1.938.5t1.412.5q.9 0 1.425-.5T12 13.5t1.925.5t1.425.5t1.425-.5t1.925-.5t1.875.5t1.425.5v2q-1.475 0-1.937-.5t-1.363-.5t-1.388.5t-1.962.5q-1.425 0-1.937-.5T12 15.5q-.95 0-1.412.5t-1.938.5t-1.963-.5t-1.387-.5t-1.362.5T2 16.5m4.9-5.1l3.325-3.325l-1-1q-.825-.825-1.75-1.2T5.2 5.5V3q1.875 0 3.1.413T10.7 5l6.4 6.4q-.425.275-.825.438T15.35 12q-.9 0-1.425-.5T12 11t-1.925.5t-1.425.5q-.525 0-.925-.162T6.9 11.4m11.575-7.663q.725.738.725 1.763q0 1.05-.725 1.775T16.7 8t-1.775-.725T14.2 5.5q0-1.025.725-1.763T16.7 3t1.775.738"/></svg> Natação</button>
-                            <button onclick="setWorkoutTypePill('Ciclismo')"   class="workout-type-pill" data-type="Ciclismo"      style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#166534;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-riding-line"></i> Ciclismo</button>
-                            <button onclick="setWorkoutTypePill('Fortalecimento')" class="workout-type-pill" data-type="Fortalecimento" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #ddd6fe;background:#f5f3ff;color:#5b21b6;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-barbell-line"></i> Fortalecimento</button>
-                            <button onclick="setWorkoutTypePill('Outros')"     class="workout-type-pill" data-type="Outros"       style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;border:1.5px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;"><i class="ri-clipboard-line"></i> Outros</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div style="display: flex; gap: 12px; flex-shrink: 0; align-items: center;">
-                    <button id="toggle-vam-btn" class="btn btn-secondary" onclick="toggleVamPreview()" style="background: transparent; color: var(--text); font-weight: 700; border: 1px solid var(--border-strong); display: flex; align-items: center; gap: 6px;">
-                        <i class="ri-layout-right-line"></i> Tabelas VAM
-                    </button>
-                    <button class="btn btn-secondary" onclick="closeEditWorkoutModal()" style="background: #D8D8D8; color: #101010; font-weight: 700; border: none;">Cancelar</button>
-                    <button class="btn btn-primary" onclick="saveIndividualWorkout()" style="font-weight: 700; padding: 10px 24px;">Salvar Treino</button>
-                </div>
-            </div>
-
-            <div class="modal-body" style="flex: 1; overflow: hidden; padding: 0; display: flex; background: white;">
-                <!-- Main Content Area -->
-                <div style="flex: 1; display: flex; height: 100%; overflow: hidden; padding: 20px; width: 100%;">
-                    <!-- Left: Steps List -->
-                    <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding-right: 20px; border-right: 1px solid var(--border-strong);" id="calendar-workout-steps-container">
-                        <!-- Steps will be rendered here dynamically -->
-                    </div>
-
-                    <!-- Right: Actions & Notes -->
-                    <div style="width: 360px; padding-left: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; height: 100%; flex-shrink: 0;" id="calendar-workout-actions-sidebar">
-                        <input type="hidden" id="edit-workout-id">
-                        <input type="hidden" id="edit-workout-date">
-
-                        <div class="sidebar-actions" style="display: flex; flex-direction: column; gap: 12px; flex-shrink: 0;">
-                            <button class="btn-garmin-action" onclick="addCalendarWorkoutStep('run')" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                                <i class="ri-add-line" style="background: #0369a1; color: white; border-radius: 50%; padding: 2px; font-size: 14px;"></i> Adicionar Etapa
-                            </button>
-                            <button class="btn-garmin-action" onclick="addCalendarWorkoutStep('repetition')" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                                <i class="ri-repeat-line" style="background: #0369a1; color: white; border-radius: 50%; padding: 2px; font-size: 14px;"></i> Adicionar Repetição
-                            </button>
-                        </div>
-
-                        <!-- hidden type sync field -->
-                        <input type="hidden" id="edit-workout-type">
-
-                        <!-- Basic Attributes -->
-
-                        <div style="display: none; gap: 10px; width: 100%;">
-                            <div class="input-col" style="margin-bottom:0; flex: 1;">
-                                <label style="font-weight:700; font-size:11px; display: block; margin-bottom: 4px; color: #475569;">Distância Prescrita (KM)</label>
-                                <input type="text" id="edit-workout-dist" placeholder="Ex: 8.0" style="width:100%; padding:10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text);">
-                            </div>
-                            <div class="input-col" style="margin-bottom:0; flex: 1;">
-                                <label style="font-weight:700; font-size:11px; display: block; margin-bottom: 4px; color: #475569;">Pace Alvo (Min/km)</label>
-                                <input type="text" id="edit-workout-pace" placeholder="Ex: 05:00" style="width:100%; padding:10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text);">
-                            </div>
-                        </div>
-
-                        <div style="display: none; gap: 10px; width: 100%;">
-                            <div class="input-col" style="margin-bottom:0; flex: 1;">
-                                <label style="font-weight:700; font-size:11px; display: block; margin-bottom: 4px; color: #475569;">Status</label>
-                                <select id="edit-workout-status" onchange="toggleEditWorkoutCompletedFields()" style="width:100%; padding:10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg); color:var(--text);">
-                                    <option value="pending">Pendente (Prescrito)</option>
-                                    <option value="completed">Concluído</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Completed Specific Fields -->
-                        <div id="edit-workout-completed-fields" style="display: flex; flex-direction: column; gap: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; display: none;">
-                            <h5 style="font-size:12px; font-weight:800; color:#15803d; margin:0 0 4px 0;">Métricas da Atividade Concluída</h5>
-                            
-                            <div style="display: flex; gap: 8px;">
-                                <div style="flex: 1;">
-                                    <label style="font-weight:700; font-size:10px; display: block; margin-bottom: 2px; color: #166534;">Esforço (1-10 RPE)</label>
-                                    <input type="number" id="edit-workout-effort" min="1" max="10" placeholder="Ex: 5" style="width:100%; padding:8px; border:1px solid #bbf7d0; border-radius:6px; background:white; color:var(--text);">
-                                </div>
-                                <div style="flex: 1;">
-                                    <label style="font-weight:700; font-size:10px; display: block; margin-bottom: 2px; color: #166534;">Distância Real (km)</label>
-                                    <input type="text" id="edit-workout-real-dist" placeholder="Ex: 8.2" style="width:100%; padding:8px; border:1px solid #bbf7d0; border-radius:6px; background:white; color:var(--text);">
-                                </div>
-                            </div>
-
-                            <div style="display: flex; gap: 8px;">
-                                <div style="flex: 1;">
-                                    <label style="font-weight:700; font-size:10px; display: block; margin-bottom: 2px; color: #166534;">Duração Real (min)</label>
-                                    <input type="number" id="edit-workout-real-duration" placeholder="Ex: 42" style="width:100%; padding:8px; border:1px solid #bbf7d0; border-radius:6px; background:white; color:var(--text);">
-                                </div>
-                                <div style="flex: 1;">
-                                    <label style="font-weight:700; font-size:10px; display: block; margin-bottom: 2px; color: #166534;">Pace Real</label>
-                                    <input type="text" id="edit-workout-real-pace" placeholder="Ex: 05:08" style="width:100%; padding:8px; border:1px solid #bbf7d0; border-radius:6px; background:white; color:var(--text);">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style="margin-top: 10px; width: 100%;">
-                            <label style="font-weight: 700; font-size: 11px; display: block; margin-bottom: 4px; color: #475569;">Notas Adicionais do Treino</label>
-                            <textarea id="edit-workout-desc" style="width: 100%; height: 180px; border: 1px solid var(--border-strong); border-radius: 6px; padding: 10px; background: var(--bg); color: var(--text);" placeholder="Notas do treino"></textarea>
-                        </div>
-
-                        <!-- Delete Button & Disclaimer -->
-                        <div style="margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; width: 100%;">
-                            <button id="edit-workout-delete-btn" class="btn btn-danger-solid" onclick="deleteIndividualWorkout()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 8px; font-weight: 700;">
-                                <i class="ri-delete-bin-line"></i> Excluir Treino Permanente
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Right 2: Referência de Ritmos de VAM do Atleta na Edição -->
-                    <div id="edit-workout-vam-preview" style="display:none; width: 380px; flex-direction: column; gap: 16px; height: 100%; overflow-y: auto; flex-shrink: 0; padding-left: 10px; scrollbar-width: none; -ms-overflow-style: none;">
-                        <!-- Top Summary Card: Tempo e VAM -->
-                        <div style="display: flex; gap: 12px; align-items: stretch;">
-                            <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
-                                <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Tempo Teste (3km)</div>
-                                <div id="edit-workout-modal-test-time" style="font-size:20px;font-weight:900;color:var(--text);letter-spacing:-0.5px;">-- min</div>
-                            </div>
-                            <div class="stat-card" style="flex: 1; padding: 12px 16px; margin: 0; background: linear-gradient(135deg, #1265C2 0%, #1e3a5f 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(18, 101, 194, 0.15);">
-                                <div style="font-size:10px;color:rgba(255,255,255,0.7);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">VAM Calculada</div>
-                                <div id="edit-workout-modal-vam" style="font-size:20px;font-weight:900;color:white;letter-spacing:-0.5px;">-- km/h</div>
-                            </div>
-                        </div>
-
-                        <!-- Training Zones -->
-                        <div class="stat-card" style="padding: 14px; margin: 0; background: var(--panel); border: 1px solid var(--border-strong);">
-                            <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                                <i class="ri-radar-line" style="color: #1265C2; font-size: 16px;"></i> Zonas de Treino (VAM)
-                            </h4>
-                            <div id="edit-workout-vam-zones" style="display:flex;flex-direction:column;gap:6px;"></div>
-                        </div>
-
-                        <!-- Ritmos por Distância -->
-                        <div style="display: flex; flex-direction: column; gap: 8px;">
-                            <h4 class="calc-card-title" style="font-size: 12px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
-                                <i class="ri-split-cells-vertical" style="color: #1265C2; font-size: 16px;"></i> Ritmos por Distância
-                            </h4>
-                            <!-- Tiros Curtos -->
-                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
-                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Tiros Curtos (m)</span></div>
-                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="edit-workout-tbl-short"></table>
-                            </div>
-                            <!-- Provas e Rodagens -->
-                            <div class="stat-card" style="padding:0; overflow:hidden; background: var(--panel); border: 1px solid var(--border-strong);">
-                                <div style="background:#334155; padding:6px 10px; text-align: center;"><span style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.5px;">Provas & Rodagens (km)</span></div>
-                                <table style="width:100%; border-collapse:collapse; font-size:11px;" id="edit-workout-tbl-long"></table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <div class="modal" id="modal-history">
+        <div class="modal-card">
+            <div class="modal-header"><h3>Histórico de <span id="hist-athlete-name"></span></h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-body" style="background:var(--bg);padding:0;"><div id="history-list" class="history-list"></div></div>
         </div>
     </div>
 
@@ -797,258 +441,60 @@
         </div>
     </div>
 
-    <!-- Duplicate Modal -->
+    <!-- Duplicate to Folder Modal -->
     <div class="modal" id="modal-duplicate">
         <div class="modal-card" style="max-width:400px;">
-            <div class="modal-header"><h3>Duplicar Treino</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-header"><h3>Duplicar para Outra Pasta</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
             <div class="modal-body">
                 <p style="margin-bottom:12px;font-size:14px;color:var(--text-muted);">Escolha a pasta de destino:</p>
-                <div id="dup-folder-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-            </div>
-            <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModals()">Cancelar</button></div>
-        </div>
-    </div>
-
-    <!-- Strava Activities Modal -->
-    <div class="modal" id="modal-strava">
-        <div class="modal-card" style="max-width:600px;">
-            <div class="modal-header">
-                <h3>Atividades Strava: <span id="strava-athlete-name"></span></h3>
-                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
-            </div>
-            <div class="modal-body" style="padding:0; background:var(--bg);">
-                <div id="strava-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
-                    <i class="ri-loader-4-line ri-spin" style="font-size:32px; display:block; margin-bottom:8px;"></i>
-                    Buscando atividades no Strava...
-                </div>
-                <div id="strava-list" class="history-list"></div>
+                <div id="dup-folder-list" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
         </div>
     </div>
 
-    <!-- Modal Zoom de Gráfico (Garmin Style) -->
-    <div class="modal" id="modal-zoom-chart" style="z-index: 110;">
-        <div class="modal-card modal-xl" style="height: 85vh; max-width: 1400px; width: 95vw; background: #fff; color: #333; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
-            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 12px 20px;">
-                <h3 id="zoom-chart-title" style="font-size: 14px; font-weight: 700; color: #495057; text-transform: uppercase; letter-spacing: 1px;">Análise de Atividade</h3>
-                <div style="display: flex; gap: 20px; align-items: center;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 12px; font-weight: 600; color: #6c757d;">Visualização:</span>
-                        <select id="zoom-hr-mode" onchange="applyZoomOverlay()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
-                            <option value="zones">Zonas de Intensidade</option>
-                            <option value="classic">Clássico (Vermelho)</option>
-                        </select>
+    <div class="modal" id="modal-export">
+        <div class="modal-card modal-lg">
+            <div class="modal-header"><h3>Treino Gerado</h3><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div>
+            <div class="modal-body" style="display:flex;gap:32px;background:var(--bg);flex-wrap:wrap;">
+                <div style="flex:1;min-width:280px;display:flex;justify-content:center;align-items:flex-start;padding:16px;border:1px dashed var(--border-strong);border-radius:var(--radius);background:var(--panel);max-height:520px;overflow-y:auto;position:relative;">
+                    <div id="export-loading" style="position:absolute;inset:0;background:rgba(255,255,255,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius);z-index:10;gap:12px;">
+                        <div class="loader"></div>
+                        <span style="font-size:13px;font-weight:600;color:var(--text-muted);">Gerando imagem...</span>
                     </div>
-                    <div id="overlay-control" style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 12px; font-weight: 600; color: #6c757d;">Sobreposição:</span>
-                        <select id="zoom-overlay-select" onchange="applyZoomOverlay()" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
-                            <option value="">Nenhuma</option>
-                            <option value="pace">Ritmo</option>
-                            <option value="heartrate">Frequência Cardíaca</option>
-                            <option value="altitude">Elevação</option>
-                        </select>
-                    </div>
-                    <button class="btn-close" onclick="closeZoomModal()" style="background: none; border: none; font-size: 20px; color: #adb5bd; cursor: pointer;"><i class="ri-close-line"></i></button>
+                    <img id="export-img-preview" src="" style="width:100%;border-radius:var(--radius);box-shadow:var(--shadow);object-fit:contain;display:none;">
                 </div>
-            </div>
-            <div class="modal-body" style="padding: 30px 40px; display: flex; flex-direction: column; background: #fff; height: calc(85vh - 60px);">
-                <div style="flex: 1; min-height: 0; position: relative; width: 100%;">
-                    <canvas id="zoomCanvas"></canvas>
-                </div>
-                <div style="display: flex; justify-content: center; padding-top: 15px; border-top: 1px solid #f1f3f5;">
-                    <select id="zoom-xaxis-select" onchange="applyZoomXAxis()" style="padding: 4px 12px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff; cursor: pointer;">
-                        <option value="distance">De acordo com a distância</option>
-                        <option value="time">De acordo com o tempo</option>
-                    </select>
+                <div style="width:220px;display:flex;flex-direction:column;gap:10px;justify-content:center;">
+                    <button class="btn" style="background:#25D366;color:white;justify-content:center;font-weight:600;" onclick="sendToWhatsApp()"><i class="ri-whatsapp-line"></i> WhatsApp</button>
+                    <button class="btn btn-primary" onclick="copyImageToClipboard()" style="justify-content:center;"><i class="ri-clipboard-line"></i> Copiar Imagem</button>
+                    <button class="btn btn-secondary" onclick="downloadImage()" style="justify-content:center;"><i class="ri-download-line"></i> Baixar PNG</button>
+                    <button class="btn btn-secondary" onclick="shareImage()" style="justify-content:center;"><i class="ri-share-forward-line"></i> Compartilhar</button>
+                    <hr style="border:none;border-top:1px dotted var(--border-strong);">
+                    <button class="btn btn-secondary" id="btn-send-another" onclick="sendToAnotherAthlete()" style="justify-content:center;display:none;"><i class="ri-user-shared-line"></i> Enviar p/ Outro Atleta</button>
+                    <div style="font-size:11px;color:var(--text-muted);line-height:1.4;">💡 "WhatsApp" copia a imagem. Cole com <strong>Ctrl+V</strong>.</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Garmin Details Modal -->
-    <div class="modal" id="modal-garmin-details">
-        <div class="modal-card" style="max-width: 600px; width: 90%;">
-            <div class="modal-header">
-                <h3><i class="ri-compass-discover-line"></i> Dinâmicas Avançadas Garmin</h3>
-                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
-            </div>
-            <div class="modal-body">
-                <div id="garmin-loading" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">
-                    Extraindo dados da Garmin...
-                </div>
-                <div id="garmin-error" style="padding:40px; text-align:center; color:#fc4c02; display:none; font-weight: bold;">
-                </div>
-                <div id="garmin-details-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 16px 0;">
+    <!-- Hidden Template -->
+    <div id="export-wrapper" style="position:absolute;left:-9999px;top:-9999px;">
+        <div id="export-template" class="vdot-card">
+            <div class="vdot-header">
+                <div class="vdot-title">PLANO DE TREINO</div>
+                <h2 id="tpl-name">Atleta</h2>
+                <div class="vdot-metrics">
+                    <span id="tpl-objective"></span>
+                    <span id="tpl-vol"></span>
+                    <span id="tpl-date"></span>
                 </div>
             </div>
+            <div class="vdot-body" id="tpl-days"></div>
+            <div class="vdot-footer">MeuVAM — by Superação Assessoria Esportiva</div>
         </div>
     </div>
-
-    <!-- Activity Detail Modal -->
-    <div class="modal" id="modal-activity-detail">
-        <div class="modal-card modal-xl" style="max-width: 1000px; height: 90vh; display: flex; flex-direction: column;">
-            <div class="modal-header">
-                <h3 id="act-detail-title">Detalhes da Atividade</h3>
-                <button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button>
-            </div>
-            <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0;">
-                <div id="act-detail-map" style="height: 45vh; width: 100%; background: #eee;"></div>
-                <div style="padding: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div id="act-detail-avatar" style="width: 48px; height: 48px; border-radius: 12px; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px;">
-                                A
-                            </div>
-                            <div>
-                                <div id="act-detail-athlete" style="font-size: 18px; font-weight: 800;">Nome do Atleta</div>
-                                <div id="act-detail-date" style="font-size: 13px; color: var(--text-muted);">Data da atividade</div>
-                            </div>
-                        </div>
-                        <div id="act-detail-type" style="display: none; background: #fc4c0215; color: #fc4c02; padding: 8px 16px; border-radius: 100px; font-size: 13px; font-weight: 800; text-transform: uppercase;">
-                        </div>
-                    </div>
-
-                    <div id="act-detail-metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                        <!-- Métricas serão inseridas aqui -->
-                    </div>
-
-
-                    <div id="act-detail-charts" style="display: none; border-top: 1px solid var(--border); padding-top: 24px;">
-                        <div class="chart-controls-bar">
-                            <h4 style="font-weight: 800; display: flex; align-items: center; gap: 8px;">
-                                <i class="ri-line-chart-line" style="color: #fc4c02;"></i> Análise de Telemetria
-                            </h4>
-                            <div class="chart-toggle-group">
-                                <button id="btn-xaxis-distance" class="chart-toggle-btn active" onclick="setChartXAxis('distance')">Distância</button>
-                                <button id="btn-xaxis-time" class="chart-toggle-btn" onclick="setChartXAxis('time')">Tempo</button>
-                            </div>
-                        </div>
-                        
-                        <div class="premium-chart-stack" id="detail-charts-stack">
-                            <!-- Gráfico de Ritmo -->
-                            <div class="premium-chart-container">
-                                <div class="chart-label-wrap">
-                                    <div class="chart-title"><i class="ri-speed-up-line" style="color:#007aff;"></i> Ritmo</div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <div id="avg-pace-tag" class="chart-avg-tag">Média: --</div>
-                                        <button class="chart-zoom-btn" onclick="openZoomModal('pace')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
-                                    </div>
-                                </div>
-                                <div class="chart-wrapper" style="height: 180px; position: relative;">
-                                    <canvas id="detailChartPace"></canvas>
-                                </div>
-                            </div>
-
-                            <!-- Gráfico de FC -->
-                            <div class="premium-chart-container">
-                                <div class="chart-label-wrap">
-                                    <div class="chart-title"><i class="ri-pulse-line" style="color:#ff2d55;"></i> Frequência Cardíaca</div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <div id="avg-hr-tag" class="chart-avg-tag">Média: --</div>
-                                        <button class="chart-zoom-btn" onclick="openZoomModal('heartrate')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
-                                    </div>
-                                </div>
-                                <div class="chart-wrapper" style="height: 150px; position: relative;">
-                                    <canvas id="detailChartHR"></canvas>
-                                </div>
-                            </div>
-
-                            <!-- Gráfico de Elevação -->
-                            <div class="premium-chart-container">
-                                <div class="chart-label-wrap">
-                                    <div class="chart-title"><i class="ri-landscape-line" style="color:#64748b;"></i> Elevação</div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <div id="avg-elev-tag" class="chart-avg-tag">-- m</div>
-                                        <button class="chart-zoom-btn" onclick="openZoomModal('altitude')" title="Expandir"><i class="ri-expand-diagonal-line"></i></button>
-                                    </div>
-                                </div>
-                                <div class="chart-wrapper" style="height: 120px; position: relative;">
-                                    <canvas id="detailChartElevation"></canvas>
-                                </div>
-                            </div>
-                        </div>
-
-                        <p style="font-size: 11px; color: var(--text-muted); text-align: center; margin-top: -10px; margin-bottom: 20px;">
-                            <i class="ri-information-line"></i> Passe o mouse sobre os gráficos para ver detalhes e sincronizar com o mapa.
-                        </p>
-                    </div>
-
-
-                    <div id="act-detail-extra" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; padding-top: 20px; border-top: 1px solid var(--border); margin-top: 20px;">
-                        <!-- Mais detalhes -->
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Export Modal -->
-    <div class="modal" id="modal-export" style="z-index:1100;">
-        <div class="modal-card modal-lg" style="height:90vh;display:flex;flex-direction:column;background:var(--bg);">
-            <div class="modal-header"><h3>Visualizar Treino</h3><div style="display:flex;gap:10px;"><button class="btn btn-primary" onclick="sendToAnotherAthlete()" id="btn-send-another" style="display:none;"><i class="ri-send-plane-line"></i> Re-enviar para outro</button><button class="btn-close" onclick="closeModals()"><i class="ri-close-line"></i></button></div></div>
-            <div class="modal-body" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
-                <div style="flex:1;overflow-y:auto;padding:20px;display:flex;justify-content:center;background:#cbd5e1;">
-                    <div id="export-loading" style="padding:40px;text-align:center;display:none;flex-direction:column;align-items:center;"><div class="loader"></div><p style="margin-top:12px;font-weight:700;color:#475569;">Gerando visualização...</p></div>
-                    <img id="export-img-preview" style="max-width:100%;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1),0 10px 10px -5px rgba(0,0,0,0.04);border-radius:8px;">
-                    <div id="export-wrapper" style="position:absolute;left:-9999px;top:0;background:#f1f5f9;padding:20px;">
-                        <div id="export-template" class="vdot-card">
-                            <div class="vdot-header">
-                                <div class="vdot-title">TREINAMENTO PROFISSIONAL</div>
-                                <h2 id="tpl-name">Atleta</h2>
-                                <div class="vdot-metrics" id="tpl-objective"></div>
-                                <div class="vdot-metrics" style="margin-top:8px;" id="tpl-vol"></div>
-                                <div class="vdot-metrics" style="margin-top:8px;" id="tpl-date"></div>
-                            </div>
-                            <div class="vdot-body" id="tpl-days"></div>
-                            <div class="vdot-footer">MEUVAM — CONSULTORIA ESPORTIVA</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer" style="background:#fff;border-top:1px solid var(--border);padding:12px 20px;justify-content:center;gap:12px;flex-wrap:wrap;">
-                    <button class="btn btn-secondary" onclick="copyImageToClipboard()" style="padding:10px 20px;"><i class="ri-file-copy-line"></i> Copiar Imagem</button>
-                    <button class="btn btn-secondary" onclick="downloadImage()" style="padding:10px 20px;"><i class="ri-download-line"></i> Baixar PNG</button>
-                    <button class="btn btn-secondary" onclick="sendToWhatsApp()" style="padding:10px 20px;background:#25D366;color:white;border:none;"><i class="ri-whatsapp-line"></i> Enviar WhatsApp</button>
-                    <button class="btn btn-primary" onclick="shareImage()" style="padding:10px 20px;"><i class="ri-share-line"></i> Compartilhar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
     <div class="toast" id="toast"><span id="toast-msg">Sucesso!</span></div>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-
-    <!-- Floating Chat Widget -->
-    <div id="chat-balloon" class="chat-balloon" onclick="toggleFloatingChat()">
-        <i class="ri-message-3-line"></i>
-        <span id="chat-notif-count" class="badge" style="display:none;">0</span>
-    </div>
-
-    <div id="floating-chat" class="floating-chat-window">
-        <div class="floating-chat-header">
-            <h4 style="margin:0; font-size:14px;">Chat</h4>
-            <div class="chat-header-actions" style="display:flex; gap:15px; align-items:center;">
-                <button onclick="syncAthletesFromSupabase(true)" style="background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-refresh-line"></i> Sync</button>
-                <button id="btn-expand-chat" onclick="expandChat()" style="background:rgba(255,255,255,0.1); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-fullscreen-line"></i> Expandir</button>
-                <button onclick="toggleFloatingChat()" style="background:rgba(255,255,255,0.2); border:none; color:white; cursor:pointer; padding:4px 8px; border-radius:4px; font-size:11px;"><i class="ri-close-line"></i> Fechar</button>
-            </div>
-        </div>
-        <div class="floating-chat-body">
-            <div id="floating-chat-users"></div>
-            <div class="floating-chat-content">
-                <div id="floating-chat-header-name" style="padding:10px 15px; background:white; border-bottom:1px solid var(--border); font-size:12px; font-weight:700; color:var(--text);">
-                    Selecione um atleta
-                </div>
-                <div id="floating-chat-messages" class="floating-chat-messages"></div>
-                <div class="floating-chat-input">
-                    <input type="text" id="floating-chat-input-text" placeholder="Escreva uma mensagem..." onkeydown="if(event.key==='Enter') sendFloatingMessage()">
-                    <button onclick="sendFloatingMessage()"><i class="ri-send-plane-fill"></i></button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="auth.js?v=3.1"></script>
-    <script src="app.js?v=3.9"></script>
+    <script src="auth.js"></script>
+    <script src="app.js?v=1.2.2"></script>
 </body>
 </html>
