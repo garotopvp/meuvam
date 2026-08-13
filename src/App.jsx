@@ -23,6 +23,7 @@ import EditProfileView from './views/EditProfileView';
 import AuthView from './views/AuthView';
 import PortalSelection from './views/PortalSelection';
 import AntigravityPreview from './views/AntigravityPreview';
+import PedidoRegataView from './views/PedidoRegataView';
 
 import ChatView from './components/ChatView';
 import NotificationsView from './components/NotificationsView';
@@ -499,6 +500,8 @@ const AppContent = () => {
       <Route path="/preview" element={<AntigravityPreview />} />
       <Route path="/baixar" element={<InstallView />} />
       <Route path="/instalar" element={<InstallView />} />
+      <Route path="/pedido-regata" element={<PedidoRegataView />} />
+      <Route path="/regata" element={<PedidoRegataView />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
