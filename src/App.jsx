@@ -15,6 +15,7 @@ import IOSInstallPrompt from './components/IOSInstallPrompt';
 
 // Views
 import HomeView from './views/HomeView';
+import AthleteDesktopDashboard from './views/AthleteDesktopDashboard';
 import TrainingView from './views/TrainingView';
 import FeedView from './views/FeedView';
 
@@ -157,6 +158,14 @@ const UrlCleanup = ({ onConnected }) => {
 
 const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthleteRaw, handlePhotoUpload, session, updateProfile, navigate, deferredPrompt, handleInstallApp, theme, setTheme }) => {
   const location = useLocation();
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)', transition: 'background-color 0.3s ease' }}>
       <AnimatePresence mode="wait">
@@ -166,11 +175,24 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="page-container"
-          style={{ flex: 1, paddingBottom: '90px' }}
+          className={isDesktop ? "w-full" : "page-container"}
+          style={{ flex: 1, paddingBottom: isDesktop ? '0px' : '90px' }}
         >
           <Routes>
-            <Route path="/" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
+            <Route path="/" element={
+              isDesktop ? (
+                <AthleteDesktopDashboard 
+                  athlete={athlete} 
+                  workouts={workouts} 
+                  onLogout={() => supabase.auth.signOut()} 
+                  deferredPrompt={deferredPrompt} 
+                  onInstall={handleInstallApp} 
+                  navigate={navigate}
+                />
+              ) : (
+                <HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />
+              )
+            } />
             <Route path="/atividade/:activityId" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
             <Route path="/treinos" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
             <Route path="/treinos/:workoutId" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
@@ -203,7 +225,7 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
           </Routes>
         </motion.div>
       </AnimatePresence>
-      {!location.pathname.includes('/edit') && <BottomNav />}
+      {!isDesktop && !location.pathname.includes('/edit') && <BottomNav />}
     </div>
   );
 };
