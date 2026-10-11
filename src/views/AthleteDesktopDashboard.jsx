@@ -213,13 +213,7 @@ export default function AthleteDesktopDashboard({
                   onClick={() => navigate('/aluno')} 
                   className="rounded-lg bg-blue-50 px-3 py-1.5 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 font-bold"
                 >
-                  📅 Calendário
-                </button>
-                <button 
-                  onClick={() => navigate('/aluno/treinos')} 
-                  className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  📋 Lista de Treinos
+                  📅 Calendário de Treinos
                 </button>
                 <button 
                   onClick={() => navigate('/aluno/feed')} 
@@ -232,6 +226,12 @@ export default function AthleteDesktopDashboard({
                   className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   💬 Coach IA
+                </button>
+                <button 
+                  onClick={() => navigate('/aluno/perfil')} 
+                  className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  👤 Meu Perfil
                 </button>
               </nav>
             )}

@@ -175,7 +175,13 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className={isDesktop ? "w-full" : "page-container"}
+          className={
+            isDesktop 
+              ? (location.pathname.includes('/perfil') || location.pathname.includes('/feed') || location.pathname.includes('/coach')
+                  ? "max-w-4xl mx-auto px-4 py-6 w-full"
+                  : "w-full")
+              : "page-container"
+          }
           style={{ flex: 1, paddingBottom: isDesktop ? '0px' : '90px' }}
         >
           <Routes>
@@ -194,8 +200,34 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
               )
             } />
             <Route path="/atividade/:activityId" element={<HomeView athlete={athlete} workouts={workouts} deferredPrompt={deferredPrompt} onInstall={handleInstallApp} />} />
-            <Route path="/treinos" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
-            <Route path="/treinos/:workoutId" element={<TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />} />
+            <Route path="/treinos" element={
+              isDesktop ? (
+                <AthleteDesktopDashboard 
+                  athlete={athlete} 
+                  workouts={workouts} 
+                  onLogout={() => supabase.auth.signOut()} 
+                  deferredPrompt={deferredPrompt} 
+                  onInstall={handleInstallApp} 
+                  navigate={navigate}
+                />
+              ) : (
+                <TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />
+              )
+            } />
+            <Route path="/treinos/:workoutId" element={
+              isDesktop ? (
+                <AthleteDesktopDashboard 
+                  athlete={athlete} 
+                  workouts={workouts} 
+                  onLogout={() => supabase.auth.signOut()} 
+                  deferredPrompt={deferredPrompt} 
+                  onInstall={handleInstallApp} 
+                  navigate={navigate}
+                />
+              ) : (
+                <TrainingView athlete={athlete} workouts={workouts} onRefresh={fetchWorkouts} isRefreshing={isRefreshing} />
+              )
+            } />
             <Route path="/feed" element={<FeedView athlete={athlete} />} />
             <Route path="/feed/:activityId" element={<FeedView athlete={athlete} />} />
             <Route path="/coach" element={<ChatView session={session} />} />
