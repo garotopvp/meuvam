@@ -9,6 +9,7 @@ import InstallView from './views/InstallView';
 
 // Components
 import BottomNav from './components/BottomNav';
+import AthleteDesktopHeader from './components/AthleteDesktopHeader';
 import PhotoEditorModal from './modals/PhotoEditorModal';
 import SmartInstallBanner from './components/SmartInstallBanner';
 import IOSInstallPrompt from './components/IOSInstallPrompt';
@@ -168,6 +169,16 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-color)', transition: 'background-color 0.3s ease' }}>
+      {isDesktop && (
+        <AthleteDesktopHeader 
+          athlete={athlete}
+          navigate={navigate}
+          location={location}
+          deferredPrompt={deferredPrompt}
+          onInstall={handleInstallApp}
+          onLogout={() => supabase.auth.signOut()}
+        />
+      )}
       <AnimatePresence mode="wait">
         <motion.div
           key={location.pathname}
