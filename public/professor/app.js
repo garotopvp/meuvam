@@ -4882,14 +4882,9 @@ async function syncAthletesFromSupabase(isManual = false) {
             }
         });
 
-        // Limpeza: Remover da lista local quem não é mais um atleta (como o professor)
-        const remoteIds = new Set(profiles.map(p => p.id));
-        athletes = athletes.filter(a => {
-            // Se o atleta não tem supabaseId, é um cadastro manual, mantemos.
-            if (!a.supabaseId) return true;
-            // Se tem supabaseId, só mantemos se ele estiver no retorno atual do banco (que só traz role='athlete')
-            return remoteIds.has(a.supabaseId);
-        });
+        // Limpeza automática DESATIVADA: ela apagava atletas locais cujo supabaseId
+        // não existia no banco atual (ex.: após troca de projeto Supabase).
+        // Nenhum atleta é removido automaticamente; remoção só manual.
 
         saveState(['athletes']);
         renderAthletes();
