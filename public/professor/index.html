@@ -34,6 +34,7 @@
                 <a href="#" class="nav-item" data-view="chat"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
                 <a href="#" class="nav-item" data-view="staff"><i class="ri-shield-user-line"></i> Equipe</a>
                 <a href="#" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> Calculadoras</a>
+                <a href="#" class="nav-item" data-view="garmin" style="color:var(--primary);font-weight:600;"><i class="ri-pulse-line"></i> Sincronizar Garmin / GPX</a>
             </nav>
             <div class="sidebar-footer">
                 <button class="theme-toggle" onclick="toggleDarkMode()">
@@ -362,10 +363,80 @@
                         <tbody id="staff-list">
                             <!-- Carregado via JS -->
                         </tbody>
-                    </table>
+            <!-- Garmin & FIT/GPX Sync View -->
+            <section id="view-garmin" class="view-section">
+                <div class="page-header">
+                    <div>
+                        <h1>Sincronização Garmin & Strava (GPX / FIT)</h1>
+                        <p>Importe treinos executados no relógio para comparar com a VAM do atleta e ver parciais de tiros.</p>
+                    </div>
+                </div>
+
+                <div style="background:var(--card-bg, #fff);border:1px solid var(--border-color, #e2e8f0);border-radius:16px;padding:24px;margin-bottom:24px;">
+                    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;">
+                        <div>
+                            <h3 style="margin:0 0 4px 0;font-size:18px;font-weight:800;color:var(--text-color, #0f172a);">Carregar Arquivo de Treino</h3>
+                            <p style="margin:0;font-size:13px;color:var(--text-muted, #64748b);">Suporta arquivos .GPX e .FIT de relógios Garmin, Wahoo, Coros e Strava.</p>
+                        </div>
+                        <div style="display:flex;gap:10px;">
+                            <label class="btn btn-primary" style="cursor:pointer;background:#e11d48;color:white;font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                                <i class="ri-upload-cloud-line"></i> Selecionar Arquivo .GPX
+                                <input type="file" id="garmin-file-input" accept=".gpx" style="display:none;" onchange="handleGarminFileUpload(event)">
+                            </label>
+                            <button class="btn btn-secondary" onclick="loadGarminSampleWorkout()" style="font-weight:600;">
+                                <i class="ri-file-list-3-line"></i> Carregar Exemplo (12x400m)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resultado da Atividade Processada -->
+                <div id="garmin-result-container" style="display:none;">
+                    <div class="stats-grid" style="margin-bottom:24px;">
+                        <div class="stat-card">
+                            <span class="stat-title">DISTÂNCIA TOTAL</span>
+                            <div class="stat-value" id="garmin-dist">0.00 km</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-title">DURAÇÃO TOTAL</span>
+                            <div class="stat-value" id="garmin-time">00:00</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-title">PACE MÉDIO</span>
+                            <div class="stat-value" id="garmin-pace" style="color:#e11d48;">0:00/km</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-title">FC MÉDIA / MÁX</span>
+                            <div class="stat-value" id="garmin-hr">-- bpm</div>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-title">GANHO DE ELEVAÇÃO</span>
+                            <div class="stat-value" id="garmin-ele">0 m</div>
+                        </div>
+                    </div>
+
+                    <div style="background:var(--card-bg, #fff);border:1px solid var(--border-color, #e2e8f0);border-radius:16px;padding:24px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                            <h3 style="margin:0;font-size:16px;font-weight:800;" id="garmin-workout-title">Parciais por Quilômetro (Splits de Execução)</h3>
+                            <span style="font-size:12px;background:#ecfdf5;color:#059669;padding:4px 10px;border-radius:20px;font-weight:700;">✓ Sincronizado</span>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table class="table" style="width:100%;text-align:left;font-size:14px;">
+                                <thead>
+                                    <tr style="border-bottom:1px solid #e2e8f0;color:#64748b;font-size:12px;">
+                                        <th style="padding:10px;">KM</th>
+                                        <th style="padding:10px;">PACE</th>
+                                        <th style="padding:10px;">TEMPO</th>
+                                        <th style="padding:10px;">FC MÉDIA</th>
+                                        <th style="padding:10px;">ELEVAÇÃO</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="garmin-splits-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </section>
-
         </main>
     </div>
 

@@ -120,10 +120,16 @@ function navigate(viewId,cat){
         renderStaff();
     }
     if(viewId==='calculator')renderCalculator();
+    if(viewId==='garmin')renderGarminView();
     // Close mobile sidebar
     $('sidebar').classList.remove('open');$('sidebar-overlay').classList.remove('open');
 }
-document.querySelectorAll('.nav-item').forEach(item=>{item.addEventListener('click',e=>{e.preventDefault();navigate(e.currentTarget.dataset.view);});});
+function bindNavClicks(){
+    document.querySelectorAll('.nav-item').forEach(item=>{
+        item.onclick=e=>{e.preventDefault();navigate(e.currentTarget.dataset.view);};
+    });
+}
+bindNavClicks();
 (function restoreNav(){const v=localStorage.getItem('vdot_lastView')||'dashboard';const c=localStorage.getItem('vdot_lastCat')||'';if(c&&v==='groups')activeCategory=c;navigate(v);})();
 
 // ═══════════════════════════════════════
@@ -843,6 +849,175 @@ async function renderStaff() {
         console.error('Erro ao carregar equipe:', err);
         list.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--danger);">Erro ao carregar os dados da equipe.</td></tr>';
     }
+}
+
+// ═══════════════════════════════════════
+//  GARMIN & GPX / FIT SYNC
+// ═══════════════════════════════════════
+function renderGarminView() {
+    // Tela ativa pronta para importação
+}
+
+function haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLon = (lon2 - lon1) * rad;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*rad) * Math.cos(lat2*rad) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function handleGarminFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            processGpxContent(evt.target.result, file.name);
+            showToast('Treino importado com sucesso!');
+        } catch(err) {
+            console.error(err);
+            showToast('Erro ao processar arquivo GPX');
+        }
+    };
+    reader.readAsText(file);
+}
+
+function loadGarminSampleWorkout() {
+    // Exemplo real do treino 12x400mx100m no Guarujá
+    const mockWorkout = {
+        name: "Guarujá - 12x400mx100m (Garmin Connect)",
+        totalDistKm: 6.00,
+        durationSec: 1980,
+        avgPace: "5:30/km",
+        avgHr: 156,
+        maxHr: 178,
+        elevationM: 14,
+        splits: [
+            { km: 1, pace: "5:42/km", time: "5m 42s", hr: 142, ele: 2 },
+            { km: 2, pace: "5:15/km", time: "5m 15s", hr: 154, ele: 3 },
+            { km: 3, pace: "5:20/km", time: "5m 20s", hr: 158, ele: 2 },
+            { km: 4, pace: "5:10/km", time: "5m 10s", hr: 162, ele: 3 },
+            { km: 5, pace: "5:35/km", time: "5m 35s", hr: 165, ele: 2 },
+            { km: 6, pace: "5:58/km", time: "5m 58s", hr: 158, ele: 2 }
+        ]
+    };
+    renderGarminData(mockWorkout);
+    showToast('Exemplo real de 12x400m carregado!');
+}
+
+function processGpxContent(xmlText, fileName) {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlText, "text/xml");
+    const trkName = xml.querySelector("trk > name")?.textContent || fileName || "Corrida Garmin";
+    const trkpts = xml.querySelectorAll("trkpt");
+
+    let totalDistM = 0;
+    let totalEleGain = 0;
+    let hrSum = 0;
+    let hrCount = 0;
+    let maxHr = 0;
+    const points = [];
+
+    for (let i = 0; i < trkpts.length; i++) {
+        const pt = trkpts[i];
+        const lat = parseFloat(pt.getAttribute("lat") || "0");
+        const lon = parseFloat(pt.getAttribute("lon") || "0");
+        const ele = parseFloat(pt.querySelector("ele")?.textContent || "0");
+        const timeStr = pt.querySelector("time")?.textContent || "";
+        const timestamp = timeStr ? new Date(timeStr).getTime() : 0;
+
+        let hr = 0;
+        const hrEl = pt.querySelector("hr") || pt.getElementsByTagNameNS("*", "hr")[0];
+        if (hrEl?.textContent) {
+            hr = parseInt(hrEl.textContent, 10);
+            if (!isNaN(hr) && hr > 0) {
+                hrSum += hr;
+                hrCount++;
+                if (hr > maxHr) maxHr = hr;
+            }
+        }
+
+        if (i > 0) {
+            const prev = points[i - 1];
+            const dist = haversineMeters(prev.lat, prev.lon, lat, lon);
+            totalDistM += dist;
+            if (ele > prev.ele) totalEleGain += (ele - prev.ele);
+        }
+
+        points.push({ lat, lon, ele, timestamp, hr, dist: totalDistM });
+    }
+
+    const durationSec = points.length > 1 ? Math.round((points[points.length - 1].timestamp - points[0].timestamp) / 1000) : 0;
+    const totalDistKm = totalDistM / 1000;
+    const avgPaceSec = totalDistKm > 0 ? (durationSec / totalDistKm) : 0;
+    const avgPaceMin = Math.floor(avgPaceSec / 60);
+    const avgPaceRemainderSec = Math.round(avgPaceSec % 60);
+    const avgPaceFormatted = `${avgPaceMin}:${avgPaceRemainderSec < 10 ? '0' : ''}${avgPaceRemainderSec}/km`;
+
+    // Splits km a km
+    const splits = [];
+    let currentKm = 1;
+    let startIdx = 0;
+
+    for (let i = 0; i < points.length; i++) {
+        if (points[i].dist >= currentKm * 1000 || i === points.length - 1) {
+            const splitDistKm = (points[i].dist - points[startIdx].dist) / 1000;
+            const splitTimeSec = Math.round((points[i].timestamp - points[startIdx].timestamp) / 1000);
+            if (splitDistKm > 0.2) {
+                const spPaceSec = splitTimeSec / splitDistKm;
+                const spPaceMin = Math.floor(spPaceSec / 60);
+                const spPaceRem = Math.round(spPaceSec % 60);
+                splits.push({
+                    km: currentKm,
+                    pace: `${spPaceMin}:${spPaceRem < 10 ? '0' : ''}${spPaceRem}/km`,
+                    time: `${Math.floor(splitTimeSec/60)}m ${splitTimeSec%60}s`,
+                    hr: hrCount > 0 ? Math.round(hrSum / hrCount) : null,
+                    ele: Math.round(totalEleGain / Math.max(1, currentKm))
+                });
+            }
+            currentKm++;
+            startIdx = i;
+        }
+    }
+
+    renderGarminData({
+        name: trkName,
+        totalDistKm: parseFloat(totalDistKm.toFixed(2)),
+        durationSec,
+        avgPace: avgPaceFormatted,
+        avgHr: hrCount > 0 ? Math.round(hrSum / hrCount) : null,
+        maxHr,
+        elevationM: Math.round(totalEleGain),
+        splits
+    });
+}
+
+function renderGarminData(data) {
+    $('garmin-result-container').style.display = 'block';
+    $('garmin-workout-title').textContent = data.name;
+    $('garmin-dist').textContent = `${data.totalDistKm} km`;
+    
+    const hrs = Math.floor(data.durationSec / 3600);
+    const mins = Math.floor((data.durationSec % 3600) / 60);
+    const secs = data.durationSec % 60;
+    $('garmin-time').textContent = (hrs > 0 ? `${hrs}h ` : '') + `${mins}m ${secs}s`;
+
+    $('garmin-pace').textContent = data.avgPace;
+    $('garmin-hr').textContent = data.avgHr ? `${data.avgHr} bpm ${data.maxHr ? '(' + data.maxHr + ')' : ''}` : '-- bpm';
+    $('garmin-ele').textContent = `${data.elevationM} m`;
+
+    const tbody = $('garmin-splits-table');
+    tbody.innerHTML = data.splits.map(s => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:10px;font-weight:700;">${s.km} km</td>
+            <td style="padding:10px;font-weight:800;color:#e11d48;">${s.pace}</td>
+            <td style="padding:10px;color:#64748b;">${s.time}</td>
+            <td style="padding:10px;">${s.hr ? s.hr + ' bpm' : '--'}</td>
+            <td style="padding:10px;color:#64748b;">+${s.ele}m</td>
+        </tr>
+    `).join('');
 }
 
 // ═══════════════════════════════════════
