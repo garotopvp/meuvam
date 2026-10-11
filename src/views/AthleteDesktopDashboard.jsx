@@ -412,6 +412,39 @@ export default function AthleteDesktopDashboard({
                 </CardHeader>
 
                 <CardContent className="pt-4 space-y-4">
+                  {/* Métricas Rápidas do Treino Selecionado */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-800/40 text-center">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Distância</p>
+                      <p className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                        {activeWorkout.metrics?.distance || '--'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-800/40 text-center">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Tempo</p>
+                      <p className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                        {activeWorkout.metrics?.duration || '--'}
+                      </p>
+                    </div>
+                    {(() => {
+                      const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
+                      const mainBlock = blocks.find(b => {
+                        const n = (b.name || '').toLowerCase();
+                        return !n.includes('aquec') && !n.includes('desaquec');
+                      }) || blocks[0];
+                      const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
+                      const paceToShow = mainBlock?.pace || (isInterval ? '3:45 min/km' : '5:30 min/km');
+                      return (
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-800/40 text-center">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Ritmo Alvo</p>
+                          <p className="text-xs font-black text-cyan-600 dark:text-cyan-400 mt-1 truncate">
+                            {paceToShow}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                   {/* Bloco de Séries de Tiros / Estrutura */}
                   {(() => {
                     const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
