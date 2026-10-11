@@ -93,9 +93,14 @@
     color: var(--text-muted);
     font-size: 14px;
 }
-.professor-boot-inner img {
-    margin-bottom: 12px;
-    border-radius: 12px;
+.professor-boot-inner img,
+.professor-boot-logo {
+    width: 140px;
+    height: auto;
+    max-height: 90px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 14px;
 }
 .professor-boot.hidden {
     display: none;
