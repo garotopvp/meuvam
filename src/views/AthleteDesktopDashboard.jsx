@@ -15,7 +15,9 @@ import {
   Activity,
   Layers,
   TrendingUp,
-  Download
+  Download,
+  Eye,
+  X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -40,6 +42,7 @@ export default function AthleteDesktopDashboard({
   // Estado do mês exibido
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -291,7 +294,12 @@ export default function AthleteDesktopDashboard({
                           return (
                             <div
                               key={w.id}
-                              className={`group flex flex-col rounded-lg border p-1.5 text-left text-xs transition-all shadow-xs ${badge.bg} hover:scale-[1.02]`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedWorkout(w);
+                                setIsDetailModalOpen(true);
+                              }}
+                              className={`group flex flex-col rounded-lg border p-1.5 text-left text-xs transition-all shadow-xs cursor-pointer ${badge.bg} hover:scale-[1.03] hover:shadow-sm`}
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span className="font-bold truncate text-[11px] leading-tight">
@@ -424,7 +432,15 @@ export default function AthleteDesktopDashboard({
                   </div>
 
                   {/* Ações */}
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsDetailModalOpen(true)}
+                      className="w-full gap-2 border-slate-200 text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 font-semibold"
+                    >
+                      <Eye className="h-4 w-4 text-blue-600" />
+                      Abrir Atividade Completa
+                    </Button>
                     <Button variant="vam" className="w-full gap-2">
                       <Zap className="h-4 w-4" />
                       Enviar Treino para o Garmin
@@ -471,6 +487,137 @@ export default function AthleteDesktopDashboard({
           </div>
         </div>
       </main>
+
+      {/* ── MODAL DE DETALHES COMPLETOS DA ATIVIDADE ── */}
+      {isDetailModalOpen && activeWorkout && (
+        <div 
+          onClick={() => setIsDetailModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 md:p-8 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6"
+          >
+            {/* Top Bar do Modal */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+                <CalendarIcon className="h-4 w-4 text-blue-600" />
+                <span>{activeWorkout.date}</span>
+              </div>
+              <button 
+                onClick={() => setIsDetailModalOpen(false)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Cabeçalho do Treino */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="vam">
+                  {activeWorkout.type || 'Corrida'}
+                </Badge>
+                {activeWorkout.status === 'completed' ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+                    <CheckCircle2 className="h-4 w-4" /> Concluído
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600">
+                    <Clock className="h-4 w-4" /> Agendado
+                  </span>
+                )}
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                {activeWorkout.title}
+              </h2>
+              {activeWorkout.description && (
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {activeWorkout.description}
+                </p>
+              )}
+            </div>
+
+            {/* Grade de Métricas da Sessão */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Distância Total</p>
+                <p className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                  {activeWorkout.metrics?.distance || '--'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tempo Estimado</p>
+                <p className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                  {activeWorkout.metrics?.duration || '--'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50 col-span-2 sm:col-span-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ritmo Alvo (100% VAM)</p>
+                <p className="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-1">
+                  3:45 min/km
+                </p>
+              </div>
+            </div>
+
+            {/* Estrutura Passo a Passo dos Tiros */}
+            {(() => {
+              const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
+              if (blocks.length === 0) return null;
+
+              return (
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Passo a Passo das Séries (Tiros & Recuperação)
+                  </h4>
+                  <div className="space-y-2">
+                    {blocks.map((b, i) => (
+                      <div 
+                        key={i} 
+                        className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 text-xs dark:border-slate-800 dark:bg-slate-800/50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-600 text-xs font-black text-white shadow-xs">
+                            {i + 1}
+                          </span>
+                          <div>
+                            <p className="font-bold text-slate-900 dark:text-white text-sm">
+                              {b.name || b.type || 'Série'}
+                            </p>
+                            {b.pace && (
+                              <p className="text-xs text-cyan-600 dark:text-cyan-400 font-semibold mt-0.5">
+                                Ritmo sugerido: {b.pace}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                          {b.distance || b.duration || '--'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Ações do Modal */}
+            <div className="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100 dark:border-slate-800">
+              <Button variant="vam" className="w-full sm:flex-1 gap-2">
+                <Zap className="h-4 w-4" />
+                Enviar Treino para o Garmin
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDetailModalOpen(false)}
+                className="w-full sm:w-auto px-6 font-semibold"
+              >
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
