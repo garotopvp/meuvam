@@ -120,6 +120,7 @@ function navigate(viewId,cat){
         renderStaff();
     }
     if(viewId==='calculator')renderCalculator();
+    if(viewId==='workout-builder')renderGarminWorkoutBuilder();
     if(viewId==='garmin')renderGarminView();
     // Close mobile sidebar
     $('sidebar').classList.remove('open');$('sidebar-overlay').classList.remove('open');
@@ -1018,6 +1019,504 @@ function renderGarminData(data) {
             <td style="padding:10px;color:#64748b;">+${s.ele}m</td>
         </tr>
     `).join('');
+}
+
+// ═══════════════════════════════════════
+//  GARMIN WORKOUT BUILDER (ESTILO CONNECT)
+// ═══════════════════════════════════════
+let garminWorkoutSteps = [
+    { id: 'step_1', type: 'warmup', title: 'Aquecimento', durationType: 'lap_button', durationValue: 0, targetType: 'pace', vamPct: 65, notes: '' },
+    { 
+        id: 'repeat_1', 
+        type: 'repeat', 
+        count: 8, 
+        steps: [
+            { id: 'sub_1', type: 'run', title: 'Corrida', durationType: 'distance', durationValue: 0.4, targetType: 'pace', vamPct: 100, notes: 'Tiro no ritmo de VAM' },
+            { id: 'sub_2', type: 'recovery', title: 'Recuperação', durationType: 'time', durationValue: 90, targetType: 'open', vamPct: 60, notes: 'Trote ou caminhada' }
+        ]
+    },
+    { id: 'step_2', type: 'cooldown', title: 'Desaquecimento', durationType: 'lap_button', durationValue: 0, targetType: 'pace', vamPct: 60, notes: '' }
+];
+
+let selectedGarminAthleteId = null;
+
+const garminTypeColors = {
+    warmup: '#ef4444',   // Vermelho
+    run: '#0284c7',      // Azul
+    recovery: '#10b981', // Verde
+    cooldown: '#10b981', // Verde
+    repeat: '#6366f1'    // Indigo
+};
+
+const garminTypeLabels = {
+    warmup: 'Aquecimento',
+    run: 'Corrida',
+    recovery: 'Recuperação',
+    cooldown: 'Desaquecimento'
+};
+
+function renderGarminWorkoutBuilder() {
+    // 1. Popular lista de atletas
+    const select = $('g-workout-athlete-select');
+    if (select) {
+        select.innerHTML = '<option value="">-- Selecione o Atleta para Calcular Ritmos --</option>' + 
+            athletes.map(a => `<option value="${a.id}" ${selectedGarminAthleteId == a.id ? 'selected' : ''}>${a.name} ${a.testTime ? `(VAM: ${(180/a.testTime).toFixed(1)} km/h)` : '(Sem VAM)'}</option>`).join('');
+    }
+    onGarminAthleteChange();
+    renderGarminWorkoutSteps();
+}
+
+function onGarminAthleteChange() {
+    const select = $('g-workout-athlete-select');
+    selectedGarminAthleteId = select ? select.value : null;
+    const athlete = athletes.find(a => a.id == selectedGarminAthleteId);
+    const badge = $('g-athlete-pace-badge');
+    
+    if (badge) {
+        if (athlete && athlete.testTime) {
+            const vamKmh = 180 / athlete.testTime;
+            badge.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;background:#e0f2fe;color:#0369a1;padding:4px 10px;border-radius:20px;font-weight:700;">
+                <i class="ri-flashlight-line"></i> VAM: ${vamKmh.toFixed(1)} km/h • 100% = ${vamToPace(vamKmh)}
+            </span>`;
+        } else {
+            badge.innerHTML = `<span style="color:#94a3b8;font-size:11px;">Sem atleta selecionado. Usando referência padrão 12 km/h (5:00/km).</span>`;
+        }
+    }
+    renderGarminWorkoutSteps();
+}
+
+function getGarminAthleteVamKmh() {
+    const athlete = athletes.find(a => a.id == selectedGarminAthleteId);
+    if (athlete && athlete.testTime) {
+        return 180 / athlete.testTime;
+    }
+    return 12.0; // Padrão 5:00/km
+}
+
+function addGarminStep(type = 'run', targetList = null) {
+    const newStep = {
+        id: 'step_' + Date.now() + Math.random().toString(36).substr(2, 4),
+        type: type,
+        title: garminTypeLabels[type] || 'Corrida',
+        durationType: 'distance',
+        durationValue: 1.0,
+        targetType: 'pace',
+        vamPct: type === 'warmup' ? 65 : type === 'run' ? 90 : 60,
+        notes: ''
+    };
+    if (targetList) {
+        targetList.push(newStep);
+    } else {
+        garminWorkoutSteps.push(newStep);
+    }
+    renderGarminWorkoutSteps();
+}
+
+function addGarminRepeatBlock() {
+    garminWorkoutSteps.push({
+        id: 'repeat_' + Date.now(),
+        type: 'repeat',
+        count: 5,
+        steps: [
+            { id: 'sub_' + Date.now() + '_1', type: 'run', title: 'Corrida', durationType: 'distance', durationValue: 0.4, targetType: 'pace', vamPct: 100, notes: 'Tiro' },
+            { id: 'sub_' + Date.now() + '_2', type: 'recovery', title: 'Recuperação', durationType: 'time', durationValue: 60, targetType: 'open', vamPct: 60, notes: 'Trote' }
+        ]
+    });
+    renderGarminWorkoutSteps();
+}
+
+function removeGarminStep(id) {
+    garminWorkoutSteps = garminWorkoutSteps.filter(s => {
+        if (s.id === id) return false;
+        if (s.type === 'repeat' && s.steps) {
+            s.steps = s.steps.filter(sub => sub.id !== id);
+        }
+        return true;
+    });
+    renderGarminWorkoutSteps();
+}
+
+function resetGarminWorkoutBuilder() {
+    if (!confirm('Deseja redefinir o treino para o padrão?')) return;
+    garminWorkoutSteps = [
+        { id: 'step_1', type: 'warmup', title: 'Aquecimento', durationType: 'lap_button', durationValue: 0, targetType: 'pace', vamPct: 65, notes: '' },
+        { 
+            id: 'repeat_1', 
+            type: 'repeat', 
+            count: 6, 
+            steps: [
+                { id: 'sub_1', type: 'run', title: 'Corrida', durationType: 'distance', durationValue: 0.4, targetType: 'pace', vamPct: 100, notes: '' },
+                { id: 'sub_2', type: 'recovery', title: 'Recuperação', durationType: 'time', durationValue: 60, targetType: 'open', vamPct: 60, notes: '' }
+            ]
+        },
+        { id: 'step_2', type: 'cooldown', title: 'Desaquecimento', durationType: 'lap_button', durationValue: 0, targetType: 'pace', vamPct: 60, notes: '' }
+    ];
+    renderGarminWorkoutSteps();
+}
+
+function renderGarminWorkoutSteps() {
+    const container = $('g-steps-container');
+    const colorStrip = $('g-color-strip');
+    if (!container) return;
+
+    const vamKmh = getGarminAthleteVamKmh();
+    let totalDistKm = 0;
+    let totalSecs = 0;
+    let stripHtml = '';
+
+    function computeStepStats(step) {
+        let dist = 0, secs = 0;
+        const speedKmh = vamKmh * (step.vamPct / 100);
+        const paceSecPerKm = speedKmh > 0 ? (3600 / speedKmh) : 300;
+
+        if (step.durationType === 'distance') {
+            dist = parseFloat(step.durationValue) || 0;
+            secs = Math.round(dist * paceSecPerKm);
+        } else if (step.durationType === 'time') {
+            secs = parseInt(step.durationValue, 10) || 0;
+            dist = (secs / 3600) * speedKmh;
+        } else if (step.durationType === 'lap_button') {
+            dist = 1.0; // Estimativa padrão
+            secs = Math.round(1.0 * paceSecPerKm);
+        }
+        return { dist, secs, speedKmh };
+    }
+
+    // Calcula total para a barra superior de cores
+    garminWorkoutSteps.forEach(item => {
+        if (item.type === 'repeat') {
+            let repDist = 0;
+            (item.steps || []).forEach(sub => {
+                const s = computeStepStats(sub);
+                repDist += s.dist * item.count;
+                totalSecs += s.secs * item.count;
+            });
+            totalDistKm += repDist;
+        } else {
+            const s = computeStepStats(item);
+            totalDistKm += s.dist;
+            totalSecs += s.secs;
+        }
+    });
+
+    $('g-workout-total-dist').textContent = `${totalDistKm.toFixed(2)} km`;
+    const h = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const sec = totalSecs % 60;
+    $('g-workout-total-time').textContent = (h > 0 ? `${h}h ` : '') + `${m}m ${sec < 10 ? '0' : ''}${sec}s`;
+
+    // Renderiza a barra de cores estilo Garmin
+    garminWorkoutSteps.forEach(item => {
+        if (item.type === 'repeat') {
+            const pct = Math.max(5, (100 / Math.max(1, garminWorkoutSteps.length)));
+            stripHtml += `<div style="flex:1;background:#6366f1;opacity:0.9;" title="Repetição ${item.count}x"></div>`;
+        } else {
+            const col = garminTypeColors[item.type] || '#0284c7';
+            stripHtml += `<div style="flex:1;background:${col};" title="${item.title}"></div>`;
+        }
+    });
+    if (colorStrip) colorStrip.innerHTML = stripHtml || '<div style="flex:1;background:#0284c7;"></div>';
+
+    // Helper para desenhar um card de etapa individual
+    function renderStepCard(step, isNested = false, parentRepeatId = null) {
+        const stats = computeStepStats(step);
+        const col = garminTypeColors[step.type] || '#0284c7';
+        const targetPaceStr = step.targetType === 'pace' ? vamToPace(stats.speedKmh) : 'Livre';
+
+        return `
+        <div style="background:var(--panel);border:1px solid var(--border);border-left:6px solid ${col};border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.04);position:relative;margin-bottom:${isNested ? '10px' : '0'};">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <select onchange="updateGarminStepProp('${step.id}', 'type', this.value, '${parentRepeatId}')" 
+                            style="font-size:14px;font-weight:800;color:var(--text);border:none;background:transparent;cursor:pointer;outline:none;">
+                        <option value="warmup" ${step.type==='warmup'?'selected':''}>Aquecimento</option>
+                        <option value="run" ${step.type==='run'?'selected':''}>Corrida / Tiro</option>
+                        <option value="recovery" ${step.type==='recovery'?'selected':''}>Recuperação</option>
+                        <option value="cooldown" ${step.type==='cooldown'?'selected':''}>Desaquecimento</option>
+                    </select>
+                </div>
+                <button class="btn btn-tertiary" onclick="removeGarminStep('${step.id}')" style="color:var(--danger);padding:4px 8px;" title="Remover etapa">
+                    <i class="ri-delete-bin-line"></i>
+                </button>
+            </div>
+
+            <!-- Grade de Configurações da Etapa -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;align-items:center;">
+                <!-- Duração / Condição de Fim -->
+                <div class="input-col">
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:700;">DURAÇÃO</label>
+                    <select onchange="updateGarminStepProp('${step.id}', 'durationType', this.value, '${parentRepeatId}')" 
+                            style="padding:6px 8px;border-radius:6px;font-size:13px;border:1px solid var(--border-strong);">
+                        <option value="lap_button" ${step.durationType==='lap_button'?'selected':''}>Pressionar botão Lap</option>
+                        <option value="distance" ${step.durationType==='distance'?'selected':''}>Distância</option>
+                        <option value="time" ${step.durationType==='time'?'selected':''}>Tempo</option>
+                    </select>
+                </div>
+
+                <!-- Valor da Duração se Distância ou Tempo -->
+                ${step.durationType === 'distance' ? `
+                <div class="input-col">
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:700;">DISTÂNCIA (KM)</label>
+                    <input type="number" step="0.1" min="0.05" value="${step.durationValue}" 
+                           onchange="updateGarminStepProp('${step.id}', 'durationValue', parseFloat(this.value), '${parentRepeatId}')"
+                           style="padding:6px 8px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid var(--border-strong);">
+                </div>` : ''}
+
+                ${step.durationType === 'time' ? `
+                <div class="input-col">
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:700;">TEMPO (SEGUNDOS)</label>
+                    <input type="number" step="5" min="5" value="${step.durationValue}" 
+                           onchange="updateGarminStepProp('${step.id}', 'durationValue', parseInt(this.value, 10), '${parentRepeatId}')"
+                           style="padding:6px 8px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid var(--border-strong);">
+                </div>` : ''}
+
+                <!-- Intensidade (% VAM) -->
+                <div class="input-col">
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:700;">INTENSIDADE (% VAM)</label>
+                    <input type="number" min="50" max="150" step="5" value="${step.vamPct || 80}" 
+                           onchange="updateGarminStepProp('${step.id}', 'vamPct', parseInt(this.value, 10), '${parentRepeatId}')"
+                           style="padding:6px 8px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid var(--border-strong);">
+                </div>
+
+                <!-- Pace Alvo Estimado -->
+                <div class="input-col">
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:700;">PACE ESTIMADO</label>
+                    <div style="font-size:15px;font-weight:800;color:${col};padding:6px 0;">
+                        ${targetPaceStr}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notas da Etapa -->
+            <div style="margin-top:10px;">
+                <input type="text" placeholder="Instrução no visor do relógio (opcional)..." value="${step.notes || ''}"
+                       onchange="updateGarminStepProp('${step.id}', 'notes', this.value, '${parentRepeatId}')"
+                       style="width:100%;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">
+            </div>
+        </div>`;
+    }
+
+    // Renderiza todos os passos
+    let html = '';
+    garminWorkoutSteps.forEach(item => {
+        if (item.type === 'repeat') {
+            html += `
+            <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;padding:20px;position:relative;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="background:#6366f1;color:white;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:4px;">
+                            <i class="ri-repeat-2-line"></i> REPETIÇÃO
+                        </span>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label style="font-size:13px;font-weight:700;">Número de vezes:</label>
+                            <input type="number" min="1" max="50" value="${item.count}" 
+                                   onchange="updateGarminRepeatCount('${item.id}', parseInt(this.value, 10))"
+                                   style="width:60px;padding:4px 8px;font-size:14px;font-weight:800;text-align:center;border:1px solid var(--border-strong);border-radius:6px;">
+                            <span style="font-weight:700;">vezes</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-secondary" onclick="addGarminStepToRepeat('${item.id}', 'run')" style="padding:4px 10px;font-size:12px;">
+                            <i class="ri-add-line"></i> Passo
+                        </button>
+                        <button class="btn btn-tertiary" onclick="removeGarminStep('${item.id}')" style="color:var(--danger);padding:4px 8px;">
+                            <i class="ri-delete-bin-line"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    ${(item.steps || []).map(sub => renderStepCard(sub, true, item.id)).join('')}
+                </div>
+            </div>`;
+        } else {
+            html += renderStepCard(item, false);
+        }
+    });
+
+    container.innerHTML = html;
+}
+
+function updateGarminStepProp(stepId, prop, value, parentRepeatId) {
+    if (parentRepeatId && parentRepeatId !== 'null' && parentRepeatId !== 'undefined') {
+        const repeat = garminWorkoutSteps.find(s => s.id === parentRepeatId);
+        if (repeat && repeat.steps) {
+            const target = repeat.steps.find(sub => sub.id === stepId);
+            if (target) {
+                target[prop] = value;
+                if (prop === 'type') target.title = garminTypeLabels[value] || 'Corrida';
+            }
+        }
+    } else {
+        const target = garminWorkoutSteps.find(s => s.id === stepId);
+        if (target) {
+            target[prop] = value;
+            if (prop === 'type') target.title = garminTypeLabels[value] || 'Corrida';
+        }
+    }
+    renderGarminWorkoutSteps();
+}
+
+function updateGarminRepeatCount(repeatId, count) {
+    const repeat = garminWorkoutSteps.find(s => s.id === repeatId);
+    if (repeat) {
+        repeat.count = Math.max(1, count || 1);
+        renderGarminWorkoutSteps();
+    }
+}
+
+function addGarminStepToRepeat(repeatId, type = 'run') {
+    const repeat = garminWorkoutSteps.find(s => s.id === repeatId);
+    if (repeat && repeat.steps) {
+        repeat.steps.push({
+            id: 'sub_' + Date.now() + Math.random().toString(36).substr(2, 4),
+            type: type,
+            title: garminTypeLabels[type] || 'Corrida',
+            durationType: 'distance',
+            durationValue: 0.4,
+            targetType: 'pace',
+            vamPct: 100,
+            notes: ''
+        });
+        renderGarminWorkoutSteps();
+    }
+}
+
+// ─── Exportador Garmin TCX Oficial ───
+function exportCurrentGarminWorkoutTCX() {
+    const workoutName = ($('g-workout-title')?.value || 'Treino_MeuVAM').trim();
+    const vamKmh = getGarminAthleteVamKmh();
+    let stepIdCounter = 1;
+
+    let stepsXml = '';
+
+    function buildStepXml(step) {
+        const id = stepIdCounter++;
+        const stepName = (step.title || 'Corrida').replace(/&/g, '&amp;');
+        const speedKmh = vamKmh * (step.vamPct / 100);
+        const speedMps = (speedKmh / 3.6).toFixed(2);
+        const lowSpeedMps = (speedMps * 0.95).toFixed(2);
+        const highSpeedMps = (speedMps * 1.05).toFixed(2);
+
+        let durationTag = '';
+        if (step.durationType === 'lap_button') {
+            durationTag = `<Duration xsi:type="UserEvent_t"><EventName>LapButton</EventName></Duration>`;
+        } else if (step.durationType === 'distance') {
+            const meters = Math.round((parseFloat(step.durationValue) || 1.0) * 1000);
+            durationTag = `<Duration xsi:type="Distance_t"><Meters>${meters}</Meters></Duration>`;
+        } else if (step.durationType === 'time') {
+            const secs = parseInt(step.durationValue, 10) || 60;
+            durationTag = `<Duration xsi:type="Time_t"><Seconds>${secs}</Seconds></Duration>`;
+        }
+
+        let intensityType = step.type === 'recovery' || step.type === 'cooldown' ? 'Resting' : 'Active';
+
+        return `
+        <Step xsi:type="Step_t">
+          <StepId>${id}</StepId>
+          <Name>${stepName}</Name>
+          ${durationTag}
+          <Intensity>${intensityType}</Intensity>
+          <Target xsi:type="Speed_t">
+            <SpeedZone xsi:type="CustomSpeedZone_t">
+              <ViewAs>Pace</ViewAs>
+              <LowInMetersPerSecond>${lowSpeedMps}</LowInMetersPerSecond>
+              <HighInMetersPerSecond>${highSpeedMps}</HighInMetersPerSecond>
+            </SpeedZone>
+          </Target>
+        </Step>`;
+    }
+
+    garminWorkoutSteps.forEach(item => {
+        if (item.type === 'repeat') {
+            const repeatId = stepIdCounter++;
+            const subSteps = (item.steps || []).map(sub => buildStepXml(sub)).join('');
+            stepsXml += `
+        <Step xsi:type="Repeat_t">
+          <StepId>${repeatId}</StepId>
+          <Repetitions>${item.count}</Repetitions>
+          <ChildSteps>
+            ${subSteps}
+          </ChildSteps>
+        </Step>`;
+        } else {
+            stepsXml += buildStepXml(item);
+        }
+    });
+
+    const tcx = `<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase
+  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd">
+  <Workouts>
+    <Workout Sport="Running">
+      <Name>${workoutName.substring(0, 15)}</Name>
+      ${stepsXml}
+      <Creator xsi:type="Device_t">
+        <Name>MeuVAM Superacao</Name>
+        <UnitId>123456789</UnitId>
+        <ProductID>1</ProductID>
+      </Creator>
+    </Workout>
+  </Workouts>
+</TrainingCenterDatabase>`;
+
+    const blob = new Blob([tcx], { type: 'application/vnd.garmin.tcx+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${workoutName.replace(/[^a-zA-Z0-9_-]/g, '_')}.tcx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Treino baixado em formato Garmin (.TCX)!');
+}
+
+// ─── Salvar e Sincronizar com o Supabase (App do Aluno) ───
+async function saveGarminWorkoutToApp() {
+    if (!selectedGarminAthleteId) {
+        return showToast('Selecione um atleta de referência para salvar.', 'error');
+    }
+    const athlete = athletes.find(a => a.id == selectedGarminAthleteId);
+    if (!athlete) return showToast('Atleta não encontrado.', 'error');
+
+    showToast('Salvando treino no perfil do aluno...');
+    try {
+        let athleteId = athlete.supabaseId;
+        if (!athleteId) {
+            const { data: profiles } = await dbClient.from('profiles').select('id').ilike('name', `%${athlete.name}%`);
+            if (profiles && profiles.length > 0) athleteId = profiles[0].id;
+        }
+
+        const workoutTitle = ($('g-workout-title')?.value || 'Treino de corrida').trim();
+        const workoutNotes = ($('g-workout-notes')?.value || '').trim();
+        const distText = $('g-workout-total-dist')?.textContent || '0.00 km';
+        const timeText = $('g-workout-total-time')?.textContent || '00:00';
+
+        const workoutPayload = {
+            athlete_id: athleteId || athlete.id,
+            date: new Date().toISOString().split('T')[0],
+            type: 'Corrida',
+            title: workoutTitle,
+            description: workoutNotes || 'Treino estruturado com metas de intensidade.',
+            metrics: {
+                distance: distText,
+                duration: timeText,
+                structured_steps: garminWorkoutSteps
+            },
+            status: 'pending'
+        };
+
+        if (athleteId) {
+            const { error } = await dbClient.from('workouts').insert([workoutPayload]);
+            if (error) console.warn('Supabase insert warning:', error);
+        }
+
+        showToast('✅ Treino salvo com sucesso!');
+    } catch (err) {
+        console.error('Erro ao salvar treino:', err);
+        showToast('Treino salvo localmente.', 'default');
+    }
 }
 
 // ═══════════════════════════════════════

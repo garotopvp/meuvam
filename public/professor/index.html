@@ -34,6 +34,7 @@
                 <a href="#" class="nav-item" data-view="chat"><i class="ri-chat-3-line"></i> Mensagens <span id="chat-badge" class="badge-new" style="display:none;"></span></a>
                 <a href="#" class="nav-item" data-view="staff"><i class="ri-shield-user-line"></i> Equipe</a>
                 <a href="#" class="nav-item" data-view="calculator"><i class="ri-calculator-line"></i> Calculadoras</a>
+                <a href="#" class="nav-item" data-view="workout-builder" style="color:#0284c7;font-weight:700;"><i class="ri-route-line"></i> Criador de Treinos (Garmin)</a>
                 <a href="#" class="nav-item" data-view="garmin" style="color:var(--primary);font-weight:600;"><i class="ri-pulse-line"></i> Sincronizar Garmin / GPX</a>
             </nav>
             <div class="sidebar-footer">
@@ -441,6 +442,104 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Garmin Workout Builder (Estilo Garmin Connect) -->
+            <section id="view-workout-builder" class="view-section">
+                <div style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow);margin-bottom:24px;">
+                    <!-- Top Bar Garmin Header -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
+                        <div style="display:flex;align-items:center;gap:16px;">
+                            <div style="width:52px;height:52px;background:#0284c7;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;box-shadow:0 4px 12px rgba(2,132,199,0.35);">
+                                <i class="ri-run-fill" style="font-size:28px;"></i>
+                            </div>
+                            <div>
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <input type="text" id="g-workout-title" value="Treino de corrida (Superação)" 
+                                           style="font-size:22px;font-weight:800;border:none;background:transparent;outline:none;color:var(--text);border-bottom:2px dashed transparent;transition:0.2s;width:340px;padding:2px 4px;"
+                                           onfocus="this.style.borderBottomColor='var(--primary)'" onblur="this.style.borderBottomColor='transparent'">
+                                    <i class="ri-pencil-line" style="color:var(--text-muted);cursor:pointer;" onclick="$('g-workout-title').focus()"></i>
+                                </div>
+                                <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:12px;margin-top:4px;">
+                                    <span>Esporte: <strong>Corrida</strong></span>
+                                    <span>•</span>
+                                    <span>Distância estimada: <strong id="g-workout-total-dist">0.00 km</strong></span>
+                                    <span>•</span>
+                                    <span>Duração estimada: <strong id="g-workout-total-time">00:00</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <button class="btn btn-secondary" onclick="resetGarminWorkoutBuilder()">
+                                <i class="ri-refresh-line"></i> Limpar
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportCurrentGarminWorkoutTCX()" style="background:#0284c7;color:white;font-weight:700;">
+                                <i class="ri-download-cloud-2-line"></i> Baixar Garmin (.TCX)
+                            </button>
+                            <button class="btn btn-primary" onclick="saveGarminWorkoutToApp()" style="font-weight:700;">
+                                <i class="ri-save-3-line"></i> Salvar & Sincronizar App
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Garmin Color Distribution Bar -->
+                    <div style="margin-bottom:24px;">
+                        <div id="g-color-strip" style="height:10px;width:100%;border-radius:6px;overflow:hidden;display:flex;background:#e2e8f0;">
+                            <!-- Preenchido dinamicamente via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Layout: Steps List + Side Actions -->
+                    <div style="display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start;">
+                        <!-- Coluna Esquerda: Lista de Etapas e Repetições -->
+                        <div>
+                            <div id="g-steps-container" style="display:flex;flex-direction:column;gap:14px;">
+                                <!-- Renderizado via renderGarminWorkoutSteps() -->
+                            </div>
+                        </div>
+
+                        <!-- Coluna Direita: Controles e Ações estilo Garmin Connect -->
+                        <div style="display:flex;flex-direction:column;gap:16px;">
+                            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:20px;">
+                                <h4 style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;color:var(--text-muted);">
+                                    Adicionar ao Treino
+                                </h4>
+                                <div style="display:flex;flex-direction:column;gap:10px;">
+                                    <button class="btn btn-primary" style="justify-content:center;padding:12px;font-weight:700;" onclick="addGarminStep('run')">
+                                        <i class="ri-add-line"></i> Adicionar etapa
+                                    </button>
+                                    <button class="btn btn-secondary" style="justify-content:center;padding:12px;font-weight:700;border:1px solid var(--border);" onclick="addGarminRepeatBlock()">
+                                        <i class="ri-repeat-2-line"></i> Adicionar repetição
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:20px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                    <h4 style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">
+                                        Notas / Instruções
+                                    </h4>
+                                    <span style="font-size:11px;color:var(--text-muted);">Instruções do relógio</span>
+                                </div>
+                                <textarea id="g-workout-notes" placeholder="Adicionar orientações para o atleta..." rows="4"
+                                          style="width:100%;border:1px solid var(--border-strong);border-radius:8px;padding:10px;font-family:var(--font);font-size:13px;outline:none;resize:vertical;"></textarea>
+                            </div>
+
+                            <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:20px;">
+                                <h4 style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;color:var(--text-muted);">
+                                    Atleta de Referência (Cálculo VAM)
+                                </h4>
+                                <select id="g-workout-athlete-select" onchange="onGarminAthleteChange()" 
+                                        style="width:100%;padding:10px;border:1px solid var(--border-strong);border-radius:8px;font-family:var(--font);font-size:13px;outline:none;background:var(--panel);">
+                                </select>
+                                <div id="g-athlete-pace-badge" style="margin-top:10px;font-size:12px;color:var(--text-muted);">
+                                    <!-- Informações de VAM e Pace 100% -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -542,6 +641,7 @@
                     <button class="btn" style="background:#25D366;color:white;justify-content:center;font-weight:600;" onclick="sendToWhatsApp()"><i class="ri-whatsapp-line"></i> WhatsApp</button>
                     <button class="btn btn-primary" onclick="copyImageToClipboard()" style="justify-content:center;"><i class="ri-clipboard-line"></i> Copiar Imagem</button>
                     <button class="btn btn-secondary" onclick="downloadImage()" style="justify-content:center;"><i class="ri-download-line"></i> Baixar PNG</button>
+                    <button class="btn btn-secondary" onclick="exportWorkoutToGarminTCX()" style="justify-content:center;background:#0284c7;color:white;font-weight:700;"><i class="ri-pulse-line"></i> Exportar para Garmin (.TCX)</button>
                     <button class="btn btn-secondary" onclick="shareImage()" style="justify-content:center;"><i class="ri-share-forward-line"></i> Compartilhar</button>
                     <hr style="border:none;border-top:1px dotted var(--border-strong);">
                     <button class="btn btn-secondary" id="btn-send-another" onclick="sendToAnotherAthlete()" style="justify-content:center;display:none;"><i class="ri-user-shared-line"></i> Enviar p/ Outro Atleta</button>
