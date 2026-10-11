@@ -38,24 +38,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.warn("Erro ao buscar perfil do banco (usando cache local):", e);
             }
 
-            // Se o perfil não existe no banco, mas o metadata do login diz que é professor, cria o perfil automaticamente
-            if (!profile && data.session.user.user_metadata?.role === 'professor') {
-                try {
-                    await supabaseClient.from('profiles').insert([{
-                        id: data.session.user.id,
-                        email: data.session.user.email,
-                        name: data.session.user.user_metadata?.full_name || data.session.user.email.split('@')[0],
-                        role: 'professor'
-                    }]);
-                    userRole = 'professor';
-                    sessionStorage.setItem('vdot_role', 'professor');
-                    console.log("Perfil de professor auto-criado e corrigido no banco de dados.");
-                } catch (e) {
-                    console.error("Erro ao auto-criar perfil de professor:", e);
-                }
+            const isProfMeta = (data.session.user.user_metadata?.role === 'professor') || (data.session.user.email === 'rinaldopedroso@gmail.com');
+
+            if (!profile && isProfMeta) {
+                userRole = 'professor';
+                sessionStorage.setItem('vdot_role', 'professor');
             }
 
-            if (!userRole || userRole !== 'professor') {
+            if (!userRole || (userRole !== 'professor' && !isProfMeta)) {
                 console.log("Acesso negado ao portal do professor: perfil não encontrado ou papel incorreto.");
                 
                 if (isIndex) {
@@ -185,24 +175,29 @@ async function login() {
                 .eq('id', data.user.id)
                 .single();
 
+            const isProfMeta = (data.user.user_metadata?.role === 'professor') || (data.user.email === 'rinaldopedroso@gmail.com');
+
             // Se o perfil não existe mas o usuário é professor no metadata, tenta criar
-            if (!profile && data.user.user_metadata?.role === 'professor') {
-                await supabaseClient.from('profiles').insert([{
-                    id: data.user.id,
-                    email: data.user.email,
-                    name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
-                    role: 'professor'
-                }]);
-                // Busca novamente para confirmar
-                const { data: newProfile } = await supabaseClient.from('profiles').select('role').eq('id', data.user.id).single();
-                profile = newProfile;
+            if (!profile && isProfMeta) {
+                try {
+                    await supabaseClient.from('profiles').insert([{
+                        id: data.user.id,
+                        email: data.user.email,
+                        name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
+                        role: 'professor'
+                    }]);
+                    const { data: newProfile } = await supabaseClient.from('profiles').select('role').eq('id', data.user.id).single();
+                    profile = newProfile;
+                } catch(e) {
+                    console.warn("Nao foi possivel inserir em profiles:", e);
+                }
             }
 
-            if (!profile || profile.role !== 'professor') {
+            const isAllowed = (profile && profile.role === 'professor') || isProfMeta;
+
+            if (!isAllowed) {
                 await supabaseClient.auth.signOut();
-                let errMsg = "Acesso negado. Esta é uma conta de Aluno.";
-                if (!profile) errMsg = "Perfil não encontrado. Se você é professor, solicite ao administrador para rodar o comando SQL de ativação.";
-                showMessage(errMsg, 'error');
+                showMessage("Acesso negado. Esta é uma conta de Aluno.", 'error');
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 return;
