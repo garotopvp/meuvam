@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════
 
 // ─── SUPABASE ───
-const supabaseUrl = 'https://ofacvjvhzduvmhosvheh.supabase.co';
-const supabaseKey = 'sb_publishable_AoNKk_DuoUWQLk_oIJLNWA_LpeIQGlT';
+const supabaseUrl = 'https://zljqlzwzwfzslftnymur.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsanFsend6d2Z6c2xmdG55bXVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczOTM0MTcsImV4cCI6MjA5Mjk2OTQxN30.fQVJWpPVw5ZmV-FXpLyqpUoXvITOAedvbRpxlzdm-Ec';
 
 // Usar o cliente do auth.js se disponível para manter a sessão
 let dbClient = (typeof supabaseClient !== 'undefined' && supabaseClient) ? supabaseClient : supabase.createClient(supabaseUrl, supabaseKey);
