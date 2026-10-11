@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════
 
 // ─── SUPABASE ───
-const supabaseUrl = 'https://zljqlzwzwfzslftnymur.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsanFsend6d2Z6c2xmdG55bXVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczOTM0MTcsImV4cCI6MjA5Mjk2OTQxN30.fQVJWpPVw5ZmV-FXpLyqpUoXvITOAedvbRpxlzdm-Ec';
+const supabaseUrl = 'https://ofacvjvhzduvmhosvheh.supabase.co';
+const supabaseKey = 'sb_publishable_AoNKk_DuoUWQLk_oIJLNWA_LpeIQGlT';
 const dbClient = supabase.createClient(supabaseUrl, supabaseKey);
 
 // ─── STATE ───
