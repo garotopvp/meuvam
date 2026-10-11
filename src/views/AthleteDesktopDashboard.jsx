@@ -366,38 +366,48 @@ export default function AthleteDesktopDashboard({
 
                 <CardContent className="pt-4 space-y-4">
                   {/* Bloco de Séries de Tiros / Estrutura */}
-                  {activeWorkout.structured_blocks?.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Estrutura do Treino
-                      </p>
-                      <div className="space-y-1.5">
-                        {activeWorkout.structured_blocks.map((b, i) => (
-                          <div 
-                            key={i} 
-                            className="flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-600/10 text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                                {i + 1}
-                              </span>
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                {b.name || b.type || 'Série'}
+                  {(() => {
+                    const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
+                    return blocks.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Estrutura do Treino
+                        </p>
+                        <div className="space-y-1.5">
+                          {blocks.map((b, i) => (
+                            <div 
+                              key={i} 
+                              className="flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-600/10 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                  {i + 1}
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-slate-800 dark:text-slate-200">
+                                    {b.name || b.type || 'Série'}
+                                  </p>
+                                  {b.pace && (
+                                    <p className="text-[10px] text-slate-400 font-medium">
+                                      Ritmo: {b.pace}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="font-bold text-slate-900 dark:text-white">
+                                {b.distance || b.duration || '--'}
                               </span>
                             </div>
-                            <span className="font-bold text-slate-900 dark:text-white">
-                              {b.distance || b.duration || '--'}
-                            </span>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-                      <p className="font-semibold">Treino Contínuo / Rodagem</p>
-                      <p className="text-slate-400 mt-1">Mantenha a frequência na zona alvo indicada pelo seu professor.</p>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                        <p className="font-semibold">Treino Contínuo / Rodagem</p>
+                        <p className="text-slate-400 mt-1">Mantenha a frequência na zona alvo indicada pelo seu professor.</p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Status do Treino */}
                   <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-800/30">
