@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Download,
   Eye,
-  X
+  X,
+  Leaf
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -30,6 +31,44 @@ const MONTH_NAMES = [
 ];
 
 const WEEK_DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+const getBlockStage = (name = '', type = '') => {
+  const n = (name + ' ' + type).toLowerCase();
+  if (n.includes('aquec') || n.includes('warm')) {
+    return {
+      stage: 'Aquecimento',
+      bgBadge: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
+      numBg: 'bg-amber-500 text-white',
+      border: 'border-amber-200/80 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20',
+      icon: Flame,
+    };
+  }
+  if (n.includes('desaquec') || n.includes('cool') || n.includes('trote final') || n.includes('volta')) {
+    return {
+      stage: 'Desaquecimento',
+      bgBadge: 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30',
+      numBg: 'bg-sky-500 text-white',
+      border: 'border-sky-200/80 dark:border-sky-900/50 bg-sky-50/50 dark:bg-sky-950/20',
+      icon: Leaf,
+    };
+  }
+  if (n.includes('tiro') || n.includes('interval') || n.includes('vam') || n.includes('velocidade')) {
+    return {
+      stage: 'Tiros de VAM',
+      bgBadge: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30',
+      numBg: 'bg-cyan-500 text-white',
+      border: 'border-cyan-200/80 dark:border-cyan-900/50 bg-cyan-50/50 dark:bg-cyan-950/20',
+      icon: Zap,
+    };
+  }
+  return {
+    stage: 'Parte Principal',
+    bgBadge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+    numBg: 'bg-emerald-600 text-white',
+    border: 'border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20',
+    icon: Activity,
+  };
+};
 
 export default function AthleteDesktopDashboard({ 
   athlete, 
@@ -381,32 +420,40 @@ export default function AthleteDesktopDashboard({
                         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
                           Estrutura do Treino
                         </p>
-                        <div className="space-y-1.5">
-                          {blocks.map((b, i) => (
-                            <div 
-                              key={i} 
-                              className="flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-600/10 text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                                  {i + 1}
-                                </span>
-                                <div>
-                                  <p className="font-semibold text-slate-800 dark:text-slate-200">
-                                    {b.name || b.type || 'Série'}
-                                  </p>
-                                  {b.pace && (
-                                    <p className="text-[10px] text-slate-400 font-medium">
-                                      Ritmo: {b.pace}
-                                    </p>
-                                  )}
+                        <div className="space-y-2">
+                          {blocks.map((b, i) => {
+                            const stage = getBlockStage(b.name, b.type);
+                            return (
+                              <div 
+                                key={i} 
+                                className={`flex items-center justify-between rounded-xl border p-2.5 text-xs transition-all ${stage.border}`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-black ${stage.numBg}`}>
+                                    {i + 1}
+                                  </span>
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${stage.bgBadge}`}>
+                                        {stage.stage}
+                                      </span>
+                                      <p className="font-bold text-slate-800 dark:text-slate-200">
+                                        {b.name || b.type || 'Série'}
+                                      </p>
+                                    </div>
+                                    {b.pace && (
+                                      <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                        Ritmo: <span className="font-bold text-slate-800 dark:text-slate-200">{b.pace}</span>
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
+                                <span className="font-extrabold text-slate-900 dark:text-white">
+                                  {b.distance || b.duration || '--'}
+                                </span>
                               </div>
-                              <span className="font-bold text-slate-900 dark:text-white">
-                                {b.distance || b.duration || '--'}
-                              </span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ) : (
@@ -552,15 +599,30 @@ export default function AthleteDesktopDashboard({
                   {activeWorkout.metrics?.duration || '--'}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50 col-span-2 sm:col-span-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ritmo Alvo (100% VAM)</p>
-                <p className="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-1">
-                  3:45 min/km
-                </p>
-              </div>
+              {(() => {
+                const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
+                const mainBlock = blocks.find(b => {
+                  const n = (b.name || '').toLowerCase();
+                  return !n.includes('aquec') && !n.includes('desaquec');
+                }) || blocks[0];
+
+                const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
+                const paceToShow = mainBlock?.pace || (isInterval ? '3:45 min/km' : '5:30 min/km');
+
+                return (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50 col-span-2 sm:col-span-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {isInterval ? 'Ritmo dos Tiros (100% VAM)' : 'Ritmo Principal'}
+                    </p>
+                    <p className="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-1">
+                      {paceToShow}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Estrutura Passo a Passo dos Tiros */}
+            {/* Estrutura Passo a Passo dos Tiros com cores separadas */}
             {(() => {
               const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
               if (blocks.length === 0) return null;
@@ -570,32 +632,45 @@ export default function AthleteDesktopDashboard({
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Passo a Passo das Séries (Tiros & Recuperação)
                   </h4>
-                  <div className="space-y-2">
-                    {blocks.map((b, i) => (
-                      <div 
-                        key={i} 
-                        className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 text-xs dark:border-slate-800 dark:bg-slate-800/50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-600 text-xs font-black text-white shadow-xs">
-                            {i + 1}
-                          </span>
-                          <div>
-                            <p className="font-bold text-slate-900 dark:text-white text-sm">
-                              {b.name || b.type || 'Série'}
-                            </p>
-                            {b.pace && (
-                              <p className="text-xs text-cyan-600 dark:text-cyan-400 font-semibold mt-0.5">
-                                Ritmo sugerido: {b.pace}
-                              </p>
-                            )}
+                  <div className="space-y-2.5">
+                    {blocks.map((b, i) => {
+                      const stage = getBlockStage(b.name, b.type);
+                      const IconComp = stage.icon;
+
+                      return (
+                        <div 
+                          key={i} 
+                          className={`flex items-center justify-between rounded-2xl border p-4 text-xs transition-all shadow-xs ${stage.border}`}
+                        >
+                          <div className="flex items-center gap-3.5">
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-xl text-xs font-black shadow-xs ${stage.numBg}`}>
+                              {i + 1}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${stage.bgBadge}`}>
+                                  <IconComp className="h-3 w-3" />
+                                  <span>{stage.stage}</span>
+                                </span>
+                                <p className="font-bold text-slate-900 dark:text-white text-sm">
+                                  {b.name || b.type || 'Série'}
+                                </p>
+                              </div>
+                              {b.pace && (
+                                <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold mt-1">
+                                  Ritmo alvo: <span className="font-bold text-slate-900 dark:text-white">{b.pace}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-black text-base text-slate-900 dark:text-white">
+                              {b.distance || b.duration || '--'}
+                            </span>
                           </div>
                         </div>
-                        <span className="font-extrabold text-sm text-slate-900 dark:text-white">
-                          {b.distance || b.duration || '--'}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
