@@ -3,7 +3,11 @@ import {
   Zap, 
   Activity, 
   LogOut, 
-  Download 
+  Download,
+  Calendar,
+  Users,
+  MessageSquare,
+  User
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -49,47 +53,51 @@ export default function AthleteDesktopHeader({
             </div>
           </div>
 
-          {/* Links Desktop - Sempre Visíveis e Clicáveis */}
+          {/* Links Desktop - Ícones Profissionais Vetoriais */}
           <nav className="flex items-center gap-1.5 border-l border-slate-200 pl-4 dark:border-slate-800 text-xs font-semibold">
             <button 
               onClick={() => navigate('/aluno')} 
-              className={`rounded-lg px-3.5 py-2 transition-all font-bold ${
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 transition-all font-bold ${
                 isTabActive('/aluno')
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
             >
-              📅 Calendário de Treinos
+              <Calendar className="h-4 w-4" />
+              <span>Calendário de Treinos</span>
             </button>
             <button 
               onClick={() => navigate('/aluno/feed')} 
-              className={`rounded-lg px-3.5 py-2 transition-all font-bold ${
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 transition-all font-bold ${
                 isTabActive('/aluno/feed')
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
             >
-              🏆 Comunidade
+              <Users className="h-4 w-4" />
+              <span>Comunidade</span>
             </button>
             <button 
               onClick={() => navigate('/aluno/coach')} 
-              className={`rounded-lg px-3.5 py-2 transition-all font-bold ${
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 transition-all font-bold ${
                 isTabActive('/aluno/coach')
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
             >
-              💬 Coach IA
+              <MessageSquare className="h-4 w-4" />
+              <span>Coach IA</span>
             </button>
             <button 
               onClick={() => navigate('/aluno/perfil')} 
-              className={`rounded-lg px-3.5 py-2 transition-all font-bold ${
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 transition-all font-bold ${
                 isTabActive('/aluno/perfil')
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
             >
-              👤 Meu Perfil
+              <User className="h-4 w-4" />
+              <span>Meu Perfil</span>
             </button>
           </nav>
         </div>
