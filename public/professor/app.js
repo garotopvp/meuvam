@@ -4957,6 +4957,19 @@ function importAllData(e){
     const reader=new FileReader();reader.onload=ev=>{
         try{
             const data=JSON.parse(ev.target.result);
+            // Arquivo só com lista de atletas (array): MESCLA sem apagar nada
+            if(Array.isArray(data)||(data&&Array.isArray(data.athletes)&&!data.categories)){
+                const list=Array.isArray(data)?data:data.athletes;
+                let added=0;
+                list.forEach(r=>{
+                    if(!r||!r.name)return;
+                    const exists=athletes.some(a=>(r.id&&a.id==r.id)||(r.supabaseId&&a.supabaseId===r.supabaseId)||((a.name||'').trim().toLowerCase()===(r.name||'').trim().toLowerCase()));
+                    if(!exists){athletes.push(r);added++;}
+                });
+                saveState(['athletes']);renderAthletes();renderDashboard();
+                showToast(`${added} atleta(s) restaurado(s)!`);
+                return;
+            }
             if(!data.categories||!data.groups||!data.athletes){showToast('Arquivo inválido.','error');return;}
             if(!confirm(`Importar dados de ${data.date?new Date(data.date).toLocaleDateString('pt-BR'):'?'}?\n\nIsso substituirá TODOS os dados atuais.`))return;
             categories=data.categories;groups=data.groups;athletes=data.athletes;historyPlans=data.historyPlans||[];
