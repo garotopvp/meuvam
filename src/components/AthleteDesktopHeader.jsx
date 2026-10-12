@@ -85,7 +85,7 @@ export default function AthleteDesktopHeader({
               }`}
             >
               <MessageSquare className="h-4 w-4" />
-              <span>Coach IA</span>
+              <span>Chat</span>
             </button>
             <button 
               onClick={() => navigate('/aluno/perfil')} 

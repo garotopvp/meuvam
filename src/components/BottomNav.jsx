@@ -7,7 +7,7 @@ const BottomNav = () => {
     { path: '/aluno', icon: Home, label: 'Início' },
     { path: '/aluno/treinos', icon: Calendar, label: 'Treino' },
     { path: '/aluno/feed', icon: Users, label: 'Feed' },
-    { path: '/aluno/coach', icon: MessageCircle, label: 'Coach' },
+    { path: '/aluno/coach', icon: MessageCircle, label: 'Chat' },
     { path: '/aluno/perfil', icon: User, label: 'Perfil' },
   ];
 
