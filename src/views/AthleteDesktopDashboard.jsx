@@ -18,24 +18,25 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { MetricCard, ProgressBar, ZoneBadge } from '../components/ui/tremor-metrics';
 
-// Ícone vetorial da sapatilha de corrida (estilo TrainingPeaks verde)
-const RunningShoeIcon = ({ className = "h-4 w-4 text-emerald-600 dark:text-emerald-400" }) => (
+// Ícone vetorial da pessoa correndo ("cara correndo" / Estilo Strava & Tabler Run)
+const RunnerIcon = ({ className = "h-4 w-4 text-emerald-600 dark:text-emerald-400" }) => (
   <svg 
     viewBox="0 0 24 24" 
     fill="none" 
     stroke="currentColor" 
-    strokeWidth="1.8" 
+    strokeWidth="2.2" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
     className={className}
   >
-    <path d="M2.5 17.5h18c.6 0 1-.4.9-1l-2.4-7c-.2-.6-.8-1-1.4-1.1l-5.6-1a2 2 0 0 0-1.8.6L7.5 11l-3.3 1c-.8.2-1.3.9-1.4 1.7l-.3 2.8c0 .6.4 1 1 1z" />
-    <path d="M4 14.5c2.5.5 5 0 7.5-1" />
-    <path d="M10 9.5l1.5 2.5" />
-    <path d="M13 9l1 3" />
-    <path d="M2 17.5c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2" />
+    <circle cx="13" cy="4" r="1.6" fill="currentColor" stroke="none" />
+    <path d="M4 17l5 1 .75-1.5" />
+    <path d="M15 21v-4l-4-3 1-6" />
+    <path d="M7 12v-3l5-1 3 3 3 1" />
   </svg>
 );
+
+const RunningShoeIcon = RunnerIcon;
 
 const getModalityIcon = (type = '', title = '') => {
   const t = (type + ' ' + title).toLowerCase();
@@ -45,7 +46,7 @@ const getModalityIcon = (type = '', title = '') => {
   if (t.includes('swim') || t.includes('nataç') || t.includes('nado')) {
     return <Waves className="h-4 w-4 text-cyan-500" />;
   }
-  return <RunningShoeIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
+  return <RunnerIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
 };
 
 const MONTH_NAMES = [
