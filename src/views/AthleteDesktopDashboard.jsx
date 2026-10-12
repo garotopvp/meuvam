@@ -597,6 +597,70 @@ export default function AthleteDesktopDashboard({
     return days;
   }, [year, month, workoutsByDate]);
 
+  // Agrupamento por Semanas com Cálculo da Soma Semanal (TrainingPeaks Style)
+  const calendarWeeks = useMemo(() => {
+    const weeks = [];
+    for (let i = 0; i < calendarDays.length; i += 7) {
+      const weekDays = calendarDays.slice(i, i + 7);
+      
+      let totalKm = 0;
+      let totalMinutes = 0;
+      let count = 0;
+      let completedCount = 0;
+
+      weekDays.forEach(day => {
+        day.workouts.forEach(w => {
+          count++;
+          if (w.status === 'completed') completedCount++;
+
+          const dStr = w.metrics?.distance || '';
+          if (dStr) {
+            const cleanD = String(dStr).toLowerCase().replace(',', '.');
+            if (cleanD.includes('m') && !cleanD.includes('km')) {
+              const val = parseFloat(cleanD);
+              if (!isNaN(val)) totalKm += val / 1000;
+            } else {
+              const val = parseFloat(cleanD);
+              if (!isNaN(val)) totalKm += val;
+            }
+          }
+
+          const tStr = w.metrics?.duration || '';
+          if (tStr) {
+            const cleanT = String(tStr).toLowerCase();
+            const hMatch = cleanT.match(/(\d+)\s*h(?:oras?)?(?:\s*(\d+)\s*(?:m|min)?)?/i);
+            if (hMatch) {
+              const h = parseInt(hMatch[1]) || 0;
+              const m = parseInt(hMatch[2]) || 0;
+              totalMinutes += h * 60 + m;
+            } else {
+              const mMatch = cleanT.match(/(\d+)/);
+              if (mMatch) totalMinutes += parseInt(mMatch[1]) || 0;
+            }
+          }
+        });
+      });
+
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      const durationFormatted = hours > 0 
+        ? (mins > 0 ? `${hours}h ${mins}min` : `${hours}h`) 
+        : (mins > 0 ? `${mins} min` : '0 min');
+
+      weeks.push({
+        days: weekDays,
+        summary: {
+          totalKm,
+          totalMinutes,
+          durationFormatted,
+          count,
+          completedCount
+        }
+      });
+    }
+    return weeks;
+  }, [calendarDays]);
+
   // Estatísticas do Mês
   const monthStats = useMemo(() => {
     const monthWorkouts = workouts.filter(w => {
@@ -702,123 +766,138 @@ export default function AthleteDesktopDashboard({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* ── COLUNA DA ESQUERDA: CALENDÁRIO COMPLETO ── */}
           <div className="lg:col-span-8 space-y-4">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              {/* Cabeçalho dos 7 Dias da Semana */}
-              <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 text-center dark:border-slate-800/80 dark:bg-slate-900/50">
-                {WEEK_DAYS.map((day, idx) => (
-                  <div key={idx} className="py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {day}
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="min-w-[720px]">
+                {/* Cabeçalho dos 7 Dias da Semana + Coluna de Total */}
+                <div className="grid grid-cols-8 border-b border-slate-100 bg-slate-50 text-center dark:border-slate-800/80 dark:bg-slate-900/50">
+                  {WEEK_DAYS.map((day, idx) => (
+                    <div key={idx} className="py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {day}
+                    </div>
+                  ))}
+                  <div className="py-2.5 text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border-l border-slate-200/80 dark:border-slate-800">
+                    Total
                   </div>
-                ))}
-              </div>
+                </div>
 
-              {/* Grid dos Dias do Mês */}
-              <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100 dark:divide-slate-800/60">
-                {calendarDays.map((item, index) => {
-                  const isToday = item.dateStr === todayStr;
-                  const hasWorkouts = item.workouts.length > 0;
-                  const isSelected = activeWorkout && item.workouts.some(w => w.id === activeWorkout.id);
+                {/* Grid das Semanas com Resumo Semanal na 8ª Coluna */}
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {calendarWeeks.map((week, wIdx) => (
+                    <div key={wIdx} className="grid grid-cols-8 divide-x divide-slate-100 dark:divide-slate-800/60 auto-rows-fr">
+                      {/* 7 Dias da Semana */}
+                      {week.days.map((item, dIdx) => {
+                        const isToday = item.dateStr === todayStr;
+                        const hasWorkouts = item.workouts.length > 0;
+                        const isSelected = activeWorkout && item.workouts.some(w => w.id === activeWorkout.id);
 
-                  return (
-                    <div
-                      key={index}
-                      onClick={() => {
-                        if (hasWorkouts) setSelectedWorkout(item.workouts[0]);
-                      }}
-                      className={`min-h-[140px] p-2 transition-all duration-150 ${
-                        !item.isCurrentMonth ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-950/40 dark:text-slate-700' : 'bg-white dark:bg-slate-900'
-                      } ${hasWorkouts ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''} ${
-                        isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-950/20' : ''
-                      }`}
-                    >
-                      {/* Número do Dia */}
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span
-                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                            isToday
-                              ? 'bg-blue-600 text-white font-bold shadow-sm'
-                              : item.isCurrentMonth
-                              ? 'text-slate-700 dark:text-slate-300'
-                              : 'text-slate-300 dark:text-slate-700'
-                          }`}
-                        >
-                          {item.dayNum}
-                        </span>
+                        return (
+                          <div
+                            key={dIdx}
+                            onClick={() => {
+                              if (hasWorkouts) setSelectedWorkout(item.workouts[0]);
+                            }}
+                            className={`min-h-[125px] p-1.5 sm:p-2 transition-all duration-150 ${
+                              !item.isCurrentMonth ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-950/40 dark:text-slate-700' : 'bg-white dark:bg-slate-900'
+                            } ${hasWorkouts ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''} ${
+                              isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-950/20' : ''
+                            }`}
+                          >
+                            {/* Número do Dia */}
+                            <div className="flex items-center justify-between mb-1">
+                              <span
+                                className={`flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                                  isToday
+                                    ? 'bg-blue-600 text-white font-bold shadow-sm'
+                                    : item.isCurrentMonth
+                                    ? 'text-slate-700 dark:text-slate-300'
+                                    : 'text-slate-300 dark:text-slate-700'
+                                }`}
+                              >
+                                {item.dayNum}
+                              </span>
 
-                        {isToday && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Hoje</span>
-                        )}
-                      </div>
-
-                      {/* Lista de Treinos alocados para o dia (Estilo TrainingPeaks) */}
-                      <div className="space-y-1.5">
-                        {item.workouts.map((w) => {
-                          const isDone = w.status === 'completed';
-                          // Faixa de status clássica do TrainingPeaks: Verde = Realizado, Amarelo = Agendado/Planejado
-                          const topBarColor = isDone ? 'bg-emerald-500' : 'bg-amber-400';
-                          const durationFormatted = formatEstimatedTime(w.metrics?.duration);
-
-                          // Bloco principal de ritmo
-                          const blocks = w.structured_blocks || w.metrics?.structured_blocks || [];
-                          const mainBlock = blocks.find(b => {
-                            const n = (b.name || '').toLowerCase();
-                            return !n.includes('aquec') && !n.includes('desaquec');
-                          }) || blocks[0];
-                          const pace = mainBlock?.pace || w.metrics?.pace;
-
-                          return (
-                            <div
-                              key={w.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedWorkout(w);
-                                setIsDetailModalOpen(true);
-                              }}
-                              className="group relative flex flex-col overflow-hidden rounded-md border border-slate-200/90 bg-[#fafafa] text-left shadow-2xs transition-all hover:scale-[1.02] hover:shadow-md hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
-                            >
-                              {/* Barra superior de status clássica do TrainingPeaks */}
-                              <div className={`h-1.5 w-full ${topBarColor}`} />
-
-                              <div className="p-2 space-y-1">
-                                {/* Topo: Símbolo da modalidade (ex: sapatilha verde) + 3 pontos */}
-                                <div className="flex items-center justify-between">
-                                  {getModalityIcon(w.type, w.title)}
-                                  <span className="text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <MoreVertical className="h-3 w-3" />
-                                  </span>
-                                </div>
-
-                                {/* Título do Treino */}
-                                <h4 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-tight">
-                                  {w.title || 'Treino'}
-                                </h4>
-
-                                {/* Métricas em baixo: Tempo e Volume/Distância */}
-                                <div className="pt-0.5 space-y-0.5 text-slate-900 dark:text-white">
-                                  {durationFormatted && durationFormatted !== '--' && (
-                                    <p className="text-[11px] font-black tabular-nums leading-none">
-                                      {durationFormatted}
-                                    </p>
-                                  )}
-                                  {w.metrics?.distance && w.metrics?.distance !== '--' && (
-                                    <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 tabular-nums leading-tight">
-                                      {w.metrics.distance}
-                                    </p>
-                                  )}
-                                  {pace && (
-                                    <p className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 tabular-nums leading-tight">
-                                      {pace}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
+                              {isToday && (
+                                <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Hoje</span>
+                              )}
                             </div>
-                          );
-                        })}
+
+                            {/* Lista de Treinos alocados para o dia (Apenas Nome da Atividade conforme solicitado) */}
+                            <div className="space-y-1">
+                              {item.workouts.map((w) => {
+                                const isDone = w.status === 'completed';
+                                const topBarColor = isDone ? 'bg-emerald-500' : 'bg-amber-400';
+
+                                return (
+                                  <div
+                                    key={w.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedWorkout(w);
+                                      setIsDetailModalOpen(true);
+                                    }}
+                                    className="group relative flex flex-col overflow-hidden rounded-md border border-slate-200/90 bg-[#fafafa] text-left shadow-2xs transition-all hover:scale-[1.02] hover:shadow-md hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
+                                  >
+                                    {/* Barra superior de status clássica do TrainingPeaks */}
+                                    <div className={`h-1.5 w-full ${topBarColor}`} />
+
+                                    <div className="p-1.5 sm:p-2 space-y-1">
+                                      {/* Topo: Símbolo da modalidade (ex: sapatilha verde) + 3 pontos */}
+                                      <div className="flex items-center justify-between">
+                                        {getModalityIcon(w.type, w.title)}
+                                        <span className="text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity">
+                                          <MoreVertical className="h-3 w-3" />
+                                        </span>
+                                      </div>
+
+                                      {/* Apenas o Título / Nome da Atividade (solicitado pelo usuário) */}
+                                      <h4 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-3 leading-tight">
+                                        {w.title || 'Treino'}
+                                      </h4>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* 8ª Coluna: Resumo Semanal (Soma de tudo da semana) */}
+                      <div className="min-h-[125px] p-2 bg-slate-50/80 dark:bg-slate-950/60 border-l border-slate-200/90 dark:border-slate-800 flex flex-col justify-between text-center select-none">
+                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                          <span>Semana {wIdx + 1}</span>
+                          {week.summary.count > 0 && (
+                            <span className="text-slate-500 font-semibold">{week.summary.count}x</span>
+                          )}
+                        </div>
+
+                        {week.summary.count > 0 ? (
+                          <div className="my-auto py-1 space-y-0.5">
+                            <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                              {week.summary.totalKm.toFixed(1)} km
+                            </p>
+                            <p className="text-[10px] sm:text-[11px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
+                              {week.summary.durationFormatted}
+                            </p>
+                            {week.summary.completedCount > 0 && (
+                              <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                                {week.summary.completedCount} ok
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="my-auto py-1 text-slate-300 dark:text-slate-700 font-mono text-xs">
+                            --
+                          </div>
+                        )}
+
+                        <div className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
+                          Total
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             </div>
 
