@@ -10,7 +10,8 @@ import {
   X,
   MoreVertical,
   Bike,
-  Waves
+  Waves,
+  Activity
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -147,6 +148,145 @@ const getStepDetails = (name = '', type = '') => {
     colorText,
     accentBorder
   };
+};
+
+const getBlockIntensity = (b) => {
+  const n = ((b.name || '') + ' ' + (b.type || '')).toLowerCase();
+  if (n.includes('tiro') || n.includes('sprint') || n.includes('vam') || n.includes('velocidade')) {
+    return { height: 95, color: 'bg-cyan-500 border-t-2 border-cyan-300 text-white', label: 'Tiro' };
+  }
+  if (n.includes('limiar') || n.includes('tempo') || n.includes('z4') || n.includes('forte')) {
+    return { height: 80, color: 'bg-blue-600 border-t-2 border-blue-400 text-white', label: 'Z4' };
+  }
+  if (n.includes('moderado') || n.includes('z3') || n.includes('ritmo')) {
+    return { height: 65, color: 'bg-emerald-600 border-t-2 border-emerald-400 text-white', label: 'Z3' };
+  }
+  if (n.includes('aquec') || n.includes('warm')) {
+    return { height: 48, color: 'bg-amber-400 border-t-2 border-amber-300 text-slate-900', label: 'Aquec.' };
+  }
+  if (n.includes('desaquec') || n.includes('esfriar') || n.includes('cool') || n.includes('volta')) {
+    return { height: 42, color: 'bg-sky-400 border-t-2 border-sky-300 text-slate-900', label: 'Desaq.' };
+  }
+  if (n.includes('recupera') || n.includes('rest') || n.includes('pausa')) {
+    return { height: 28, color: 'bg-slate-300 dark:bg-slate-600 border-t-2 border-slate-400 text-slate-700', label: 'Recup.' };
+  }
+  return { height: 55, color: 'bg-emerald-500 border-t-2 border-emerald-300 text-white', label: 'Z2' };
+};
+
+// ─── COMPONENTE DA FAIXA DO TREINO COM ESCALA (TrainingPeaks / Garmin Style) ───
+const WorkoutProfileScale = ({ workout, compact = false }) => {
+  if (!workout) return null;
+
+  const rawBlocks = workout.structured_blocks || workout.metrics?.structured_blocks || workout.metrics?.structured_steps || [];
+
+  const blocks = useMemo(() => {
+    if (rawBlocks.length > 0) return rawBlocks;
+
+    const distStr = workout.metrics?.distance || '5.0 km';
+    const totalDist = parseFloat(String(distStr).replace(',', '.')) || 5.0;
+    const title = (workout.title || workout.type || '').toLowerCase();
+
+    if (title.includes('tiro') || title.includes('vam') || title.includes('interval')) {
+      const workDist = Math.max(1, totalDist - 2.5);
+      return [
+        { name: 'Aquecimento', type: 'Aquecimento', distance: '1.5 km', pace: '5:45 min/km' },
+        { name: 'Tiros 100% VAM', type: 'Tiro', distance: `${workDist.toFixed(1)} km`, pace: '3:45 min/km' },
+        { name: 'Desaquecimento', type: 'Desaquecimento', distance: '1.0 km', pace: '6:00 min/km' }
+      ];
+    }
+
+    if (title.includes('tempo') || title.includes('ritmo') || title.includes('limiar')) {
+      const workDist = Math.max(1, totalDist - 2.5);
+      return [
+        { name: 'Aquecimento', type: 'Aquecimento', distance: '1.5 km', pace: '5:30 min/km' },
+        { name: 'Ritmo Limiar Z4', type: 'Corrida', distance: `${workDist.toFixed(1)} km`, pace: '4:15 min/km' },
+        { name: 'Desaquecimento', type: 'Desaquecimento', distance: '1.0 km', pace: '5:45 min/km' }
+      ];
+    }
+
+    // Treino contínuo / Rodagem Z1/Z2
+    return [
+      { name: workout.title || 'Rodagem Contínua', type: 'Corrida', distance: `${totalDist} km`, pace: workout.metrics?.pace || '5:30 min/km' }
+    ];
+  }, [rawBlocks, workout]);
+
+  let cumulativeDist = 0;
+  const blocksWithScale = blocks.map((b) => {
+    let dist = parseFloat(String(b.distance || '').replace(',', '.'));
+    if (isNaN(dist) || dist <= 0) dist = 1;
+    const startKm = cumulativeDist;
+    cumulativeDist += dist;
+    return {
+      ...b,
+      distNum: dist,
+      startKm,
+      endKm: cumulativeDist,
+      ...getBlockIntensity(b)
+    };
+  });
+
+  const totalKm = cumulativeDist;
+
+  return (
+    <div className={`rounded-2xl border border-slate-200/90 bg-slate-100/90 dark:bg-slate-800/60 dark:border-slate-800 ${compact ? 'p-3 space-y-2' : 'p-4 space-y-3'}`}>
+      {/* Cabeçalho da Faixa */}
+      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-1.5">
+          <Activity className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+          <span>Estrutura do Treino • Perfil de Intensidade</span>
+        </div>
+        <span className="text-slate-700 dark:text-slate-300 font-black tabular-nums">
+          {workout.metrics?.distance || `${totalKm.toFixed(1)} km`}
+        </span>
+      </div>
+
+      {/* Faixa Cinza com os Degraus/Barras de Intensidade */}
+      <div className={`relative flex items-end ${compact ? 'h-16' : 'h-24'} w-full bg-white dark:bg-slate-900/90 rounded-xl border border-slate-200/80 dark:border-slate-800 p-1.5 overflow-hidden shadow-2xs`}>
+        {/* Linhas de grade tracejadas horizontais */}
+        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-1.5 opacity-15">
+          <div className="border-b border-dashed border-slate-400 w-full" />
+          <div className="border-b border-dashed border-slate-400 w-full" />
+          <div className="border-b border-dashed border-slate-400 w-full" />
+        </div>
+
+        {/* Blocos do Treino proporcionais ao volume */}
+        <div className="relative flex items-end h-full w-full gap-1 z-10">
+          {blocksWithScale.map((b, idx) => (
+            <div
+              key={idx}
+              style={{
+                height: `${b.height}%`,
+                flex: b.distNum
+              }}
+              title={`${b.name} - ${b.distance || ''} (${b.pace || ''})`}
+              className={`group relative flex flex-col justify-between rounded-t-md p-1 transition-all hover:brightness-110 shadow-xs cursor-default ${b.color}`}
+            >
+              <span className="text-[9px] font-extrabold text-white truncate drop-shadow-xs">
+                {b.name}
+              </span>
+              {b.pace && !compact && (
+                <span className="text-[8px] font-bold text-white/90 truncate drop-shadow-xs">
+                  {b.pace}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Escala Horizontal (Eixo X com escala de km) */}
+      <div className="relative w-full pt-0.5">
+        <div className="h-0.5 w-full bg-slate-300 dark:bg-slate-700 rounded-full" />
+        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+          <span>0.0 km</span>
+          {blocksWithScale.length > 1 && (
+            <span>{(totalKm / 2).toFixed(1)} km</span>
+          )}
+          <span>{totalKm.toFixed(1)} km</span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default function AthleteDesktopDashboard({ 
@@ -559,6 +699,9 @@ export default function AthleteDesktopDashboard({
                     })()}
                   </div>
 
+                  {/* Faixa Cinza com a Escala do Treino */}
+                  <WorkoutProfileScale workout={activeWorkout} compact />
+
                   {/* Bloco de Séries de Tiros / Estrutura */}
                   {(() => {
                     const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
@@ -770,6 +913,9 @@ export default function AthleteDesktopDashboard({
                 );
               })()}
             </div>
+
+            {/* Faixa Cinza do Perfil do Treino com Escala (TrainingPeaks Style) */}
+            <WorkoutProfileScale workout={activeWorkout} />
 
             {/* Estrutura Passo a Passo dos Tiros */}
             {(() => {
