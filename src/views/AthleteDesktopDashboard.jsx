@@ -7,12 +7,45 @@ import {
   Clock, 
   CheckCircle2, 
   Eye, 
-  X 
+  X,
+  MoreVertical,
+  Bike,
+  Waves
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { MetricCard, ProgressBar, ZoneBadge } from '../components/ui/tremor-metrics';
+
+// Ícone vetorial da sapatilha de corrida (estilo TrainingPeaks verde)
+const RunningShoeIcon = ({ className = "h-4 w-4 text-emerald-600 dark:text-emerald-400" }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="1.8" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M2.5 17.5h18c.6 0 1-.4.9-1l-2.4-7c-.2-.6-.8-1-1.4-1.1l-5.6-1a2 2 0 0 0-1.8.6L7.5 11l-3.3 1c-.8.2-1.3.9-1.4 1.7l-.3 2.8c0 .6.4 1 1 1z" />
+    <path d="M4 14.5c2.5.5 5 0 7.5-1" />
+    <path d="M10 9.5l1.5 2.5" />
+    <path d="M13 9l1 3" />
+    <path d="M2 17.5c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2" />
+  </svg>
+);
+
+const getModalityIcon = (type = '', title = '') => {
+  const t = (type + ' ' + title).toLowerCase();
+  if (t.includes('bike') || t.includes('ciclism') || t.includes('pedal')) {
+    return <Bike className="h-4 w-4 text-amber-500" />;
+  }
+  if (t.includes('swim') || t.includes('nataç') || t.includes('nado')) {
+    return <Waves className="h-4 w-4 text-cyan-500" />;
+  }
+  return <RunningShoeIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
+};
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -345,14 +378,14 @@ export default function AthleteDesktopDashboard({
                       onClick={() => {
                         if (hasWorkouts) setSelectedWorkout(item.workouts[0]);
                       }}
-                      className={`min-h-[105px] p-2 transition-all duration-150 ${
+                      className={`min-h-[140px] p-2 transition-all duration-150 ${
                         !item.isCurrentMonth ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-950/40 dark:text-slate-700' : 'bg-white dark:bg-slate-900'
                       } ${hasWorkouts ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''} ${
                         isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-950/20' : ''
                       }`}
                     >
                       {/* Número do Dia */}
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-1.5">
                         <span
                           className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
                             isToday
@@ -370,11 +403,21 @@ export default function AthleteDesktopDashboard({
                         )}
                       </div>
 
-                      {/* Lista de Treinos alocados para o dia */}
-                      <div className="space-y-1">
+                      {/* Lista de Treinos alocados para o dia (Estilo TrainingPeaks) */}
+                      <div className="space-y-1.5">
                         {item.workouts.map((w) => {
-                          const badge = getWorkoutBadge(w.title || w.type);
                           const isDone = w.status === 'completed';
+                          // Faixa de status clássica do TrainingPeaks: Verde = Realizado, Amarelo = Agendado/Planejado
+                          const topBarColor = isDone ? 'bg-emerald-500' : 'bg-amber-400';
+                          const durationFormatted = formatEstimatedTime(w.metrics?.duration);
+
+                          // Bloco principal de ritmo
+                          const blocks = w.structured_blocks || w.metrics?.structured_blocks || [];
+                          const mainBlock = blocks.find(b => {
+                            const n = (b.name || '').toLowerCase();
+                            return !n.includes('aquec') && !n.includes('desaquec');
+                          }) || blocks[0];
+                          const pace = mainBlock?.pace || w.metrics?.pace;
 
                           return (
                             <div
@@ -384,24 +427,51 @@ export default function AthleteDesktopDashboard({
                                 setSelectedWorkout(w);
                                 setIsDetailModalOpen(true);
                               }}
-                              className={`group flex flex-col rounded-lg border p-1.5 text-left text-xs transition-all shadow-xs cursor-pointer ${badge.bg} hover:scale-[1.03] hover:shadow-sm`}
+                              className="group relative flex flex-col overflow-hidden rounded-md border border-slate-200/90 bg-[#fafafa] text-left shadow-2xs transition-all hover:scale-[1.02] hover:shadow-md hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
                             >
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="font-bold truncate text-[11px] leading-tight">
-                                  {w.title || 'Treino de Corrida'}
-                                </span>
-                                {isDone ? (
-                                  <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
-                                ) : (
-                                  <Clock className="h-3 w-3 shrink-0 opacity-60" />
+                              {/* Barra superior de status clássica do TrainingPeaks */}
+                              <div className={`h-1.5 w-full ${topBarColor}`} />
+
+                              <div className="p-2 space-y-1">
+                                {/* Topo: Símbolo da modalidade (ex: sapatilha verde) + 3 pontos */}
+                                <div className="flex items-center justify-between">
+                                  {getModalityIcon(w.type, w.title)}
+                                  <span className="text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity">
+                                    <MoreVertical className="h-3 w-3" />
+                                  </span>
+                                </div>
+
+                                {/* Título do Treino */}
+                                <h4 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-tight">
+                                  {w.title || 'Treino'}
+                                </h4>
+
+                                {/* Métricas em baixo: Tempo e Volume/Distância */}
+                                <div className="pt-0.5 space-y-0.5 text-slate-900 dark:text-white">
+                                  {durationFormatted && durationFormatted !== '--' && (
+                                    <p className="text-[11px] font-black tabular-nums leading-none">
+                                      {durationFormatted}
+                                    </p>
+                                  )}
+                                  {w.metrics?.distance && w.metrics?.distance !== '--' && (
+                                    <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 tabular-nums leading-tight">
+                                      {w.metrics.distance}
+                                    </p>
+                                  )}
+                                  {pace && (
+                                    <p className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 tabular-nums leading-tight">
+                                      {pace}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* Descrição resumida */}
+                                {w.description && (
+                                  <p className="text-[9px] text-slate-400 line-clamp-2 leading-tight pt-1 border-t border-slate-200/60 dark:border-slate-800/80 mt-1">
+                                    {w.description}
+                                  </p>
                                 )}
                               </div>
-
-                              {w.metrics?.distance && (
-                                <span className="text-[10px] font-medium opacity-80 mt-0.5">
-                                  {w.metrics.distance}
-                                </span>
-                              )}
                             </div>
                           );
                         })}
@@ -412,24 +482,29 @@ export default function AthleteDesktopDashboard({
               </div>
             </div>
 
-            {/* Legenda de Tipos de Treino */}
+            {/* Legenda de Tipos de Treino (TrainingPeaks) */}
             <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
-              <span className="font-bold text-slate-500 dark:text-slate-400">Legenda:</span>
-              <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-cyan-500" />
-                <span className="text-slate-600 dark:text-slate-300 font-medium">Tiros / Intervalados VAM</span>
-              </div>
+              <span className="font-bold text-slate-500 dark:text-slate-400">Status:</span>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                <span className="text-slate-600 dark:text-slate-300 font-medium">Rodagem / Base</span>
+                <span className="text-slate-600 dark:text-slate-300 font-medium">Realizado / Concluído</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
-                <span className="text-slate-600 dark:text-slate-300 font-medium">Ritmo / Progressivo</span>
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                <span className="text-slate-600 dark:text-slate-300 font-medium">Planejado / Agendado</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                <span className="text-slate-600 dark:text-slate-300 font-medium">Regenerativo</span>
+
+              <div className="hidden sm:flex items-center gap-3 ml-auto">
+                <span className="font-bold text-slate-500 dark:text-slate-400">Modalidades:</span>
+                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 font-medium">
+                  <RunningShoeIcon className="h-3.5 w-3.5 text-emerald-600" /> Corrida
+                </div>
+                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 font-medium">
+                  <Bike className="h-3.5 w-3.5 text-amber-500" /> Ciclismo
+                </div>
+                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 font-medium">
+                  <Waves className="h-3.5 w-3.5 text-cyan-500" /> Natação
+                </div>
               </div>
             </div>
           </div>
