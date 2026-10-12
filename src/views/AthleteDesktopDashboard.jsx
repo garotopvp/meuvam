@@ -464,13 +464,6 @@ export default function AthleteDesktopDashboard({
                                     </p>
                                   )}
                                 </div>
-
-                                {/* Descrição resumida */}
-                                {w.description && (
-                                  <p className="text-[9px] text-slate-400 line-clamp-2 leading-tight pt-1 border-t border-slate-200/60 dark:border-slate-800/80 mt-1">
-                                    {w.description}
-                                  </p>
-                                )}
                               </div>
                             </div>
                           );
