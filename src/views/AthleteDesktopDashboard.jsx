@@ -775,8 +775,8 @@ export default function AthleteDesktopDashboard({
                       {day}
                     </div>
                   ))}
-                  <div className="py-2.5 text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border-l border-slate-200/80 dark:border-slate-800">
-                    Total
+                  <div className="py-2.5 text-xs font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 border-l border-blue-200/70 dark:border-blue-900/60">
+                    Resumo
                   </div>
                 </div>
 
@@ -862,37 +862,51 @@ export default function AthleteDesktopDashboard({
                         );
                       })}
 
-                      {/* 8ª Coluna: Resumo Semanal (Soma de tudo da semana) */}
-                      <div className="min-h-[125px] p-2 bg-slate-50/80 dark:bg-slate-950/60 border-l border-slate-200/90 dark:border-slate-800 flex flex-col justify-between text-center select-none">
-                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                          <span>Semana {wIdx + 1}</span>
-                          {week.summary.count > 0 && (
-                            <span className="text-slate-500 font-semibold">{week.summary.count}x</span>
-                          )}
-                        </div>
-
-                        {week.summary.count > 0 ? (
-                          <div className="my-auto py-1 space-y-0.5">
-                            <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
-                              {week.summary.totalKm.toFixed(1)} km
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
-                              {week.summary.durationFormatted}
-                            </p>
-                            {week.summary.completedCount > 0 && (
-                              <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                                {week.summary.completedCount} ok
-                              </p>
+                      {/* 8ª Coluna: Resumo Semanal com Card Destacado e Cores Vivas (TrainingPeaks Style) */}
+                      <div className="min-h-[125px] p-1.5 bg-blue-50/20 dark:bg-slate-950/40 border-l border-slate-200 dark:border-slate-800 flex flex-col justify-center select-none">
+                        <div className={`h-full rounded-xl p-2.5 flex flex-col justify-between transition-all ${
+                          week.summary.count > 0 
+                            ? 'bg-gradient-to-b from-blue-500/10 via-white to-blue-500/5 dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/80 dark:border-blue-900/50 shadow-xs' 
+                            : 'bg-slate-50/60 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-800/40'
+                        }`}>
+                          {/* Top: Tag da Semana e Contagem */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                              Sem. {wIdx + 1}
+                            </span>
+                            {week.summary.count > 0 && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-blue-600 text-white shadow-2xs">
+                                {week.summary.count}x
+                              </span>
                             )}
                           </div>
-                        ) : (
-                          <div className="my-auto py-1 text-slate-300 dark:text-slate-700 font-mono text-xs">
-                            --
-                          </div>
-                        )}
 
-                        <div className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
-                          Total
+                          {/* Middle: Volume e Duração em Destaque Alto */}
+                          {week.summary.count > 0 ? (
+                            <div className="my-auto py-1.5 text-center space-y-0.5">
+                              <p className="text-base sm:text-lg font-black text-slate-950 dark:text-white tabular-nums tracking-tight">
+                                {week.summary.totalKm.toFixed(1)} <span className="text-xs font-bold text-blue-600 dark:text-blue-400">km</span>
+                              </p>
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 tabular-nums">
+                                {week.summary.durationFormatted}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="my-auto py-2 text-center text-slate-300 dark:text-slate-600 font-semibold text-xs">
+                              --
+                            </div>
+                          )}
+
+                          {/* Bottom: Status ou Rótulo */}
+                          <div className="text-[9px] font-bold text-center uppercase tracking-wider">
+                            {week.summary.count > 0 ? (
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                {week.summary.completedCount > 0 ? `${week.summary.completedCount}/${week.summary.count} feito` : 'Planejado'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-500">Sem treino</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
