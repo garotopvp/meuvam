@@ -68,33 +68,51 @@ export const formatEstimatedTime = (timeStr) => {
   return str;
 };
 
-const getBlockStage = (name = '', type = '') => {
-  const n = (name + ' ' + type).toLowerCase();
-  if (n.includes('aquec') || n.includes('warm')) {
-    return {
-      stage: 'Aquecimento',
-      badge: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20',
-      accent: 'border-l-amber-500',
-    };
+const getStepDetails = (name = '', type = '') => {
+  const rawType = (type || '').trim();
+  const rawName = (name || '').trim();
+  const combined = (rawType + ' ' + rawName).toLowerCase();
+
+  let typeLabel = 'Corrida';
+  let colorText = 'text-cyan-600 dark:text-cyan-400';
+  let accentBorder = 'border-l-cyan-500';
+
+  if (combined.includes('aquec') || combined.includes('warm')) {
+    typeLabel = 'Aquecimento';
+    colorText = 'text-amber-600 dark:text-amber-400';
+    accentBorder = 'border-l-amber-500';
+  } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta')) {
+    typeLabel = 'Desaquecimento';
+    colorText = 'text-sky-600 dark:text-sky-400';
+    accentBorder = 'border-l-sky-400';
+  } else if (combined.includes('recupera') || combined.includes('rest') || combined.includes('pausa')) {
+    typeLabel = 'Recuperação';
+    colorText = 'text-slate-500 dark:text-slate-400';
+    accentBorder = 'border-l-slate-400';
+  } else if (combined.includes('tiro') || combined.includes('interval') || combined.includes('sprint') || combined.includes('vam')) {
+    typeLabel = 'Tiro';
+    colorText = 'text-violet-600 dark:text-violet-400';
+    accentBorder = 'border-l-violet-500';
+  } else if (combined.includes('caminha') || combined.includes('walk')) {
+    typeLabel = 'Caminhada';
+    colorText = 'text-emerald-600 dark:text-emerald-400';
+    accentBorder = 'border-l-emerald-500';
+  } else if (rawType) {
+    typeLabel = rawType.toLowerCase() === 'trabalho' ? 'Corrida' : rawType;
+    colorText = 'text-cyan-600 dark:text-cyan-400';
+    accentBorder = 'border-l-cyan-500';
   }
-  if (n.includes('desaquec') || n.includes('cool') || n.includes('trote final') || n.includes('volta')) {
-    return {
-      stage: 'Desaquecimento',
-      badge: 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20',
-      accent: 'border-l-sky-500',
-    };
+
+  let customName = rawName;
+  if (customName.toLowerCase() === typeLabel.toLowerCase()) {
+    customName = '';
   }
-  if (n.includes('tiro') || n.includes('interval') || n.includes('vam') || n.includes('velocidade')) {
-    return {
-      stage: 'Tiros VAM',
-      badge: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20',
-      accent: 'border-l-cyan-500',
-    };
-  }
+
   return {
-    stage: 'Parte Principal',
-    badge: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20',
-    accent: 'border-l-emerald-500',
+    typeLabel,
+    customName,
+    colorText,
+    accentBorder
   };
 };
 
@@ -483,24 +501,26 @@ export default function AthleteDesktopDashboard({
                         </p>
                         <div className="space-y-1.5">
                           {blocks.map((b, i) => {
-                            const stage = getBlockStage(b.name, b.type);
+                            const step = getStepDetails(b.name, b.type);
                             return (
                               <div 
                                 key={i} 
-                                className={`flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 text-xs shadow-2xs dark:border-slate-800 dark:bg-slate-900 border-l-[3px] ${stage.accent}`}
+                                className={`flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 text-xs shadow-2xs dark:border-slate-800 dark:bg-slate-900 border-l-[3px] ${step.accentBorder}`}
                               >
                                 <div className="flex items-center gap-2.5">
-                                  <span className="font-mono text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                                    {String(i + 1).padStart(2, '0')}
+                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                    {i + 1}
                                   </span>
                                   <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${stage.badge}`}>
-                                        {stage.stage}
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`text-[11px] font-bold uppercase tracking-wider ${step.colorText}`}>
+                                        {step.typeLabel}
                                       </span>
-                                      <p className="font-semibold text-slate-800 dark:text-slate-200">
-                                        {b.name || b.type || 'Série'}
-                                      </p>
+                                      {step.customName && (
+                                        <p className="font-semibold text-slate-800 dark:text-slate-200">
+                                          • {step.customName}
+                                        </p>
+                                      )}
                                     </div>
                                     {b.pace && (
                                       <p className="text-[10px] text-slate-500 font-medium mt-0.5">
@@ -695,28 +715,30 @@ export default function AthleteDesktopDashboard({
                   </h4>
                   <div className="space-y-2">
                     {blocks.map((b, i) => {
-                      const stage = getBlockStage(b.name, b.type);
+                      const step = getStepDetails(b.name, b.type);
 
                       return (
                         <div 
                           key={i} 
-                          className={`flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3.5 text-xs transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 shadow-2xs border-l-[4px] ${stage.accent}`}
+                          className={`flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3.5 text-xs transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 shadow-2xs border-l-[4px] ${step.accentBorder}`}
                         >
                           <div className="flex items-center gap-3.5">
-                            <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 min-w-[20px]">
-                              {String(i + 1).padStart(2, '0')}
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              {i + 1}
                             </span>
                             <div>
-                              <div className="flex items-center gap-2">
-                                <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${stage.badge}`}>
-                                  {stage.stage}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-xs font-bold uppercase tracking-wider ${step.colorText}`}>
+                                  {step.typeLabel}
                                 </span>
-                                <p className="font-bold text-slate-900 dark:text-white text-sm">
-                                  {b.name || b.type || 'Série'}
-                                </p>
+                                {step.customName && (
+                                  <p className="font-bold text-slate-900 dark:text-white text-sm">
+                                    • {step.customName}
+                                  </p>
+                                )}
                               </div>
                               {b.pace && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
                                   Ritmo alvo: <span className="font-semibold text-slate-800 dark:text-slate-200">{b.pace}</span>
                                 </p>
                               )}
