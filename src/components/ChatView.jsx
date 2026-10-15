@@ -72,87 +72,79 @@ const ChatView = ({ session }) => {
   };
 
   return (
-    <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 8.5rem)' }}>
-      <header style={{ marginBottom: '1rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Chat com Coach</h1>
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fale diretamente com seu treinador</p>
+    <div className="animate-slide-up flex flex-col h-[calc(100vh-8.5rem)] w-full">
+      <header className="mb-3">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Chat com Coach</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Fale diretamente com seu treinador</p>
       </header>
 
-      <div 
-        ref={scrollRef}
-        style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingBottom: '1rem' }}
-      >
-        {isLoading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-            <Loader2 className="animate-spin" color="var(--primary-color)" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Comece uma conversa com seu treinador!
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const isMe = msg.sender_id === session.user.id;
-            const time = new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            
-            return (
-              <div key={msg.id || msg.uuid} style={{
-                alignSelf: isMe ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
-              }}>
-                <div style={{
-                  padding: '12px 16px',
-                  borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                  background: isMe ? 'var(--primary-color)' : 'var(--surface-accent)',
-                  color: isMe ? '#fff' : 'var(--text-primary)',
-                  fontSize: '0.9rem', 
-                  lineHeight: '1.5',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                }}>
-                  {msg.content}
-                </div>
-                <span style={{ 
-                  fontSize: '0.65rem', 
-                  color: 'var(--text-secondary)', 
-                  paddingLeft: isMe ? '0' : '8px', 
-                  paddingRight: isMe ? '8px' : '0',
-                  marginTop: '4px', 
-                  display: 'block',
-                  textAlign: isMe ? 'right' : 'left'
-                }}>
-                  {!isMe ? 'Coach • ' : ''}{time}
-                </span>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <div style={{ display: 'flex', gap: '10px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)' }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Mensagem..."
-          style={{
-            flex: 1, padding: '14px 18px', borderRadius: '18px',
-            border: '1px solid var(--border-color)', background: 'var(--surface-accent)',
-            fontSize: '0.95rem', outline: 'none', fontFamily: 'inherit', color: 'var(--text-primary)'
-          }}
-        />
-        <button 
-          onClick={sendMessage} 
-          disabled={!input.trim()}
-          style={{
-            width: '52px', height: '52px', borderRadius: '18px',
-            background: 'var(--primary-color)', border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            cursor: 'pointer', opacity: !input.trim() ? 0.6 : 1,
-            transition: '0.2s'
-          }}
+      <div className="flex-1 flex flex-col rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 overflow-hidden">
+        <div 
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto flex flex-col gap-2.5 pb-3 pr-1"
         >
-          <Send size={20} color="#fff" />
-        </button>
+          {isLoading ? (
+            <div className="flex justify-center p-8">
+              <Loader2 className="animate-spin text-blue-600" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-12 px-4 text-slate-400 text-sm">
+              Comece uma conversa com seu treinador!
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const isMe = msg.sender_id === session.user.id;
+              const time = new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              
+              return (
+                <div key={msg.id || msg.uuid} style={{
+                  alignSelf: isMe ? 'flex-end' : 'flex-start',
+                  maxWidth: '75%',
+                }}>
+                  <div style={{
+                    padding: '12px 18px',
+                    borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                    background: isMe ? 'var(--primary-color, #2563eb)' : '#f1f5f9',
+                    color: isMe ? '#fff' : '#0f172a',
+                    fontSize: '0.92rem', 
+                    lineHeight: '1.5',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+                  }}>
+                    {msg.content}
+                  </div>
+                  <span style={{ 
+                    fontSize: '0.65rem', 
+                    color: '#94a3b8', 
+                    paddingLeft: isMe ? '0' : '8px', 
+                    paddingRight: isMe ? '8px' : '0',
+                    marginTop: '4px', 
+                    display: 'block',
+                    textAlign: isMe ? 'right' : 'left'
+                  }}>
+                    {!isMe ? 'Coach • ' : ''}{time}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="flex gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Digite uma mensagem para o seu treinador..."
+            className="flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <button 
+            onClick={sendMessage} 
+            disabled={!input.trim()}
+            className="h-12 w-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition disabled:opacity-50 shrink-0 shadow-sm"
+          >
+            <Send size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );

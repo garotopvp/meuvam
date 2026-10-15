@@ -3,10 +3,10 @@ import CommunityFeed from '../components/CommunityFeed';
 
 const FeedView = ({ athlete }) => {
   return (
-    <div className="animate-slide-up">
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.5px' }}>Comunidade</h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Acompanhe os treinos dos seus colegas</p>
+    <div className="animate-slide-up w-full">
+      <header className="mb-6">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">Comunidade</h1>
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Acompanhe os treinos e conquistas dos seus colegas</p>
       </header>
 
       <CommunityFeed currentUser={athlete} />
