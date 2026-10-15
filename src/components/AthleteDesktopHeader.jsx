@@ -29,7 +29,7 @@ export default function AthleteDesktopHeader({
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/90">
-      <div className="mx-auto flex max-w-[1700px] items-center justify-between px-4 sm:px-6 lg:px-8 py-3.5">
+      <div className="flex w-full items-center justify-between px-3 sm:px-6 lg:px-8 py-3.5">
         {/* Logo e Assessoria */}
         <div className="flex items-center gap-6">
           <div 
