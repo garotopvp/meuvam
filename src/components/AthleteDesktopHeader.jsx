@@ -3,11 +3,10 @@ import {
   Zap, 
   Activity, 
   LogOut, 
-  Download,
-  Calendar,
-  Users,
-  MessageSquare,
-  User
+  Download, 
+  Calendar, 
+  Users, 
+  MessageSquare 
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -87,17 +86,6 @@ export default function AthleteDesktopHeader({
               <MessageSquare className="h-4 w-4" />
               <span>Chat</span>
             </button>
-            <button 
-              onClick={() => navigate('/aluno/perfil')} 
-              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 transition-all font-bold ${
-                isTabActive('/aluno/perfil')
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
-              }`}
-            >
-              <User className="h-4 w-4" />
-              <span>Meu Perfil</span>
-            </button>
           </nav>
         </div>
 
@@ -128,9 +116,12 @@ export default function AthleteDesktopHeader({
 
           <div 
             onClick={() => navigate('/aluno/perfil')}
-            className="flex items-center gap-2.5 border-l border-slate-200 pl-3 dark:border-slate-800 cursor-pointer"
+            title="Ver Dados do Perfil"
+            className={`group flex items-center gap-2.5 border-l border-slate-200 pl-3 dark:border-slate-800 cursor-pointer rounded-xl p-1.5 transition-all hover:bg-slate-100 dark:hover:bg-slate-800/80 ${
+              pathname.startsWith('/aluno/perfil') ? 'bg-blue-50/80 dark:bg-blue-950/40 ring-1 ring-blue-500/30' : ''
+            }`}
           >
-            <div className="h-9 w-9 overflow-hidden rounded-full border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+            <div className="h-9 w-9 overflow-hidden rounded-full border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800 transition-transform group-hover:scale-105">
               {athlete?.profileImage ? (
                 <img src={athlete.profileImage} alt={athlete?.name} className="h-full w-full object-cover" />
               ) : (
@@ -140,8 +131,10 @@ export default function AthleteDesktopHeader({
               )}
             </div>
             <div className="hidden sm:block text-left">
-              <p className="text-xs font-bold leading-none text-slate-900 dark:text-white">{athlete?.name || 'Atleta'}</p>
-              <p className="text-[10px] text-slate-400">Atleta</p>
+              <p className="text-xs font-bold leading-none text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                {athlete?.name || 'Atleta'}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Atleta</p>
             </div>
           </div>
 
