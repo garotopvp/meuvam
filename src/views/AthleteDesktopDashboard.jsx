@@ -718,7 +718,7 @@ export default function AthleteDesktopDashboard({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {/* ── CONTEÚDO PRINCIPAL (CALENDÁRIO + DETALHES) ── */}
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-[1700px] px-4 sm:px-6 lg:px-8 py-6">
         {/* Barra superior de controle do Calendário */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -763,10 +763,10 @@ export default function AthleteDesktopDashboard({
           </div>
         </div>
 
-        {/* Grade Principal com 2 Colunas: Calendário (70%) e Painel do Treino (30%) */}
+        {/* Grade Principal com 2 Colunas: Calendário (75%) e Painel do Treino (25%) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* ── COLUNA DA ESQUERDA: CALENDÁRIO COMPLETO ── */}
-          <div className="lg:col-span-8 space-y-4">
+          <div className="lg:col-span-8 xl:col-span-9 space-y-4">
             <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="min-w-[720px]">
                 {/* Cabeçalho dos 7 Dias da Semana + Coluna de Total */}
@@ -944,7 +944,7 @@ export default function AthleteDesktopDashboard({
           </div>
 
           {/* ── COLUNA DA DIREITA: DETALHES DO TREINO SELECIONADO ── */}
-          <div className="lg:col-span-4 space-y-6">
+          <div className="lg:col-span-4 xl:col-span-3 space-y-6">
             {activeWorkout ? (
               <Card className="border-slate-200 dark:border-slate-800 shadow-md">
                 <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
