@@ -28,7 +28,7 @@ async function getClient(userId) {
 
   // 2. Check DB for tokens
   try {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('integrations')
       .select('access_token, username')
       .match({ athlete_id: userId, platform: 'garmin' })
@@ -41,8 +41,12 @@ async function getClient(userId) {
         const GarminConstructor = GarminConnect.GarminConnect || GarminConnect;
         const client = new GarminConstructor({});
         
-        // A biblioteca garmin-connect v1.x aceita o objeto de tokens completo no loadToken
-        client.loadToken(tokens);
+        // garmin-connect v1.6+ espera loadToken(oauth1, oauth2)
+        if (tokens.oauth1 && tokens.oauth2) {
+          client.loadToken(tokens.oauth1, tokens.oauth2);
+        } else {
+          client.loadToken(tokens);
+        }
         
         // Save back to memory
         garminClients.set(userId, client);
@@ -68,30 +72,31 @@ function formatPace(secsPerKm) {
 }
 
 /**
- * Parse flexible pace inputs (MM:SS, decimals, integers) to seconds.
+ * Parse flexible pace inputs (MM:SS, "3:45 /km", "5:10 min/km", decimals) to seconds per km.
  */
 function parsePaceToSeconds(paceInput) {
   if (!paceInput) return null;
-  let clean = String(paceInput).trim().replace(',', '.').replace(/[^0-9.:]/g, '');
-  if (clean.includes(':')) {
-    const parts = clean.split(':').map(Number);
-    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-      return parts[0] * 60 + parts[1];
+  const str = String(paceInput).trim();
+  const colonMatch = str.match(/(\d+):(\d+)/);
+  if (colonMatch) {
+    const mins = parseInt(colonMatch[1], 10);
+    const secs = parseInt(colonMatch[2], 10);
+    if (!isNaN(mins) && !isNaN(secs)) {
+      return mins * 60 + secs;
     }
-  } else {
-    const num = parseFloat(clean);
-    if (!isNaN(num) && num > 0) {
-      return Math.round(num * 60);
-    }
+  }
+  const clean = str.replace(',', '.').replace(/[^0-9.]/g, '');
+  const num = parseFloat(clean);
+  if (!isNaN(num) && num > 0) {
+    return Math.round(num * 60);
   }
   return null;
 }
 
 /**
  * Build a single Garmin step from a Superação step object.
- * Format reverse-engineered from garmin-connect lib's Running.toJson().
  */
-function buildGarminStep(step, stepOrder) {
+function buildGarminStep(step, stepOrder, childStepId = null) {
   // ── Step type mapping ────────────────────────────────────────────────────
   const stepTypeMap = {
     warmup:   { stepTypeId: 1, stepTypeKey: 'warmup' },
@@ -113,11 +118,12 @@ function buildGarminStep(step, stepOrder) {
   if (step.duration?.type === 'time' && step.duration?.value) {
     endCondition = { conditionTypeKey: 'time', conditionTypeId: 2 };
     endConditionValue = Math.round(parseFloat(step.duration.value) * 60); 
-    preferredEndConditionUnit = { unitKey: 'minute' };
+    preferredEndConditionUnit = null;
   } else if (step.duration?.type === 'distance' && step.duration?.value) {
     endCondition = { conditionTypeKey: 'distance', conditionTypeId: 3 };
-    endConditionValue = Math.round(parseFloat(step.duration.value) * 1000); 
-    preferredEndConditionUnit = { unitKey: 'kilometer' };
+    const distMeters = Math.round(parseFloat(step.duration.value) * 1000);
+    endConditionValue = distMeters;
+    preferredEndConditionUnit = distMeters >= 1000 ? { unitKey: 'kilometer' } : null;
   }
 
   // ── Intensity Target ─────────────────────────────────────────────────────
@@ -130,11 +136,12 @@ function buildGarminStep(step, stepOrder) {
     try {
       const totalSec = parsePaceToSeconds(intensity.value);
       if (totalSec && totalSec > 0) {
-        const mPerSec = 1000 / totalSec;
-        const bandMs = 1000 / Math.max(1, totalSec - 15) - mPerSec; 
+        // Faixa de +/- 8 segundos por km ao redor do pace alvo (em m/s)
+        const slowSec = totalSec + 8;
+        const fastSec = Math.max(60, totalSec - 8);
         targetType = { workoutTargetTypeId: 6, workoutTargetTypeKey: 'pace.zone' };
-        targetValueOne = Math.max(0, mPerSec - bandMs);
-        targetValueTwo = mPerSec + bandMs;
+        targetValueOne = 1000 / slowSec;
+        targetValueTwo = 1000 / fastSec;
       }
     } catch (e) {
       console.warn('Garmin sync: failed to parse pace', intensity.value);
@@ -157,7 +164,7 @@ function buildGarminStep(step, stepOrder) {
     type: 'ExecutableStepDTO',
     stepId: null,
     stepOrder,
-    childStepId: null,
+    childStepId,
     description: step.label || null,
     stepType,
     endCondition,
@@ -171,24 +178,30 @@ function buildGarminStep(step, stepOrder) {
 }
 
 /**
- * Build a Garmin repeat group step.
+ * Build a Garmin repeat group step (RepeatGroupDTO).
  */
-function buildRepeatGroup(step, startOrder) {
-  let order = 1;
-  const nested = step.steps.map(s => buildGarminStep(s, order++));
+function buildRepeatGroup(step, startOrder, childGroupId = 1) {
+  let order = startOrder + 1;
+  const count = step.count || 1;
+  const nested = step.steps.map(s => buildGarminStep(s, order++, childGroupId));
 
   return {
     garminStep: {
-      type: 'WorkoutRepeatStepDTO',
+      type: 'RepeatGroupDTO',
       stepId: null,
       stepOrder: startOrder,
-      childStepId: null,
       stepType: { stepTypeId: 6, stepTypeKey: 'repeat' },
-      numberOfIterations: step.count || 1,
+      childStepId: childGroupId,
+      numberOfIterations: count,
+      endCondition: { conditionTypeId: 7, conditionTypeKey: 'iterations' },
+      endConditionValue: count,
+      preferredEndConditionUnit: null,
+      endConditionCompare: null,
+      skipLastRestStep: true,
+      smartRepeat: false,
       workoutSteps: nested,
-      smartRepeat: false
     },
-    nextOrder: startOrder + 1,
+    nextOrder: order,
   };
 }
 
@@ -198,14 +211,15 @@ function buildRepeatGroup(step, startOrder) {
 function expandSteps(steps) {
   const garminSteps = [];
   let order = 1;
+  let childGroupId = 1;
 
   for (const step of steps) {
     if (step.type === 'repetition' && Array.isArray(step.steps)) {
-      const { garminStep, nextOrder } = buildRepeatGroup(step, order);
+      const { garminStep, nextOrder } = buildRepeatGroup(step, order, childGroupId++);
       garminSteps.push(garminStep);
       order = nextOrder;
     } else {
-      garminSteps.push(buildGarminStep(step, order++));
+      garminSteps.push(buildGarminStep(step, order++, null));
     }
   }
 
@@ -213,10 +227,104 @@ function expandSteps(steps) {
 }
 
 /**
+ * Convert structured_blocks (from AthleteDesktopDashboard / Supabase) into structured_steps
+ */
+function blocksToStructuredSteps(blocks) {
+  if (!Array.isArray(blocks) || blocks.length === 0) return [];
+  const steps = [];
+
+  blocks.forEach((b, idx) => {
+    const name = b.name || '';
+    const combined = `${name} ${b.type || ''} ${b.pauseNote || ''}`.toLowerCase();
+    const repeatMatch = name.match(/(\d+)\s*[x×]\s*(.*)/i);
+
+    if (repeatMatch) {
+      const count = Math.min(30, Math.max(1, parseInt(repeatMatch[1], 10)));
+      const restText = repeatMatch[2].trim();
+      const distMatch = restText.match(/(\d+(?:[.,]\d+)?)\s*(km|m)\b/i);
+
+      let workKm = 0.2;
+      if (distMatch) {
+        const val = parseFloat(distMatch[1].replace(',', '.'));
+        const unit = distMatch[2].toLowerCase();
+        workKm = unit === 'm' ? val / 1000 : val;
+      }
+
+      // Extrair tempo de recuperação se especificado (ex: "rec 1min", "rec 20s", "pausa 1'")
+      let recMinutes = 1;
+      const recMatch = combined.match(/(?:rec(?:up(?:era[cç][aã]o)?)?|pausa)\s*(\d+)\s*(min|m|seg|s|')/i);
+      if (recMatch) {
+        const rVal = parseInt(recMatch[1], 10);
+        const rUnit = recMatch[2].toLowerCase();
+        recMinutes = (rUnit === 's' || rUnit === 'seg') ? (rVal / 60) : rVal;
+      }
+
+      steps.push({
+        type: 'repetition',
+        count,
+        steps: [
+          {
+            type: 'run',
+            label: name.replace(/\s*\(.*\)/, '').trim(),
+            duration: { type: 'distance', value: workKm },
+            intensity: b.pace ? { type: 'pace', value: b.pace } : undefined
+          },
+          {
+            type: 'recovery',
+            label: 'Recuperação',
+            duration: { type: 'time', value: recMinutes }
+          }
+        ]
+      });
+    } else {
+      let stepType = 'run';
+      if (combined.includes('aquec') || combined.includes('warm') || (idx === 0 && blocks.length > 1 && combined.includes('trote'))) {
+        stepType = 'warmup';
+      } else if (
+        combined.includes('desaquec') ||
+        combined.includes('volta') ||
+        combined.includes('trote final') ||
+        combined.includes('soltura') ||
+        combined.includes('cool') ||
+        (idx === blocks.length - 1 && blocks.length > 2 && combined.includes('regenerativo'))
+      ) {
+        stepType = 'cooldown';
+      }
+
+      let distKm = 0;
+      if (b.distance) {
+        const dStr = String(b.distance).toLowerCase().replace(',', '.').trim();
+        if (dStr.includes('m') && !dStr.includes('km')) {
+          distKm = (parseFloat(dStr) || 0) / 1000;
+        } else {
+          distKm = parseFloat(dStr) || 0;
+        }
+      }
+
+      steps.push({
+        type: stepType,
+        label: name || b.type || 'Corrida',
+        duration: distKm > 0 ? { type: 'distance', value: distKm } : { type: 'lap_button' },
+        intensity: b.pace ? { type: 'pace', value: b.pace } : undefined
+      });
+    }
+  });
+
+  return steps;
+}
+
+/**
  * Convert a Superação workout object → Garmin Connect workout payload.
  */
 function workoutToGarminPayload(workout) {
-  const rawSteps = workout.structured_steps || workout.metrics?.structured_steps || [];
+  let rawSteps = workout.structured_steps || workout.metrics?.structured_steps || [];
+  if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
+    const rawBlocks = workout.structured_blocks || workout.metrics?.structured_blocks || [];
+    if (Array.isArray(rawBlocks) && rawBlocks.length > 0) {
+      rawSteps = blocksToStructuredSteps(rawBlocks);
+    }
+  }
+
   const workoutSteps = Array.isArray(rawSteps) && rawSteps.length > 0
     ? expandSteps(rawSteps)
     : [

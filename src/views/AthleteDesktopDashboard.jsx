@@ -836,16 +836,122 @@ export default function AthleteDesktopDashboard({
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isGarminPushing, setIsGarminPushing] = useState(false);
   const [garminPushSuccess, setGarminPushSuccess] = useState(false);
+  const [garminPushMessage, setGarminPushMessage] = useState('');
+  const [garminPushError, setGarminPushError] = useState('');
+  const [isGarminLoginOpen, setIsGarminLoginOpen] = useState(false);
+  const [garminEmail, setGarminEmail] = useState('');
+  const [garminPassword, setGarminPassword] = useState('');
+  const [isGarminLoggingIn, setIsGarminLoggingIn] = useState(false);
+  const [garminLoginError, setGarminLoginError] = useState('');
+  const [garminConnectedUser, setGarminConnectedUser] = useState(
+    athlete?.integrations?.garmin?.connected ? (athlete?.integrations?.garmin?.username || 'Conectado') : null
+  );
+
+  // Verifica status real da sessão Garmin no backend
+  React.useEffect(() => {
+    if (!athlete?.id) return;
+    fetch(`/api/garmin/status?userId=${athlete.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.connected) {
+          setGarminConnectedUser(data.user?.displayName || 'Conectado');
+        }
+      })
+      .catch(() => {});
+  }, [athlete?.id]);
+
+  // Limpa mensagens ao trocar de treino selecionado
+  React.useEffect(() => {
+    setGarminPushSuccess(false);
+    setGarminPushMessage('');
+    setGarminPushError('');
+  }, [selectedWorkout]);
 
   const handleSendGarmin = async () => {
+    if (!activeWorkout) return;
+    if (!athlete?.id) {
+      setGarminPushError('Sessão do atleta não identificada.');
+      return;
+    }
+
     setIsGarminPushing(true);
-    setTimeout(() => {
+    setGarminPushError('');
+    setGarminPushMessage('');
+
+    try {
+      const { baseBlocks } = expandWorkoutSegments(activeWorkout);
+      const workoutPayload = {
+        ...activeWorkout,
+        structured_blocks: activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || baseBlocks
+      };
+
+      const res = await fetch('/api/garmin/workout/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: athlete.id,
+          workout: workoutPayload,
+          date: activeWorkout.date
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.status === 401 || (data?.error && data.error.toLowerCase().includes('não conectado'))) {
+        setIsGarminPushing(false);
+        setIsGarminLoginOpen(true);
+        return;
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.details || data.error || 'Falha ao enviar treino para o Garmin');
+      }
+
       setIsGarminPushing(false);
       setGarminPushSuccess(true);
+      setGarminPushMessage(data.message || `Treino enviado e agendado para ${activeWorkout.date} no Garmin!`);
       setTimeout(() => {
         setGarminPushSuccess(false);
-      }, 3500);
-    }, 1200);
+      }, 6000);
+    } catch (err) {
+      setIsGarminPushing(false);
+      setGarminPushError(err.message || 'Erro ao comunicar com o Garmin Connect.');
+    }
+  };
+
+  const handleGarminLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!garminEmail || !garminPassword || !athlete?.id) return;
+
+    setIsGarminLoggingIn(true);
+    setGarminLoginError('');
+
+    try {
+      const res = await fetch('/api/garmin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: garminEmail,
+          password: garminPassword,
+          userId: athlete.id
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha no login do Garmin Connect. Verifique e-mail e senha.');
+      }
+
+      setGarminConnectedUser(data.user?.displayName || garminEmail.split('@')[0]);
+      setIsGarminLoginOpen(false);
+      setGarminPassword('');
+      // Após conectar com sucesso, dispara o envio do treino automaticamente
+      await handleSendGarmin();
+    } catch (err) {
+      setGarminLoginError(err.message || 'Erro ao conectar ao Garmin Connect.');
+    } finally {
+      setIsGarminLoggingIn(false);
+    }
   };
 
   const year = currentDate.getFullYear();
@@ -1399,13 +1505,48 @@ export default function AthleteDesktopDashboard({
                   <button 
                     onClick={handleSendGarmin}
                     disabled={isGarminPushing}
-                    className="w-full h-11 sm:h-12 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75"
+                    className={`w-full h-11 sm:h-12 rounded-full font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75 ${
+                      garminPushSuccess
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white'
+                    }`}
                   >
                     <RefreshCw className={`h-4 w-4 ${isGarminPushing ? 'animate-spin' : ''}`} />
                     <span>
-                      {garminPushSuccess ? '✓ Enviado para o Garmin' : isGarminPushing ? 'Enviando...' : 'Enviar Treino para o Garmin'}
+                      {garminPushSuccess ? '✓ Enviado e Agendado no Garmin!' : isGarminPushing ? 'Enviando para o Garmin...' : 'Enviar Treino para o Garmin'}
                     </span>
                   </button>
+
+                  {garminPushMessage && (
+                    <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 px-3.5 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 text-center">
+                      {garminPushMessage}
+                    </div>
+                  )}
+
+                  {garminPushError && (
+                    <div className="rounded-2xl bg-red-500/10 border border-red-500/25 px-3.5 py-2 text-xs font-semibold text-red-600 dark:text-red-400 flex items-center justify-between gap-2">
+                      <span className="truncate">{garminPushError}</span>
+                      <button
+                        onClick={() => setIsGarminLoginOpen(true)}
+                        className="underline font-bold shrink-0 hover:opacity-80"
+                      >
+                        Reconectar
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between px-2 text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${garminConnectedUser ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                      {garminConnectedUser ? `Garmin Connect (${garminConnectedUser})` : 'Garmin desconectado'}
+                    </span>
+                    <button
+                      onClick={() => setIsGarminLoginOpen(true)}
+                      className="font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline"
+                    >
+                      {garminConnectedUser ? 'Trocar conta' : 'Conectar conta'}
+                    </button>
+                  </div>
 
                   <button 
                     onClick={() => setIsDetailModalOpen(true)}
@@ -1606,16 +1747,39 @@ export default function AthleteDesktopDashboard({
             {/* Prescrição Detalhada das Séries */}
             <WorkoutPrescription workout={activeWorkout} />
 
+            {/* Feedback de Envio Garmin no Modal */}
+            {garminPushMessage && (
+              <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 px-4 py-2.5 text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-300 text-center">
+                {garminPushMessage}
+              </div>
+            )}
+
+            {garminPushError && (
+              <div className="rounded-2xl bg-red-500/10 border border-red-500/25 px-4 py-2.5 text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 flex items-center justify-between gap-2">
+                <span>{garminPushError}</span>
+                <button
+                  onClick={() => setIsGarminLoginOpen(true)}
+                  className="underline font-bold shrink-0 hover:opacity-80"
+                >
+                  Conectar Garmin
+                </button>
+              </div>
+            )}
+
             {/* Botões de Ação do Rodapé */}
             <div className="pt-2 flex items-center gap-3">
               <button 
                 onClick={handleSendGarmin}
                 disabled={isGarminPushing}
-                className="flex-1 h-12 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75"
+                className={`flex-1 h-12 rounded-full font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75 ${
+                  garminPushSuccess
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white'
+                }`}
               >
                 <RefreshCw className={`h-4 w-4 ${isGarminPushing ? 'animate-spin' : ''}`} />
                 <span>
-                  {garminPushSuccess ? '✓ Enviado para o Garmin' : isGarminPushing ? 'Enviando...' : 'Enviar Treino para o Garmin'}
+                  {garminPushSuccess ? '✓ Enviado e Agendado no Garmin!' : isGarminPushing ? 'Enviando para o Garmin...' : 'Enviar Treino para o Garmin'}
                 </span>
               </button>
 
@@ -1626,6 +1790,95 @@ export default function AthleteDesktopDashboard({
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE LOGIN / CONEXÃO GARMIN CONNECT ── */}
+      {isGarminLoginOpen && (
+        <div
+          onClick={() => setIsGarminLoginOpen(false)}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-[28px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-[#007CC3]/15 text-[#007CC3] flex items-center justify-center font-black text-sm">
+                  G
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Conectar Garmin Connect
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Envie os treinos estruturados direto para o seu relógio
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsGarminLoginOpen(false)}
+                className="rounded-full p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGarminLoginSubmit} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  E-mail do Garmin Connect
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={garminEmail}
+                  onChange={(e) => setGarminEmail(e.target.value)}
+                  placeholder="seuemail@exemplo.com"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-[#007CC3]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Senha do Garmin Connect
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={garminPassword}
+                  onChange={(e) => setGarminPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-[#007CC3]"
+                />
+              </div>
+
+              {garminLoginError && (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {garminLoginError}
+                </div>
+              )}
+
+              <div className="pt-1 flex items-center gap-2.5">
+                <button
+                  type="submit"
+                  disabled={isGarminLoggingIn}
+                  className="flex-1 h-11 rounded-full bg-[#007CC3] hover:bg-[#0069A6] text-white font-bold text-sm flex items-center justify-center gap-2 transition disabled:opacity-70"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isGarminLoggingIn ? 'animate-spin' : ''}`} />
+                  <span>{isGarminLoggingIn ? 'Conectando e enviando...' : 'Conectar e Enviar Treino'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsGarminLoginOpen(false)}
+                  className="h-11 px-5 rounded-full border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
