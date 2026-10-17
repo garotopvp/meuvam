@@ -1116,32 +1116,51 @@ export default function AthleteDesktopDashboard({
               </Card>
             )}
 
-            {/* Card com as Zonas de VAM do Aluno para consulta */}
+            {/* Card com as Zonas de Treino do Aluno com as cores oficiais */}
             <Card className="border-slate-200 dark:border-slate-800">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold">Suas Zonas de Ritmo (VAM)</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-bold text-slate-900 dark:text-white">
+                  Zonas de Treino (VAM)
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Z1 • Recuperação</span>
-                  <span className="font-bold text-slate-900 dark:text-white">&gt; 5:45 min/km</span>
-                </div>
-                <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Z2 • Rodagem Base</span>
-                  <span className="font-bold text-slate-900 dark:text-white">5:15 - 5:45 min/km</span>
-                </div>
-                <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Z3 • Ritmo Moderado</span>
-                  <span className="font-bold text-slate-900 dark:text-white">4:40 - 5:15 min/km</span>
-                </div>
-                <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Z4 • Limiar / VAM</span>
-                  <span className="font-bold text-slate-900 dark:text-white">4:05 - 4:40 min/km</span>
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Z5 • Tiros Máximos</span>
-                  <span className="font-bold text-cyan-600 dark:text-cyan-400">&lt; 4:05 min/km</span>
-                </div>
+              <CardContent className="space-y-2">
+                {(athlete?.zones && athlete.zones.length > 0 ? athlete.zones : [
+                  { name: 'Recuperação', pace: '6:13', hrRange: '< 154' },
+                  { name: 'Aeróbico Leve', pace: '5:20', hrRange: '154 - 164' },
+                  { name: 'Aeróbico', pace: '4:40', hrRange: '164 - 174' },
+                  { name: 'Limiar', pace: '4:09', hrRange: '174 - 185' },
+                  { name: 'VAM (Máximo)', pace: '3:44', hrRange: '185 - 195' }
+                ]).map((zone, i) => {
+                  const zoneColors = ['#8E8E93', '#007AFF', '#34C759', '#FF9500', '#FF3B30'];
+                  const color = zoneColors[i % zoneColors.length];
+                  return (
+                    <div 
+                      key={i} 
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all shadow-2xs hover:scale-[1.01]"
+                      style={{ 
+                        background: `${color}35`,
+                        borderLeft: `5px solid ${color}` 
+                      }}
+                    >
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {zone.name}
+                        </p>
+                        {zone.hrRange && (
+                          <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                            {zone.hrRange.includes('bpm') ? zone.hrRange : `${zone.hrRange} bpm`}
+                          </p>
+                        )}
+                      </div>
+                      <span 
+                        className="text-sm font-black tabular-nums shrink-0"
+                        style={{ color }}
+                      >
+                        {zone.pace}
+                      </span>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           </div>
