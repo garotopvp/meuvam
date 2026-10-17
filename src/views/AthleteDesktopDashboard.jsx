@@ -201,7 +201,7 @@ export const parsePaceToSeconds = (paceStr) => {
   return null;
 };
 
-// Determina Zona (Z1-Z5), cor oficial e altura proporcional no gráfico (18px a 60px) com base no pace e nome do bloco
+// Determina Zona (Z1-Z5), cor oficial e altura proporcional no gráfico (20px a 68px) com base no pace e nome do bloco
 export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
   const combined = (String(name) + ' ' + String(type)).toLowerCase();
   const sec = parsePaceToSeconds(paceStr);
@@ -212,7 +212,7 @@ export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
       zone: 'Z1',
       zoneLabel: 'Recuperação (Z1)',
       color: '#8E8E93', // Cinza Z1
-      height: 20,
+      height: 22,
       paceFormatted: sec ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km` : (paceStr || '5:50 /km')
     };
   }
@@ -224,7 +224,7 @@ export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
         zone: 'Z5',
         zoneLabel: 'Tiros Máximos (Z5)',
         color: '#FF3B30', // Vermelho Z5
-        height: 60,
+        height: 68,
         paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
       };
     }
@@ -233,7 +233,7 @@ export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
         zone: 'Z4',
         zoneLabel: 'Limiar / VAM (Z4)',
         color: '#FF9500', // Laranja Z4
-        height: 48,
+        height: 52,
         paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
       };
     }
@@ -242,7 +242,7 @@ export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
         zone: 'Z3',
         zoneLabel: 'Ritmo Moderado (Z3)',
         color: '#34C759', // Verde Z3
-        height: 38,
+        height: 40,
         paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
       };
     }
@@ -251,7 +251,7 @@ export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
         zone: 'Z2',
         zoneLabel: 'Rodagem Base (Z2)',
         color: '#007AFF', // Azul Z2
-        height: 28,
+        height: 30,
         paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
       };
     }
@@ -260,22 +260,22 @@ export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
       zone: 'Z1',
       zoneLabel: 'Recuperação (Z1)',
       color: '#8E8E93', // Cinza Z1
-      height: 20,
+      height: 22,
       paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
     };
   }
 
   // 2. Fallbacks baseados no nome caso pace não tenha sido especificado
   if (combined.includes('z5') || combined.includes('tiro') || combined.includes('sprint') || combined.includes('reta') || combined.includes('100%')) {
-    return { zone: 'Z5', zoneLabel: 'Tiros Máximos (Z5)', color: '#FF3B30', height: 60, paceFormatted: '3:30 /km' };
+    return { zone: 'Z5', zoneLabel: 'Tiros Máximos (Z5)', color: '#FF3B30', height: 68, paceFormatted: '3:30 /km' };
   }
   if (combined.includes('z4') || combined.includes('limiar') || combined.includes('tempo') || combined.includes('forte')) {
-    return { zone: 'Z4', zoneLabel: 'Limiar / VAM (Z4)', color: '#FF9500', height: 48, paceFormatted: '4:15 /km' };
+    return { zone: 'Z4', zoneLabel: 'Limiar / VAM (Z4)', color: '#FF9500', height: 52, paceFormatted: '4:15 /km' };
   }
   if (combined.includes('z3') || combined.includes('moderado') || combined.includes('aerobico') || combined.includes('aeróbico')) {
-    return { zone: 'Z3', zoneLabel: 'Ritmo Moderado (Z3)', color: '#34C759', height: 38, paceFormatted: '4:45 /km' };
+    return { zone: 'Z3', zoneLabel: 'Ritmo Moderado (Z3)', color: '#34C759', height: 40, paceFormatted: '4:45 /km' };
   }
-  return { zone: 'Z2', zoneLabel: 'Rodagem Base (Z2)', color: '#007AFF', height: 28, paceFormatted: '5:15 /km' };
+  return { zone: 'Z2', zoneLabel: 'Rodagem Base (Z2)', color: '#007AFF', height: 30, paceFormatted: '5:15 /km' };
 };
 
 // Decompõe e expande blocos do treino para escala real de intervalos (TrainingPeaks / Garmin Style)
@@ -373,10 +373,12 @@ const expandWorkoutSegments = (workout) => {
         // Intervalo de esforço (Tiro / Reta)
         const sWork = {
           name: `${name.replace(/\s*\(.*\)/, '').trim()} (${i}/${count})`,
+          repIndex: i,
+          repCount: count,
           phase: 'Tiro',
           zone: paceInfo.zone,
           zoneLabel: paceInfo.zoneLabel,
-          height: paceInfo.height, // 60px para Z5!
+          height: paceInfo.height, // 68px para Z5!
           color: paceInfo.color,   // #FF3B30
           dist: workKm,
           pace: b.pace || paceInfo.paceFormatted,
@@ -389,13 +391,15 @@ const expandWorkoutSegments = (workout) => {
         // Intervalo de recuperação
         if (i < count || (b.pauseNote || '').includes('pausa')) {
           const sRest = {
-            name: `Recup. ${i}/${count}`,
+            name: `Recuperação (${i}/${count})`,
+            repIndex: i,
+            repCount: count,
             phase: 'Recuperação',
             isRest: true,
             zone: 'Z1',
             zoneLabel: 'Recuperação (Z1)',
-            height: 18,
-            color: '#CBD5E1', // Cinza suave
+            height: 20,
+            color: '#94A3B8', // Cinza slate bem nítido
             dist: restKm,
             pace: '6:00 min/km',
             startKm: cumDist,
@@ -649,10 +653,14 @@ const WorkoutSessionProfile = ({ workout }) => {
       <div className="flex items-center justify-between text-[11px] font-bold tracking-wider">
         <span className="text-slate-400 uppercase tracking-widest">PERFIL DA SESSÃO</span>
         {active && (
-          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-semibold truncate text-xs">
-            <span>{active.name.split('(')[0].trim()}</span>
+          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 font-semibold truncate text-xs">
+            <span className="font-bold">
+              {active.repIndex 
+                ? (active.isRest ? `Recup. ${active.repIndex}/${active.repCount}` : `Tiro ${active.repIndex}/${active.repCount}`) 
+                : active.name.split('(')[0].trim()}
+            </span>
             <span className="text-slate-300 dark:text-slate-600">•</span>
-            <span>{active.dist.toFixed(1)} km</span>
+            <span>{active.dist >= 1 ? `${active.dist.toFixed(1)} km` : `${Math.round(active.dist * 1000)}m`}</span>
             <span className="text-slate-300 dark:text-slate-600">•</span>
             <span 
               className="font-bold"
@@ -664,8 +672,8 @@ const WorkoutSessionProfile = ({ workout }) => {
         )}
       </div>
 
-      {/* Régua de Barras Visuais Proporcionais ao Ritmo */}
-      <div className="h-16 sm:h-20 w-full flex items-end gap-1.5 pt-2 pb-1 select-none">
+      {/* Régua de Barras Visuais Proporcionais ao Ritmo - MAIS LARGA, ALTA E COM DETALHES */}
+      <div className="h-20 sm:h-24 w-full flex items-end gap-1.5 sm:gap-2 pt-2 pb-1 select-none">
         {segments.map((seg, idx) => {
           const isBlock = seg.phase === 'Aquecimento' || seg.phase === 'Desaquecimento' || seg.phase === 'Corrida' || (!seg.isRest && seg.phase !== 'Tiro');
           const isRest = seg.isRest || seg.phase === 'Recuperação';
@@ -676,16 +684,21 @@ const WorkoutSessionProfile = ({ workout }) => {
                 key={idx}
                 onMouseEnter={() => setHoveredSegment(seg)}
                 onMouseLeave={() => setHoveredSegment(null)}
-                className="relative rounded-xl cursor-pointer transition-all duration-200 hover:brightness-110"
+                className="relative rounded-xl cursor-pointer transition-all duration-200 hover:brightness-110 flex-1 min-w-[50px] flex items-center justify-center overflow-hidden"
                 style={{
-                  flexGrow: Math.max(2, Math.round(seg.dist * 10)),
+                  flexGrow: Math.max(3, Math.min(8, Math.round(seg.dist * 2.5))),
                   height: `${seg.height}px`,
                   backgroundColor: seg.color,
                   opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
                   transform: hoveredSegment === seg ? 'scaleY(1.06)' : 'none',
                   transformOrigin: 'bottom'
                 }}
-              />
+                title={`${seg.name} • ${seg.pace}`}
+              >
+                <span className="text-[10px] font-bold text-white/90 drop-shadow truncate px-1 select-none pointer-events-none">
+                  {seg.dist >= 1 ? `${seg.dist.toFixed(1)}km` : `${Math.round(seg.dist * 1000)}m`}
+                </span>
+              </div>
             );
           }
 
@@ -695,33 +708,42 @@ const WorkoutSessionProfile = ({ workout }) => {
                 key={idx}
                 onMouseEnter={() => setHoveredSegment(seg)}
                 onMouseLeave={() => setHoveredSegment(null)}
-                className="cursor-pointer rounded-full transition-all duration-200 hover:brightness-90 shrink-0"
+                className="cursor-pointer rounded-full transition-all duration-200 hover:brightness-90 shrink-0 flex items-center justify-center"
                 style={{
-                  width: '5px',
-                  height: `${seg.height || 18}px`,
-                  backgroundColor: '#CBD5E1',
-                  opacity: hoveredSegment && hoveredSegment !== seg ? 0.6 : 1
+                  width: '9px',
+                  height: `${seg.height || 20}px`,
+                  backgroundColor: '#94A3B8',
+                  opacity: hoveredSegment === seg ? 1 : hoveredSegment ? 0.45 : 0.75,
+                  transform: hoveredSegment === seg ? 'scaleY(1.15)' : 'none',
+                  transformOrigin: 'bottom'
                 }}
+                title={`${seg.name} • Recuperação`}
               />
             );
           }
 
-          // Barra de Tiro / Reta
+          // Barra de Tiro / Reta: Bem mais larga e alta, com número da repetição gravado na barra
           return (
             <div
               key={idx}
               onMouseEnter={() => setHoveredSegment(seg)}
               onMouseLeave={() => setHoveredSegment(null)}
-              className="cursor-pointer rounded-md transition-all duration-200 hover:brightness-110 shrink-0"
+              className="cursor-pointer rounded-lg sm:rounded-xl transition-all duration-200 hover:brightness-110 flex-1 min-w-[24px] sm:min-w-[28px] max-w-[42px] flex items-end justify-center pb-1.5"
               style={{
-                width: '13px',
                 height: `${seg.height}px`,
                 backgroundColor: seg.color,
                 opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
                 transform: hoveredSegment === seg ? 'scaleY(1.06)' : 'none',
                 transformOrigin: 'bottom'
               }}
-            />
+              title={`${seg.name} • ${seg.pace}`}
+            >
+              {seg.repIndex && (
+                <span className="text-[10px] sm:text-[11px] font-black text-white select-none pointer-events-none drop-shadow-sm">
+                  {seg.repIndex}
+                </span>
+              )}
+            </div>
           );
         })}
       </div>
@@ -1493,7 +1515,7 @@ export default function AthleteDesktopDashboard({
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[530px] max-h-[92vh] overflow-y-auto rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-[0_25px_70px_rgba(0,0,0,0.3)] p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-[760px] max-h-[92vh] overflow-y-auto rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-[0_25px_70px_rgba(0,0,0,0.3)] p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Top Bar: Data + Tipo + Botão Fechar */}
             <div className="flex items-center justify-between">
