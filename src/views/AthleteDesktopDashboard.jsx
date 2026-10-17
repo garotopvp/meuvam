@@ -191,6 +191,93 @@ const getStepDetails = (name = '', type = '') => {
   };
 };
 
+// Converte string de ritmo (ex: "3:30 min/km", "5:35", "4:45 /km") em segundos por km
+export const parsePaceToSeconds = (paceStr) => {
+  if (!paceStr) return null;
+  const match = String(paceStr).match(/(\d+):(\d+)/);
+  if (match) {
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  }
+  return null;
+};
+
+// Determina Zona (Z1-Z5), cor oficial e altura proporcional no gráfico (18px a 60px) com base no pace e nome do bloco
+export const getPaceZoneInfo = (paceStr, name = '', type = '') => {
+  const combined = (String(name) + ' ' + String(type)).toLowerCase();
+  const sec = parsePaceToSeconds(paceStr);
+
+  // Se tiver indicação explícita de Z1 no nome (ex: "Trote Solto Z1") ou ritmo bem leve
+  if (combined.includes('z1') || combined.includes('soltura') || combined.includes('regenerativo') || combined.includes('recupera')) {
+    return {
+      zone: 'Z1',
+      zoneLabel: 'Recuperação (Z1)',
+      color: '#8E8E93', // Cinza Z1
+      height: 20,
+      paceFormatted: sec ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km` : (paceStr || '5:50 /km')
+    };
+  }
+
+  // 1. Mapeamento direto pelo ritmo (segundos por km)
+  if (sec !== null) {
+    if (sec < 245) { // < 4:05 min/km -> Z5 (Tiros, Retas, Sprints)
+      return {
+        zone: 'Z5',
+        zoneLabel: 'Tiros Máximos (Z5)',
+        color: '#FF3B30', // Vermelho Z5
+        height: 60,
+        paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
+      };
+    }
+    if (sec <= 280) { // 4:05 - 4:40 min/km -> Z4 (Limiar / VAM)
+      return {
+        zone: 'Z4',
+        zoneLabel: 'Limiar / VAM (Z4)',
+        color: '#FF9500', // Laranja Z4
+        height: 48,
+        paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
+      };
+    }
+    if (sec <= 315) { // 4:40 - 5:15 min/km -> Z3 (Ritmo Moderado)
+      return {
+        zone: 'Z3',
+        zoneLabel: 'Ritmo Moderado (Z3)',
+        color: '#34C759', // Verde Z3
+        height: 38,
+        paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
+      };
+    }
+    if (sec <= 345) { // 5:15 - 5:45 min/km -> Z2 (Rodagem Base)
+      return {
+        zone: 'Z2',
+        zoneLabel: 'Rodagem Base (Z2)',
+        color: '#007AFF', // Azul Z2
+        height: 28,
+        paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
+      };
+    }
+    // > 5:45 min/km -> Z1
+    return {
+      zone: 'Z1',
+      zoneLabel: 'Recuperação (Z1)',
+      color: '#8E8E93', // Cinza Z1
+      height: 20,
+      paceFormatted: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /km`
+    };
+  }
+
+  // 2. Fallbacks baseados no nome caso pace não tenha sido especificado
+  if (combined.includes('z5') || combined.includes('tiro') || combined.includes('sprint') || combined.includes('reta') || combined.includes('100%')) {
+    return { zone: 'Z5', zoneLabel: 'Tiros Máximos (Z5)', color: '#FF3B30', height: 60, paceFormatted: '3:30 /km' };
+  }
+  if (combined.includes('z4') || combined.includes('limiar') || combined.includes('tempo') || combined.includes('forte')) {
+    return { zone: 'Z4', zoneLabel: 'Limiar / VAM (Z4)', color: '#FF9500', height: 48, paceFormatted: '4:15 /km' };
+  }
+  if (combined.includes('z3') || combined.includes('moderado') || combined.includes('aerobico') || combined.includes('aeróbico')) {
+    return { zone: 'Z3', zoneLabel: 'Ritmo Moderado (Z3)', color: '#34C759', height: 38, paceFormatted: '4:45 /km' };
+  }
+  return { zone: 'Z2', zoneLabel: 'Rodagem Base (Z2)', color: '#007AFF', height: 28, paceFormatted: '5:15 /km' };
+};
+
 // Decompõe e expande blocos do treino para escala real de intervalos (TrainingPeaks / Garmin Style)
 const expandWorkoutSegments = (workout) => {
   if (!workout) return { segments: [], totalKm: 5.0, baseBlocks: [] };
@@ -204,11 +291,13 @@ const expandWorkoutSegments = (workout) => {
     const title = (workout.title || workout.type || '').toLowerCase();
     const desc = (workout.description || '').toLowerCase();
     const combinedText = title + ' ' + desc;
-    const repeatMatch = combinedText.match(/(\d+)\s*[x×]\s*(\d+(?:m|km)?)/i);
+    const repeatMatch = combinedText.match(/(\d+)\s*[x×]\s*(.*)/i);
 
-    if (repeatMatch || title.includes('tiro') || title.includes('vam') || title.includes('interval')) {
-      const repCount = repeatMatch ? Math.min(20, Math.max(2, parseInt(repeatMatch[1], 10))) : 10;
-      const repWork = repeatMatch ? repeatMatch[2] : '200m';
+    if (repeatMatch || title.includes('tiro') || title.includes('vam') || title.includes('interval') || title.includes('reta')) {
+      const repCount = repeatMatch ? Math.min(25, Math.max(2, parseInt(repeatMatch[1], 10))) : 10;
+      const restText = repeatMatch ? repeatMatch[2].trim() : '200m';
+      const distMatch = restText.match(/(\d+(?:[.,]\d+)?\s*(?:m|km))/i);
+      const repWork = distMatch ? distMatch[1].replace(' ', '') : '200m';
 
       let workKm = 0.2;
       if (repWork.endsWith('m')) workKm = parseFloat(repWork) / 1000;
@@ -264,29 +353,33 @@ const expandWorkoutSegments = (workout) => {
 
   baseBlocks.forEach((b) => {
     const name = b.name || '';
-    const repeatMatch = name.match(/(\d+)\s*[x×]\s*(\d+(?:m|km)?)/i);
+    const repeatMatch = name.match(/(\d+)\s*[x×]\s*(.*)/i);
 
     if (repeatMatch) {
-      const count = Math.min(20, Math.max(2, parseInt(repeatMatch[1], 10)));
-      const workVal = repeatMatch[2];
+      const count = Math.min(25, Math.max(2, parseInt(repeatMatch[1], 10)));
+      const restText = repeatMatch[2].trim();
+      const distMatch = restText.match(/(\d+(?:[.,]\d+)?\s*(?:m|km))/i);
+      const workVal = distMatch ? distMatch[1].replace(' ', '') : '200m';
+
       let workKm = 0.2;
       if (workVal.endsWith('m')) workKm = parseFloat(workVal) / 1000;
       else if (workVal.endsWith('km')) workKm = parseFloat(workVal);
 
       let blockDist = parseFloat(String(b.distance || '').replace(',', '.')) || (count * workKm * 1.35);
-      const restKm = Math.max(0.08, (blockDist - (count * workKm)) / count);
+      const restKm = Math.max(0.05, (blockDist - (count * workKm)) / count);
+      const paceInfo = getPaceZoneInfo(b.pace, b.name, b.type || 'Tiro');
 
       for (let i = 1; i <= count; i++) {
-        // Intervalo de esforço (Tiro)
+        // Intervalo de esforço (Tiro / Reta)
         const sWork = {
-          name: `Tiro ${i}/${count} (${workVal})`,
+          name: `${name.replace(/\s*\(.*\)/, '').trim()} (${i}/${count})`,
           phase: 'Tiro',
-          zone: 'Z5',
-          zoneLabel: 'Tiros Máximos (Z5)',
-          height: 95,
-          color: '#FF3B30', // Z5 Vermelho
+          zone: paceInfo.zone,
+          zoneLabel: paceInfo.zoneLabel,
+          height: paceInfo.height, // 60px para Z5!
+          color: paceInfo.color,   // #FF3B30
           dist: workKm,
-          pace: b.pace || '3:30 min/km',
+          pace: b.pace || paceInfo.paceFormatted,
           startKm: cumDist,
           endKm: cumDist + workKm
         };
@@ -301,8 +394,8 @@ const expandWorkoutSegments = (workout) => {
             isRest: true,
             zone: 'Z1',
             zoneLabel: 'Recuperação (Z1)',
-            height: 26,
-            color: '#8E8E93', // Z1 Cinza
+            height: 18,
+            color: '#CBD5E1', // Cinza suave
             dist: restKm,
             pace: '6:00 min/km',
             startKm: cumDist,
@@ -316,54 +409,17 @@ const expandWorkoutSegments = (workout) => {
       let dist = parseFloat(String(b.distance || '').replace(',', '.'));
       if (isNaN(dist) || dist <= 0) dist = 1.5;
 
-      const combined = ((b.name || '') + ' ' + (b.type || '')).toLowerCase();
-      let zone = 'Z2';
-      let zoneLabel = 'Base Aeróbia (Z2)';
-      let height = 55;
-      let color = '#007AFF'; // Z2 Azul
-      let phase = 'Corrida';
-
-      if (combined.includes('aquec') || combined.includes('warm')) {
-        zone = 'Z2';
-        zoneLabel = 'Aquecimento (Z2)';
-        height = 48;
-        color = '#007AFF'; // Z2 Azul
-        phase = 'Aquecimento';
-      } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta') || combined.includes('regenerativo') || combined.includes('recupera') || combined.includes('soltura')) {
-        zone = 'Z2';
-        zoneLabel = 'Desaquecimento (Z2)';
-        height = 48;
-        color = '#38BDF8'; // Z2 Azul Claro / Cyan
-        phase = 'Desaquecimento';
-      } else if (combined.includes('limiar') || combined.includes('tempo') || combined.includes('z4') || combined.includes('forte')) {
-        zone = 'Z4';
-        zoneLabel = 'Limiar / VAM (Z4)';
-        height = 80;
-        color = '#FF9500'; // Z4 Laranja
-        phase = 'Limiar';
-      } else if (combined.includes('tiro') || combined.includes('sprint') || combined.includes('vam') || combined.includes('z5')) {
-        zone = 'Z5';
-        zoneLabel = 'Tiros Máximos (Z5)';
-        height = 95;
-        color = '#FF3B30'; // Z5 Vermelho
-        phase = 'Tiro';
-      } else if (combined.includes('moderado') || combined.includes('z3') || combined.includes('aerobico') || combined.includes('aeróbico')) {
-        zone = 'Z3';
-        zoneLabel = 'Ritmo Moderado (Z3)';
-        height = 68;
-        color = '#34C759'; // Z3 Verde
-        phase = 'Moderado';
-      }
+      const paceInfo = getPaceZoneInfo(b.pace, b.name, b.type);
 
       const s = {
-        name: b.name || phase,
-        phase,
-        zone,
-        zoneLabel,
-        height,
-        color,
+        name: b.name || paceInfo.zoneLabel,
+        phase: b.type || 'Corrida',
+        zone: paceInfo.zone,
+        zoneLabel: paceInfo.zoneLabel,
+        height: paceInfo.height, // Altura calculada estritamente pelo ritmo (18px a 60px)!
+        color: paceInfo.color,   // Cor oficial da zona correspondente!
         dist,
-        pace: b.pace || (zone === 'Z5' ? '3:30 min/km' : zone === 'Z4' ? '4:15 min/km' : '5:05 min/km'),
+        pace: b.pace || paceInfo.paceFormatted,
         startKm: cumDist,
         endKm: cumDist + dist
       };
@@ -577,9 +633,9 @@ const StructuredStepsList = ({ workout }) => {
 const WorkoutSessionProfile = ({ workout }) => {
   const { segments } = useMemo(() => expandWorkoutSegments(workout), [workout]);
 
-  // Default para o aquecimento (ou primeiro bloco) conforme o mockup
+  // Default para o segmento mais intenso / chave da sessão
   const defaultSegment = useMemo(() => {
-    return segments[0] || null;
+    return segments.find(s => s.zone === 'Z5' || s.phase === 'Tiro') || segments.find(s => s.zone === 'Z4') || segments[0] || null;
   }, [segments]);
 
   const [hoveredSegment, setHoveredSegment] = useState(null);
@@ -608,10 +664,10 @@ const WorkoutSessionProfile = ({ workout }) => {
         )}
       </div>
 
-      {/* Régua de Barras Visuais */}
-      <div className="h-14 sm:h-16 w-full flex items-end gap-1.5 pt-2 pb-1 select-none">
+      {/* Régua de Barras Visuais Proporcionais ao Ritmo */}
+      <div className="h-16 sm:h-20 w-full flex items-end gap-1.5 pt-2 pb-1 select-none">
         {segments.map((seg, idx) => {
-          const isBlock = seg.phase === 'Aquecimento' || seg.phase === 'Desaquecimento' || seg.phase === 'Corrida';
+          const isBlock = seg.phase === 'Aquecimento' || seg.phase === 'Desaquecimento' || seg.phase === 'Corrida' || (!seg.isRest && seg.phase !== 'Tiro');
           const isRest = seg.isRest || seg.phase === 'Recuperação';
 
           if (isBlock) {
@@ -622,11 +678,11 @@ const WorkoutSessionProfile = ({ workout }) => {
                 onMouseLeave={() => setHoveredSegment(null)}
                 className="relative rounded-xl cursor-pointer transition-all duration-200 hover:brightness-110"
                 style={{
-                  flexGrow: Math.max(3, Math.round(seg.dist * 10)),
-                  height: '28px',
-                  backgroundColor: seg.color || (seg.phase === 'Aquecimento' ? '#007AFF' : '#38BDF8'),
+                  flexGrow: Math.max(2, Math.round(seg.dist * 10)),
+                  height: `${seg.height}px`,
+                  backgroundColor: seg.color,
                   opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
-                  transform: hoveredSegment === seg ? 'scaleY(1.08)' : 'none',
+                  transform: hoveredSegment === seg ? 'scaleY(1.06)' : 'none',
                   transformOrigin: 'bottom'
                 }}
               />
@@ -642,15 +698,15 @@ const WorkoutSessionProfile = ({ workout }) => {
                 className="cursor-pointer rounded-full transition-all duration-200 hover:brightness-90 shrink-0"
                 style={{
                   width: '5px',
-                  height: '20px',
-                  backgroundColor: '#E2E8F0',
+                  height: `${seg.height || 18}px`,
+                  backgroundColor: '#CBD5E1',
                   opacity: hoveredSegment && hoveredSegment !== seg ? 0.6 : 1
                 }}
               />
             );
           }
 
-          // Barra de Tiro
+          // Barra de Tiro / Reta
           return (
             <div
               key={idx}
@@ -659,10 +715,10 @@ const WorkoutSessionProfile = ({ workout }) => {
               className="cursor-pointer rounded-md transition-all duration-200 hover:brightness-110 shrink-0"
               style={{
                 width: '13px',
-                height: '48px',
-                backgroundColor: seg.color || '#FF3B30',
+                height: `${seg.height}px`,
+                backgroundColor: seg.color,
                 opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
-                transform: hoveredSegment === seg ? 'scaleY(1.08)' : 'none',
+                transform: hoveredSegment === seg ? 'scaleY(1.06)' : 'none',
                 transformOrigin: 'bottom'
               }}
             />
@@ -1262,23 +1318,18 @@ export default function AthleteDesktopDashboard({
                 {/* Pílulas de Métricas */}
                 {(() => {
                   const { totalKm, baseBlocks } = expandWorkoutSegments(activeWorkout);
-                  const mainBlock = baseBlocks.find(b => {
-                    const n = (b.name || '').toLowerCase();
-                    return !n.includes('aquec') && !n.includes('desaquec');
-                  }) || baseBlocks[0];
+                  const targetBlock = baseBlocks.reduce((best, b) => {
+                    const infoCurr = getPaceZoneInfo(b.pace, b.name, b.type);
+                    const infoBest = getPaceZoneInfo(best?.pace, best?.name, best?.type);
+                    const order = { Z5: 5, Z4: 4, Z3: 3, Z2: 2, Z1: 1 };
+                    if ((order[infoCurr.zone] || 1) > (order[infoBest?.zone] || 1)) return b;
+                    return best;
+                  }, baseBlocks[0]);
 
-                  const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
-                  const targetPace = mainBlock?.pace ? mainBlock.pace.replace(' min/km', '').replace(' /km', '') : (isInterval ? '3:30' : '5:05');
-                  const targetZone = isInterval ? 'Z5' : (activeWorkout.title?.toLowerCase().includes('limiar') ? 'Z4' : 'Z2');
-
-                  const zoneColorMap = {
-                    Z1: '#8E8E93',
-                    Z2: '#007AFF',
-                    Z3: '#34C759',
-                    Z4: '#FF9500',
-                    Z5: '#FF3B30'
-                  };
-                  const targetColor = zoneColorMap[targetZone] || '#007AFF';
+                  const targetInfo = getPaceZoneInfo(targetBlock?.pace, targetBlock?.name, targetBlock?.type);
+                  const targetPace = targetInfo.paceFormatted.replace(' /km', '');
+                  const targetZone = targetInfo.zone;
+                  const targetColor = targetInfo.color;
 
                   const distanceVal = activeWorkout.metrics?.distance 
                     ? (activeWorkout.metrics.distance.includes('km') ? activeWorkout.metrics.distance : `${activeWorkout.metrics.distance} km`)
@@ -1478,23 +1529,18 @@ export default function AthleteDesktopDashboard({
             {/* Pílulas de Métricas */}
             {(() => {
               const { totalKm, baseBlocks } = expandWorkoutSegments(activeWorkout);
-              const mainBlock = baseBlocks.find(b => {
-                const n = (b.name || '').toLowerCase();
-                return !n.includes('aquec') && !n.includes('desaquec');
-              }) || baseBlocks[0];
+              const targetBlock = baseBlocks.reduce((best, b) => {
+                const infoCurr = getPaceZoneInfo(b.pace, b.name, b.type);
+                const infoBest = getPaceZoneInfo(best?.pace, best?.name, best?.type);
+                const order = { Z5: 5, Z4: 4, Z3: 3, Z2: 2, Z1: 1 };
+                if ((order[infoCurr.zone] || 1) > (order[infoBest?.zone] || 1)) return b;
+                return best;
+              }, baseBlocks[0]);
 
-              const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
-              const targetPace = mainBlock?.pace ? mainBlock.pace.replace(' min/km', '').replace(' /km', '') : (isInterval ? '3:30' : '5:05');
-              const targetZone = isInterval ? 'Z5' : (activeWorkout.title?.toLowerCase().includes('limiar') ? 'Z4' : 'Z2');
-
-              const zoneColorMap = {
-                Z1: '#8E8E93',
-                Z2: '#007AFF',
-                Z3: '#34C759',
-                Z4: '#FF9500',
-                Z5: '#FF3B30'
-              };
-              const targetColor = zoneColorMap[targetZone] || '#FF3B30';
+              const targetInfo = getPaceZoneInfo(targetBlock?.pace, targetBlock?.name, targetBlock?.type);
+              const targetPace = targetInfo.paceFormatted.replace(' /km', '');
+              const targetZone = targetInfo.zone;
+              const targetColor = targetInfo.color;
 
               const distanceVal = activeWorkout.metrics?.distance 
                 ? (activeWorkout.metrics.distance.includes('km') ? activeWorkout.metrics.distance : `${activeWorkout.metrics.distance} km`)
