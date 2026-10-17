@@ -784,7 +784,7 @@ export default function AthleteDesktopDashboard({
                 {/* Grid das Semanas com Resumo Semanal na 8ª Coluna */}
                 <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {calendarWeeks.map((week, wIdx) => (
-                    <div key={wIdx} className="grid grid-cols-8 divide-x divide-slate-100 dark:divide-slate-800/60 auto-rows-fr">
+                    <div key={wIdx} className="grid grid-cols-8 divide-x divide-slate-100 dark:divide-slate-800/60 h-[140px] max-h-[140px]">
                       {/* 7 Dias da Semana */}
                       {week.days.map((item, dIdx) => {
                         const isToday = item.dateStr === todayStr;
@@ -797,14 +797,14 @@ export default function AthleteDesktopDashboard({
                             onClick={() => {
                               if (hasWorkouts) setSelectedWorkout(item.workouts[0]);
                             }}
-                            className={`min-h-[125px] p-1.5 sm:p-2 transition-all duration-150 ${
+                            className={`h-[140px] max-h-[140px] flex flex-col p-1.5 sm:p-2 overflow-hidden transition-all duration-150 ${
                               !item.isCurrentMonth ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-950/40 dark:text-slate-700' : 'bg-white dark:bg-slate-900'
                             } ${hasWorkouts ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''} ${
                               isSelected ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-950/20' : ''
                             }`}
                           >
                             {/* Número do Dia */}
-                            <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center justify-between mb-1 shrink-0">
                               <span
                                 className={`flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full text-xs font-semibold ${
                                   isToday
@@ -823,7 +823,7 @@ export default function AthleteDesktopDashboard({
                             </div>
 
                             {/* Lista de Treinos alocados para o dia (Apenas Nome da Atividade conforme solicitado) */}
-                            <div className="space-y-1">
+                            <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-0.5">
                               {item.workouts.map((w) => {
                                 const isDone = w.status === 'completed';
                                 const topBarColor = isDone ? 'bg-emerald-500' : 'bg-amber-400';
@@ -836,12 +836,12 @@ export default function AthleteDesktopDashboard({
                                       setSelectedWorkout(w);
                                       setIsDetailModalOpen(true);
                                     }}
-                                    className="group relative flex flex-col overflow-hidden rounded-md border border-slate-200/90 bg-[#fafafa] text-left shadow-2xs transition-all hover:scale-[1.02] hover:shadow-md hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
+                                    className="group relative flex flex-col overflow-hidden rounded-md border border-slate-200/90 bg-[#fafafa] text-left shadow-2xs transition-all hover:scale-[1.01] hover:shadow-md hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
                                   >
                                     {/* Barra superior de status clássica do TrainingPeaks */}
                                     <div className={`h-1.5 w-full ${topBarColor}`} />
 
-                                    <div className="p-1.5 sm:p-2 space-y-1">
+                                    <div className="p-1.5 space-y-0.5">
                                       {/* Topo: Símbolo da modalidade (ex: sapatilha verde) + 3 pontos */}
                                       <div className="flex items-center justify-between">
                                         {getModalityIcon(w.type, w.title)}
@@ -850,8 +850,8 @@ export default function AthleteDesktopDashboard({
                                         </span>
                                       </div>
 
-                                      {/* Apenas o Título / Nome da Atividade (solicitado pelo usuário) */}
-                                      <h4 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-3 leading-tight">
+                                      {/* Apenas o Título / Nome da Atividade */}
+                                      <h4 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-tight">
                                         {w.title || 'Treino'}
                                       </h4>
                                     </div>
@@ -864,7 +864,7 @@ export default function AthleteDesktopDashboard({
                       })}
 
                       {/* 8ª Coluna: Resumo Semanal com Card Destacado e Cores Vivas (TrainingPeaks Style) */}
-                      <div className="min-h-[125px] p-1.5 bg-blue-50/20 dark:bg-slate-950/40 border-l border-slate-200 dark:border-slate-800 flex flex-col justify-center select-none">
+                      <div className="h-[140px] max-h-[140px] p-1.5 bg-blue-50/20 dark:bg-slate-950/40 border-l border-slate-200 dark:border-slate-800 flex flex-col justify-center select-none overflow-hidden">
                         <div className={`h-full rounded-xl p-2.5 flex flex-col justify-between transition-all ${
                           week.summary.count > 0 
                             ? 'bg-gradient-to-b from-blue-500/10 via-white to-blue-500/5 dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 border border-blue-200/80 dark:border-blue-900/50 shadow-xs' 
