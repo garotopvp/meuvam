@@ -188,10 +188,8 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className={
             isDesktop 
-              ? (location.pathname.includes('/perfil')
+              ? (location.pathname.includes('/perfil') || location.pathname.includes('/feed') || location.pathname.includes('/coach') || location.pathname.includes('/avisos')
                   ? "max-w-4xl mx-auto px-4 py-6 w-full"
-                  : location.pathname.includes('/feed') || location.pathname.includes('/coach')
-                  ? "w-full px-3 sm:px-6 lg:px-8 py-6"
                   : "w-full")
               : "page-container"
           }

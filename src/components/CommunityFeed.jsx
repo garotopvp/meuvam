@@ -297,7 +297,7 @@ const CommunityFeed = ({ currentUser }) => {
               </div>
 
               {/* Map Image with Glassy Overlay */}
-              <div style={{ borderRadius: '24px', overflow: 'hidden', background: '#f8fafc', marginBottom: '1.5rem', height: '280px', position: 'relative', border: '1px solid #e2e8f0' }}>
+              <div style={{ borderRadius: '24px', overflow: 'hidden', background: '#f8fafc', marginBottom: '1.5rem', height: '240px', position: 'relative', border: '1px solid #e2e8f0' }}>
                 <ActivityMap 
                   routeData={act.polyline} 
                   isStatic={true}
