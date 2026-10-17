@@ -1085,9 +1085,20 @@ export default function AthleteDesktopDashboard({
     }
   };
 
-  // ── ENVIO PARA INTERVALS.ICU (PONTE POLAR / SUUNTO / COROS / APPLE WATCH) ──
-  const handleSendIntervals = async () => {
+  // ── ENVIO PARA INTERVALS.ICU (PONTE AMAZFIT ZEPP / APPLE WATCH / POLAR / SUUNTO) ──
+  const [intervalsTargetBrand, setIntervalsTargetBrand] = useState('polar'); // 'amazfit' | 'apple' | 'polar'
+  const [pushedBrandSuccess, setPushedBrandSuccess] = useState(''); // 'amazfit' | 'apple' | 'polar' | ''
+
+  const getBrandDisplayName = (brand) => {
+    if (brand === 'amazfit') return 'Amazfit (Zepp App)';
+    if (brand === 'apple') return 'Apple Watch';
+    return 'Polar / Suunto';
+  };
+
+  const handleSendIntervals = async (brand = 'polar') => {
     if (!activeWorkout) return;
+    setIntervalsTargetBrand(brand);
+
     if (!athlete?.id) {
       setGarminPushError('Sessão do atleta não identificada.');
       return;
@@ -1118,20 +1129,22 @@ export default function AthleteDesktopDashboard({
       }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.details || data.error || 'Falha ao enviar treino para o Intervals.icu');
+        throw new Error(data.details || data.error || `Falha ao enviar treino para ${getBrandDisplayName(brand)}`);
       }
 
       setIsIntervalsPushing(false);
       setIntervalsPushSuccess(true);
+      setPushedBrandSuccess(brand);
       setGarminPushMessage(
-        data.message || 'Treino sincronizado via Intervals.icu (Polar / Suunto / COROS / Apple Watch)!'
+        `Treino "${activeWorkout.title}" enviado para o seu ${getBrandDisplayName(brand)} (${activeWorkout.date})!`
       );
       setTimeout(() => {
         setIntervalsPushSuccess(false);
+        setPushedBrandSuccess('');
       }, 6000);
     } catch (err) {
       setIsIntervalsPushing(false);
-      setGarminPushError(err.message || 'Erro ao comunicar com o Intervals.icu.');
+      setGarminPushError(err.message || `Erro ao enviar para ${getBrandDisplayName(brand)}.`);
     }
   };
 
@@ -1161,7 +1174,7 @@ export default function AthleteDesktopDashboard({
       setIntervalsConnectedUser(data.user?.displayName || data.user?.athleteId || 'Conectado');
       setIsIntervalsLoginOpen(false);
       setIntervalsApiKey('');
-      await handleSendIntervals();
+      await handleSendIntervals(intervalsTargetBrand);
     } catch (err) {
       setIntervalsLoginError(err.message || 'Erro ao validar credenciais no Intervals.icu.');
     } finally {
@@ -1775,8 +1788,8 @@ export default function AthleteDesktopDashboard({
                     </span>
                   </button>
 
-                  {/* 3 Opções Extras de Sincronização: COROS, Polar/Intervals e Arquivo .FIT */}
-                  <div className="grid grid-cols-3 gap-2">
+                  {/* Opções de Sincronização para todas as marcas: COROS, Amazfit (Zepp), Apple Watch, Polar/Suunto e .FIT */}
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={handleSendCoros}
                       disabled={isCorosPushing}
@@ -1788,33 +1801,79 @@ export default function AthleteDesktopDashboard({
                       }`}
                     >
                       <span className={`h-2 w-2 rounded-full shrink-0 ${corosConnectedUser ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                      <span className="truncate">{corosPushSuccess ? '✓ COROS' : isCorosPushing ? 'Enviando...' : 'COROS'}</span>
+                      <span className="truncate">{corosPushSuccess ? '✓ Enviado COROS' : isCorosPushing ? 'Enviando...' : 'COROS'}</span>
                     </button>
 
                     <button
-                      onClick={handleSendIntervals}
+                      onClick={() => handleSendIntervals('amazfit')}
                       disabled={isIntervalsPushing}
-                      title="Sincronizar via Intervals.icu (Polar, Suunto, COROS e Apple Watch)"
+                      title="Enviar treino estruturado para Amazfit (Zepp App)"
                       className={`h-10 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
-                        intervalsPushSuccess
+                        intervalsPushSuccess && pushedBrandSuccess === 'amazfit'
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-orange-500'}`} />
+                      <span className="truncate">
+                        {intervalsPushSuccess && pushedBrandSuccess === 'amazfit'
+                          ? '✓ Amazfit (Zepp)'
+                          : isIntervalsPushing && intervalsTargetBrand === 'amazfit'
+                          ? 'Enviando...'
+                          : 'Amazfit (Zepp)'}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleSendIntervals('apple')}
+                      disabled={isIntervalsPushing}
+                      title="Enviar treino estruturado para o Apple Watch"
+                      className={`h-10 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                        intervalsPushSuccess && pushedBrandSuccess === 'apple'
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                      <span className="truncate">
+                        {intervalsPushSuccess && pushedBrandSuccess === 'apple'
+                          ? '✓ Apple Watch'
+                          : isIntervalsPushing && intervalsTargetBrand === 'apple'
+                          ? 'Enviando...'
+                          : 'Apple Watch'}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleSendIntervals('polar')}
+                      disabled={isIntervalsPushing}
+                      title="Enviar treino estruturado para Polar Flow ou Suunto"
+                      className={`h-10 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                        intervalsPushSuccess && pushedBrandSuccess === 'polar'
                           ? 'bg-emerald-600 border-emerald-600 text-white'
                           : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
                       }`}
                     >
                       <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
-                      <span className="truncate">{intervalsPushSuccess ? '✓ Enviado' : isIntervalsPushing ? 'Enviando...' : 'Polar / Outros'}</span>
-                    </button>
-
-                    <button
-                      onClick={handleDownloadFit}
-                      disabled={isDownloadingFit}
-                      title="Baixar arquivo .FIT do treino (COROS, Apple Watch WorkOutDoors, Suunto, Garmin)"
-                      className="h-10 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70"
-                    >
-                      <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                      <span className="truncate">{isDownloadingFit ? 'Gerando...' : 'Baixar .FIT'}</span>
+                      <span className="truncate">
+                        {intervalsPushSuccess && pushedBrandSuccess === 'polar'
+                          ? '✓ Polar / Suunto'
+                          : isIntervalsPushing && intervalsTargetBrand === 'polar'
+                          ? 'Enviando...'
+                          : 'Polar / Suunto'}
+                      </span>
                     </button>
                   </div>
+
+                  <button
+                    onClick={handleDownloadFit}
+                    disabled={isDownloadingFit}
+                    title="Baixar arquivo .FIT do treino (COROS, Apple Watch WorkOutDoors, Suunto, Garmin)"
+                    className="w-full h-9 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.99] disabled:opacity-70"
+                  >
+                    <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                    <span>{isDownloadingFit ? 'Gerando arquivo .FIT...' : 'Baixar Arquivo .FIT do Treino'}</span>
+                  </button>
 
                   {garminPushMessage && (
                     <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 px-3.5 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 text-center">
@@ -1836,7 +1895,7 @@ export default function AthleteDesktopDashboard({
 
                   {/* Barra de Status das Contas Conectadas */}
                   <div className="flex flex-wrap items-center justify-between gap-y-1 px-2 text-[11px] text-slate-400">
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <button
                         type="button"
                         onClick={() => setIsGarminLoginOpen(true)}
@@ -1859,12 +1918,12 @@ export default function AthleteDesktopDashboard({
 
                       <button
                         type="button"
-                        onClick={() => setIsIntervalsLoginOpen(true)}
+                        onClick={() => { setIntervalsTargetBrand('amazfit'); setIsIntervalsLoginOpen(true); }}
                         className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 transition"
-                        title="Gerenciar ponte Intervals.icu (Polar, Suunto, Apple Watch)"
+                        title="Gerenciar Amazfit (Zepp), Apple Watch, Polar e Suunto"
                       >
                         <span className={`h-1.5 w-1.5 rounded-full ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
-                        <span>Intervals/Polar {intervalsConnectedUser ? `(${intervalsConnectedUser})` : ''}</span>
+                        <span>Zepp/Apple/Polar {intervalsConnectedUser ? `(${intervalsConnectedUser})` : ''}</span>
                       </button>
                     </div>
                   </div>
@@ -2113,8 +2172,8 @@ export default function AthleteDesktopDashboard({
                 </button>
               </div>
 
-              {/* 3 Opções Extras no Modal: COROS, Polar/Intervals e Arquivo .FIT */}
-              <div className="grid grid-cols-3 gap-2.5">
+              {/* 4 Relógios Extras no Modal: COROS, Amazfit (Zepp), Apple Watch, Polar/Suunto + .FIT */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   onClick={handleSendCoros}
                   disabled={isCorosPushing}
@@ -2125,31 +2184,57 @@ export default function AthleteDesktopDashboard({
                   }`}
                 >
                   <span className={`h-2 w-2 rounded-full shrink-0 ${corosConnectedUser ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                  <span>{corosPushSuccess ? '✓ Enviado COROS' : isCorosPushing ? 'Enviando...' : 'Enviar COROS'}</span>
+                  <span>{corosPushSuccess ? '✓ COROS' : isCorosPushing ? 'Enviando...' : 'COROS'}</span>
                 </button>
 
                 <button
-                  onClick={handleSendIntervals}
+                  onClick={() => handleSendIntervals('amazfit')}
                   disabled={isIntervalsPushing}
                   className={`h-10 rounded-full border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
-                    intervalsPushSuccess
+                    intervalsPushSuccess && pushedBrandSuccess === 'amazfit'
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-orange-500'}`} />
+                  <span>{intervalsPushSuccess && pushedBrandSuccess === 'amazfit' ? '✓ Amazfit' : isIntervalsPushing && intervalsTargetBrand === 'amazfit' ? 'Enviando...' : 'Amazfit (Zepp)'}</span>
+                </button>
+
+                <button
+                  onClick={() => handleSendIntervals('apple')}
+                  disabled={isIntervalsPushing}
+                  className={`h-10 rounded-full border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                    intervalsPushSuccess && pushedBrandSuccess === 'apple'
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-slate-900 dark:bg-white'}`} />
+                  <span>{intervalsPushSuccess && pushedBrandSuccess === 'apple' ? '✓ Apple Watch' : isIntervalsPushing && intervalsTargetBrand === 'apple' ? 'Enviando...' : 'Apple Watch'}</span>
+                </button>
+
+                <button
+                  onClick={() => handleSendIntervals('polar')}
+                  disabled={isIntervalsPushing}
+                  className={`h-10 rounded-full border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                    intervalsPushSuccess && pushedBrandSuccess === 'polar'
                       ? 'bg-emerald-600 border-emerald-600 text-white'
                       : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
                   }`}
                 >
                   <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
-                  <span>{intervalsPushSuccess ? '✓ Sincronizado' : isIntervalsPushing ? 'Enviando...' : 'Polar / Suunto / Apple'}</span>
-                </button>
-
-                <button
-                  onClick={handleDownloadFit}
-                  disabled={isDownloadingFit}
-                  className="h-10 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70"
-                >
-                  <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                  <span>{isDownloadingFit ? 'Gerando .FIT...' : 'Baixar Arquivo .FIT'}</span>
+                  <span>{intervalsPushSuccess && pushedBrandSuccess === 'polar' ? '✓ Polar / Suunto' : isIntervalsPushing && intervalsTargetBrand === 'polar' ? 'Enviando...' : 'Polar / Suunto'}</span>
                 </button>
               </div>
+
+              <button
+                onClick={handleDownloadFit}
+                disabled={isDownloadingFit}
+                className="w-full h-9 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                <span>{isDownloadingFit ? 'Gerando Arquivo .FIT...' : 'Baixar Arquivo .FIT do Treino (Qualquer Relógio / WorkOutDoors)'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -2333,7 +2418,7 @@ export default function AthleteDesktopDashboard({
         </div>
       )}
 
-      {/* ── MODAL DE CONEXÃO INTERVALS.ICU (PONTE POLAR / SUUNTO / COROS / APPLE WATCH) ── */}
+      {/* ── MODAL DE CONEXÃO AMAZFIT (ZEPP) / APPLE WATCH / POLAR / SUUNTO ── */}
       {isIntervalsLoginOpen && (
         <div
           onClick={() => setIsIntervalsLoginOpen(false)}
@@ -2341,19 +2426,31 @@ export default function AthleteDesktopDashboard({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-[28px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-md rounded-[28px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-4 animate-in fade-in zoom-in-95 duration-150"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-indigo-500/15 text-indigo-600 flex items-center justify-center font-black text-sm">
+                <div
+                  className={`h-9 w-9 rounded-xl flex items-center justify-center font-black text-sm ${
+                    intervalsTargetBrand === 'amazfit'
+                      ? 'bg-orange-500/15 text-orange-600'
+                      : intervalsTargetBrand === 'apple'
+                      ? 'bg-slate-900/10 dark:bg-white/15 text-slate-900 dark:text-white'
+                      : 'bg-indigo-500/15 text-indigo-600'
+                  }`}
+                >
                   <Watch className="h-4 w-4" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Conectar Polar / Suunto / Apple Watch
+                    {intervalsTargetBrand === 'amazfit'
+                      ? 'Conectar Amazfit (Zepp)'
+                      : intervalsTargetBrand === 'apple'
+                      ? 'Conectar Apple Watch'
+                      : 'Conectar Polar / Suunto'}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Sincronização automática via Intervals.icu
+                    Sincronização estruturada via ponte gratuita Intervals.icu
                   </p>
                 </div>
               </div>
@@ -2365,11 +2462,92 @@ export default function AthleteDesktopDashboard({
               </button>
             </div>
 
-            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
-              <p className="font-bold text-slate-800 dark:text-slate-100">Como pegar sua chave (1 minuto):</p>
-              <p>1. Acesse <strong>intervals.icu</strong> (gratuito) e conecte seu Polar Flow, Suunto ou Apple Watch (Watchletic).</p>
-              <p>2. Vá em <strong>Settings (Configurações)</strong> → role até <strong>Developer Settings</strong> → clique em <strong>API Key</strong> e copie.</p>
+            {/* Seletor rápido de marca dentro do modal */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => setIntervalsTargetBrand('amazfit')}
+                className={`h-8 rounded-lg text-xs font-bold transition ${
+                  intervalsTargetBrand === 'amazfit'
+                    ? 'bg-white dark:bg-slate-900 text-orange-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Amazfit (Zepp)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIntervalsTargetBrand('apple')}
+                className={`h-8 rounded-lg text-xs font-bold transition ${
+                  intervalsTargetBrand === 'apple'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Apple Watch
+              </button>
+              <button
+                type="button"
+                onClick={() => setIntervalsTargetBrand('polar')}
+                className={`h-8 rounded-lg text-xs font-bold transition ${
+                  intervalsTargetBrand === 'polar'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Polar / Suunto
+              </button>
             </div>
+
+            {/* Passo a passo personalizado por marca */}
+            {intervalsTargetBrand === 'amazfit' && (
+              <div className="rounded-2xl bg-orange-500/5 border border-orange-500/20 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
+                <p className="font-bold text-orange-600 dark:text-orange-400">
+                  Como ativar no seu Amazfit (1 única vez):
+                </p>
+                <p>1. Crie uma conta gratuita em <strong>intervals.icu</strong>.</p>
+                <p>2. No celular, abra o app <strong>Zepp</strong> → <strong>Perfil</strong> → <strong>Vinculação de contas de terceiros</strong> → <strong>Intervals.icu</strong> e autorize.</p>
+                <p>3. No site intervals.icu, vá em <strong>Settings</strong> → <strong>Developer Settings</strong> → <strong>API Key</strong> e cole abaixo:</p>
+              </div>
+            )}
+
+            {intervalsTargetBrand === 'apple' && (
+              <div className="rounded-2xl bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+                <div className="space-y-1">
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    Opção 1 — Automático no app Exercício da Apple:
+                  </p>
+                  <p>1. Baixe o app gratuito <strong>Watchletic</strong> no iPhone e conecte ao <strong>intervals.icu</strong>.</p>
+                  <p>2. No intervals.icu, vá em <strong>Settings</strong> → <strong>Developer Settings</strong> → <strong>API Key</strong> e cole abaixo.</p>
+                </div>
+                <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-500">
+                    Prefere usar <strong>WorkOutDoors</strong> ou <strong>RunGap</strong> sem conta?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsIntervalsLoginOpen(false);
+                      handleDownloadFit();
+                    }}
+                    className="shrink-0 px-3 py-1.5 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[11px] font-bold flex items-center gap-1"
+                  >
+                    <Download className="h-3 w-3" />
+                    Baixar .FIT direto
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {intervalsTargetBrand === 'polar' && (
+              <div className="rounded-2xl bg-indigo-500/5 border border-indigo-500/20 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
+                <p className="font-bold text-indigo-600 dark:text-indigo-400">
+                  Como ativar no Polar Flow ou Suunto (1 única vez):
+                </p>
+                <p>1. Acesse <strong>intervals.icu</strong> (gratuito) e em <strong>Settings</strong> conecte sua conta <strong>Polar Flow</strong> ou <strong>Suunto</strong>.</p>
+                <p>2. Role até <strong>Developer Settings</strong> → clique em <strong>API Key</strong> e cole abaixo:</p>
+              </div>
+            )}
 
             <form onSubmit={handleIntervalsLoginSubmit} className="space-y-3.5">
               <div className="space-y-1.5">
@@ -2409,10 +2587,24 @@ export default function AthleteDesktopDashboard({
                 <button
                   type="submit"
                   disabled={isIntervalsLoggingIn}
-                  className="flex-1 h-11 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition disabled:opacity-70"
+                  className={`flex-1 h-11 rounded-full text-white font-bold text-sm flex items-center justify-center gap-2 transition disabled:opacity-70 ${
+                    intervalsTargetBrand === 'amazfit'
+                      ? 'bg-orange-600 hover:bg-orange-700'
+                      : intervalsTargetBrand === 'apple'
+                      ? 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
                   <RefreshCw className={`h-4 w-4 ${isIntervalsLoggingIn ? 'animate-spin' : ''}`} />
-                  <span>{isIntervalsLoggingIn ? 'Validando e enviando...' : 'Conectar e Sincronizar'}</span>
+                  <span>
+                    {isIntervalsLoggingIn
+                      ? 'Validando e enviando...'
+                      : intervalsTargetBrand === 'amazfit'
+                      ? 'Conectar Amazfit e Enviar'
+                      : intervalsTargetBrand === 'apple'
+                      ? 'Conectar Apple Watch e Enviar'
+                      : 'Conectar Polar/Suunto e Enviar'}
+                  </span>
                 </button>
                 <button
                   type="button"
