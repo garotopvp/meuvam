@@ -633,11 +633,11 @@ const StructuredStepsList = ({ workout }) => {
   );
 };
 
-// ─── VISUALIZADOR DE PERFIL DA SESSÃO (Design Limpo e Moderno conforme Mockup) ───
-const WorkoutSessionProfile = ({ workout }) => {
-  const { segments } = useMemo(() => expandWorkoutSegments(workout), [workout]);
+// ─── VISUALIZADOR DE PERFIL DA SESSÃO ESTILO GARMIN CONNECT ───
+const WorkoutSessionProfile = ({ workout, compact = false }) => {
+  const { segments, totalKm } = useMemo(() => expandWorkoutSegments(workout), [workout]);
 
-  // Default para o segmento mais intenso / chave da sessão
+  // Segmento padrão (o mais intenso / principal do treino)
   const defaultSegment = useMemo(() => {
     return segments.find(s => s.zone === 'Z5' || s.phase === 'Tiro') || segments.find(s => s.zone === 'Z4') || segments[0] || null;
   }, [segments]);
@@ -647,105 +647,196 @@ const WorkoutSessionProfile = ({ workout }) => {
 
   if (segments.length === 0) return null;
 
+  const chartLeft = 36;
+  const chartWidth = 590;
+  const chartRight = chartLeft + chartWidth;
+  const baselineY = 114;
+
+  // Régua de quilometragem do Eixo X no estilo Garmin
+  const ticks = useMemo(() => {
+    if (totalKm <= 0) return [0];
+    const stepCount = totalKm <= 6 ? 4 : 5;
+    const list = [];
+    for (let i = 0; i < stepCount; i++) {
+      list.push((totalKm / (stepCount - 1)) * i);
+    }
+    return list;
+  }, [totalKm]);
+
+  // Linhas guias horizontais das 5 Zonas VAM (Z1 a Z5)
+  const zonesGuide = [
+    { zone: 'Z5', label: 'Z5', y: 18, h: 96, color: '#FF3B30' },
+    { zone: 'Z4', label: 'Z4', y: 42, h: 72, color: '#FF9500' },
+    { zone: 'Z3', label: 'Z3', y: 66, h: 48, color: '#34C759' },
+    { zone: 'Z2', label: 'Z2', y: 90, h: 24, color: '#007AFF' },
+    { zone: 'Z1', label: 'Z1', y: 102, h: 12, color: '#8E8E93' },
+  ];
+
   return (
-    <div className="space-y-3">
-      {/* Top Header: PERFIL DA SESSÃO & Inspetor de Ritmo */}
-      <div className="flex items-center justify-between text-[11px] font-bold tracking-wider">
-        <span className="text-slate-400 uppercase tracking-widest">PERFIL DA SESSÃO</span>
-        {active && (
-          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 font-semibold truncate text-xs">
-            <span className="font-bold">
-              {active.repIndex 
-                ? (active.isRest ? `Recup. ${active.repIndex}/${active.repCount}` : `Tiro ${active.repIndex}/${active.repCount}`) 
-                : active.name.split('(')[0].trim()}
-            </span>
-            <span className="text-slate-300 dark:text-slate-600">•</span>
-            <span>{active.dist >= 1 ? `${active.dist.toFixed(1)} km` : `${Math.round(active.dist * 1000)}m`}</span>
-            <span className="text-slate-300 dark:text-slate-600">•</span>
-            <span 
-              className="font-bold"
-              style={{ color: active.color || '#FF3B30' }}
-            >
-              {active.pace.replace(' min/km', ' /km')} ({active.zone})
-            </span>
+    <div className="rounded-2xl border border-slate-800 bg-[#0B1120] text-slate-100 shadow-xl p-3.5 sm:p-4 space-y-2.5">
+      {/* Top Header do Gráfico estilo Garmin Connect */}
+      <div className="flex items-center justify-between text-xs font-semibold">
+        <div className="flex items-center gap-2">
+          <div className="flex h-5 w-5 items-center justify-center rounded-md bg-cyan-500/20 text-cyan-400">
+            <Activity className="h-3.5 w-3.5" />
           </div>
-        )}
+          <span className="font-bold tracking-wide uppercase text-[11px] text-slate-300">
+            Perfil do Treino • Garmin Connect
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+          <span className="font-bold text-slate-200">
+            {workout.metrics?.distance || `${totalKm.toFixed(1)} km`}
+          </span>
+          <span>•</span>
+          <span>{formatEstimatedTime(workout.metrics?.duration)}</span>
+        </div>
       </div>
 
-      {/* Régua de Barras Visuais Proporcionais ao Ritmo - MAIS LARGA, ALTA E COM DETALHES */}
-      <div className="h-20 sm:h-24 w-full flex items-end gap-1.5 sm:gap-2 pt-2 pb-1 select-none">
-        {segments.map((seg, idx) => {
-          const isBlock = seg.phase === 'Aquecimento' || seg.phase === 'Desaquecimento' || seg.phase === 'Corrida' || (!seg.isRest && seg.phase !== 'Tiro');
-          const isRest = seg.isRest || seg.phase === 'Recuperação';
+      {/* Canvas SVG Interativo com Escala Real de Quilometragem e Zonas */}
+      <div className="relative w-full">
+        <svg 
+          viewBox="0 0 640 142" 
+          className="w-full h-28 sm:h-36 overflow-visible select-none"
+        >
+          {/* Linhas de Grade de Intensidade (Zonas VAM Z1 - Z5) */}
+          <g stroke="#334155" strokeDasharray="3 3" strokeWidth="0.8" opacity="0.45">
+            {zonesGuide.map((zg) => (
+              <line key={zg.zone} x1={chartLeft} y1={zg.y} x2={chartRight} y2={zg.y} />
+            ))}
+            <line x1={chartLeft} y1={baselineY} x2={chartRight} y2={baselineY} strokeDasharray="none" stroke="#475569" strokeWidth="1" />
+          </g>
 
-          if (isBlock) {
+          {/* Rótulos das Zonas no Eixo Y */}
+          <g textAnchor="end" className="text-[9px] font-mono font-bold select-none">
+            {zonesGuide.map((zg) => (
+              <text key={zg.zone} x={chartLeft - 6} y={zg.y + 3} fill={zg.color}>
+                {zg.label}
+              </text>
+            ))}
+          </g>
+
+          {/* Degraus e Blocos do Treino Proporcionais à Distância (Estilo Garmin Step Chart) */}
+          {segments.map((s, idx) => {
+            const x = chartLeft + (s.startKm / totalKm) * chartWidth;
+            const w = Math.max(2, (s.dist / totalKm) * chartWidth - 1.2);
+            
+            // Altura ancorada na Zona de intensidade do Garmin
+            let h = 24;
+            if (s.zone === 'Z5') h = 96;
+            else if (s.zone === 'Z4') h = 72;
+            else if (s.zone === 'Z3') h = 48;
+            else if (s.zone === 'Z2') h = 24;
+            else if (s.zone === 'Z1') h = 12;
+
+            if (s.isRest) h = 10;
+
+            const y = baselineY - h;
+            const isHovered = hoveredSegment === s;
+
             return (
-              <div
-                key={idx}
-                onMouseEnter={() => setHoveredSegment(seg)}
+              <g 
+                key={idx} 
+                className="cursor-pointer"
+                onMouseEnter={() => setHoveredSegment(s)}
                 onMouseLeave={() => setHoveredSegment(null)}
-                className="relative rounded-xl cursor-pointer transition-all duration-200 hover:brightness-110 flex-1 min-w-[50px] flex items-center justify-center overflow-hidden"
-                style={{
-                  flexGrow: Math.max(3, Math.min(8, Math.round(seg.dist * 2.5))),
-                  height: `${seg.height}px`,
-                  backgroundColor: seg.color,
-                  opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
-                  transform: hoveredSegment === seg ? 'scaleY(1.06)' : 'none',
-                  transformOrigin: 'bottom'
-                }}
-                title={`${seg.name} • ${seg.pace}`}
               >
-                <span className="text-[10px] font-bold text-white/90 drop-shadow truncate px-1 select-none pointer-events-none">
-                  {seg.dist >= 1 ? `${seg.dist.toFixed(1)}km` : `${Math.round(seg.dist * 1000)}m`}
-                </span>
-              </div>
-            );
-          }
+                <rect
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={h}
+                  rx="2.5"
+                  ry="2.5"
+                  fill={s.color}
+                  opacity={isHovered ? 1 : hoveredSegment ? 0.45 : 0.92}
+                  filter={isHovered ? 'drop-shadow(0px 0px 6px rgba(255,255,255,0.75))' : undefined}
+                  className="transition-all duration-150"
+                />
 
-          if (isRest) {
+                {/* Texto dentro do bloco quando largo o suficiente */}
+                {w >= 44 && h >= 22 && (
+                  <text
+                    x={x + w / 2}
+                    y={y + h / 2 + 3.5}
+                    textAnchor="middle"
+                    className="text-[9.5px] font-bold fill-white select-none pointer-events-none drop-shadow-sm font-sans"
+                  >
+                    {s.dist >= 1 ? `${s.dist.toFixed(1)} km` : `${Math.round(s.dist * 1000)}m`}
+                  </text>
+                )}
+
+                {/* Número do tiro em séries repetidas */}
+                {s.repIndex && w < 44 && (
+                  <text
+                    x={x + w / 2}
+                    y={baselineY - 4}
+                    textAnchor="middle"
+                    className="text-[8.5px] font-black fill-white select-none pointer-events-none drop-shadow-sm font-mono"
+                  >
+                    {s.repIndex}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+
+          {/* Eixo X com Régua de Quilometragem do Garmin */}
+          <line x1={chartLeft} y1={baselineY + 1} x2={chartRight} y2={baselineY + 1} stroke="#475569" strokeWidth="1" />
+          {ticks.map((t, idx) => {
+            const x = chartLeft + (t / totalKm) * chartWidth;
             return (
-              <div
-                key={idx}
-                onMouseEnter={() => setHoveredSegment(seg)}
-                onMouseLeave={() => setHoveredSegment(null)}
-                className="cursor-pointer rounded-full transition-all duration-200 hover:brightness-90 shrink-0 flex items-center justify-center"
-                style={{
-                  width: '9px',
-                  height: `${seg.height || 20}px`,
-                  backgroundColor: '#94A3B8',
-                  opacity: hoveredSegment === seg ? 1 : hoveredSegment ? 0.45 : 0.75,
-                  transform: hoveredSegment === seg ? 'scaleY(1.15)' : 'none',
-                  transformOrigin: 'bottom'
-                }}
-                title={`${seg.name} • Recuperação`}
-              />
+              <g key={idx}>
+                <line x1={x} y1={baselineY + 1} x2={x} y2={baselineY + 5} stroke="#64748B" strokeWidth="1" />
+                <text 
+                  x={x} 
+                  y={baselineY + 15} 
+                  textAnchor={idx === 0 ? 'start' : idx === ticks.length - 1 ? 'end' : 'middle'}
+                  className="text-[8.5px] font-mono fill-slate-400 font-semibold select-none"
+                >
+                  {t.toFixed(1)} km
+                </text>
+              </g>
             );
-          }
+          })}
+        </svg>
+      </div>
 
-          // Barra de Tiro / Reta: Bem mais larga e alta, com número da repetição gravado na barra
-          return (
-            <div
-              key={idx}
-              onMouseEnter={() => setHoveredSegment(seg)}
-              onMouseLeave={() => setHoveredSegment(null)}
-              className="cursor-pointer rounded-lg sm:rounded-xl transition-all duration-200 hover:brightness-110 flex-1 min-w-[24px] sm:min-w-[28px] max-w-[42px] flex items-end justify-center pb-1.5"
-              style={{
-                height: `${seg.height}px`,
-                backgroundColor: seg.color,
-                opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
-                transform: hoveredSegment === seg ? 'scaleY(1.06)' : 'none',
-                transformOrigin: 'bottom'
-              }}
-              title={`${seg.name} • ${seg.pace}`}
-            >
-              {seg.repIndex && (
-                <span className="text-[10px] sm:text-[11px] font-black text-white select-none pointer-events-none drop-shadow-sm">
-                  {seg.repIndex}
-                </span>
-              )}
+      {/* HUD Garmin - Barra de Inspeção da Etapa */}
+      <div className="flex items-center justify-between min-h-[32px] px-3 py-1.5 rounded-xl bg-slate-900/95 border border-slate-800 text-xs font-mono">
+        {active ? (
+          <>
+            <div className="flex items-center gap-2 truncate">
+              <span 
+                className="h-2 w-2 rounded-full shrink-0" 
+                style={{ backgroundColor: active.color || '#007AFF' }}
+              />
+              <span className="text-white font-bold truncate">
+                {active.repIndex 
+                  ? (active.isRest ? `Recuperação ${active.repIndex}/${active.repCount}` : `Tiro ${active.repIndex}/${active.repCount}`) 
+                  : active.name.split('(')[0].trim()}
+              </span>
+              <span className="text-slate-500">•</span>
+              <span className="text-slate-300 font-semibold">
+                {active.dist >= 1 ? `${active.dist.toFixed(1)} km` : `${Math.round(active.dist * 1000)}m`}
+              </span>
             </div>
-          );
-        })}
+            <div className="flex items-center gap-2 shrink-0 font-bold">
+              <span style={{ color: active.color || '#007AFF' }}>
+                {active.pace.replace(' min/km', ' /km')}
+              </span>
+              <span className="text-slate-500">•</span>
+              <span className="text-slate-300">
+                {active.zone}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-between w-full text-slate-400 text-[11px]">
+            <span>Passe o cursor sobre o gráfico para inspecionar cada etapa</span>
+            <span>Total: <strong className="text-slate-200">{totalKm.toFixed(1)} km</strong></span>
+          </div>
+        )}
       </div>
     </div>
   );
