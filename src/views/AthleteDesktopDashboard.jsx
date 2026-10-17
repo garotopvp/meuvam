@@ -1116,47 +1116,79 @@ export default function AthleteDesktopDashboard({
               </Card>
             )}
 
-            {/* Card com as Zonas de Treino do Aluno com as cores oficiais */}
+            {/* Card com as Zonas de Ritmo (VAM) do Aluno com as cores oficiais e dados de pace */}
             <Card className="border-slate-200 dark:border-slate-800">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-bold text-slate-900 dark:text-white">
-                  Zonas de Treino (VAM)
+                  Suas Zonas de Ritmo (VAM)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {(athlete?.zones && athlete.zones.length > 0 ? athlete.zones : [
-                  { name: 'Recuperação', pace: '6:13', hrRange: '< 154' },
-                  { name: 'Aeróbico Leve', pace: '5:20', hrRange: '154 - 164' },
-                  { name: 'Aeróbico', pace: '4:40', hrRange: '164 - 174' },
-                  { name: 'Limiar', pace: '4:09', hrRange: '174 - 185' },
-                  { name: 'VAM (Máximo)', pace: '3:44', hrRange: '185 - 195' }
-                ]).map((zone, i) => {
-                  const zoneColors = ['#8E8E93', '#007AFF', '#34C759', '#FF9500', '#FF3B30'];
-                  const color = zoneColors[i % zoneColors.length];
+                {[
+                  { 
+                    zone: 'Z1', 
+                    name: 'Recuperação', 
+                    pace: '> 5:45 min/km', 
+                    hr: '< 154 bpm',
+                    color: '#8E8E93' 
+                  },
+                  { 
+                    zone: 'Z2', 
+                    name: 'Rodagem Base', 
+                    pace: '5:15 - 5:45 min/km', 
+                    hr: '154 - 164 bpm',
+                    color: '#007AFF' 
+                  },
+                  { 
+                    zone: 'Z3', 
+                    name: 'Ritmo Moderado', 
+                    pace: '4:40 - 5:15 min/km', 
+                    hr: '164 - 174 bpm',
+                    color: '#34C759' 
+                  },
+                  { 
+                    zone: 'Z4', 
+                    name: 'Limiar / VAM', 
+                    pace: '4:05 - 4:40 min/km', 
+                    hr: '174 - 185 bpm',
+                    color: '#FF9500' 
+                  },
+                  { 
+                    zone: 'Z5', 
+                    name: 'Tiros Máximos', 
+                    pace: '< 4:05 min/km', 
+                    hr: '185 - 195 bpm',
+                    color: '#FF3B30' 
+                  }
+                ].map((item, i) => {
+                  const hrText = athlete?.zones?.[i]?.hrRange 
+                    ? (athlete.zones[i].hrRange.includes('bpm') ? athlete.zones[i].hrRange : `${athlete.zones[i].hrRange} bpm`)
+                    : item.hr;
+
                   return (
                     <div 
                       key={i} 
                       className="flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all shadow-2xs hover:scale-[1.01]"
                       style={{ 
-                        background: `${color}35`,
-                        borderLeft: `5px solid ${color}` 
+                        background: `${item.color}25`,
+                        borderLeft: `5px solid ${item.color}` 
                       }}
                     >
                       <div className="flex-1 min-w-0 pr-2">
                         <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                          {zone.name}
+                          {item.zone} • {item.name}
                         </p>
-                        {zone.hrRange && (
+                        {hrText && (
                           <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                            {zone.hrRange.includes('bpm') ? zone.hrRange : `${zone.hrRange} bpm`}
+                            {hrText}
                           </p>
                         )}
                       </div>
                       <span 
-                        className="text-sm font-black tabular-nums shrink-0"
-                        style={{ color }}
+                        className="text-xs sm:text-sm font-black tabular-nums shrink-0"
+                        style={{ color: item.color }}
                       >
-                        {zone.pace}
+                        {item.pace}
                       </span>
                     </div>
                   );
