@@ -110,33 +110,37 @@ const getStepDetails = (name = '', type = '') => {
   const combined = (rawType + ' ' + rawName).toLowerCase();
 
   let typeLabel = 'Corrida';
-  let colorText = 'text-cyan-600 dark:text-cyan-400';
-  let accentBorder = 'border-l-cyan-500';
+  let colorText = 'text-[#007AFF]';
+  let accentBorder = 'border-l-[#007AFF]';
 
-  if (combined.includes('aquec') || combined.includes('warm')) {
+  if (combined.includes('aquec') || combined.includes('warm') || combined.includes('rodagem') || combined.includes('base') || combined.includes('z2')) {
     typeLabel = 'Aquecimento';
-    colorText = 'text-amber-600 dark:text-amber-400';
-    accentBorder = 'border-l-amber-500';
-  } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta')) {
-    typeLabel = 'Desaquecimento';
-    colorText = 'text-sky-600 dark:text-sky-400';
-    accentBorder = 'border-l-sky-400';
-  } else if (combined.includes('recupera') || combined.includes('rest') || combined.includes('pausa')) {
-    typeLabel = 'Recuperação';
-    colorText = 'text-slate-500 dark:text-slate-400';
-    accentBorder = 'border-l-slate-400';
-  } else if (combined.includes('tiro') || combined.includes('interval') || combined.includes('sprint') || combined.includes('vam')) {
+    colorText = 'text-[#007AFF]';
+    accentBorder = 'border-l-[#007AFF]';
+  } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta') || combined.includes('recupera') || combined.includes('rest') || combined.includes('pausa') || combined.includes('regenerativo') || combined.includes('z1')) {
+    typeLabel = combined.includes('recupera') ? 'Recuperação' : 'Desaquecimento';
+    colorText = 'text-[#8E8E93]';
+    accentBorder = 'border-l-[#8E8E93]';
+  } else if (combined.includes('moderado') || combined.includes('aerobico') || combined.includes('aeróbico') || combined.includes('z3')) {
+    typeLabel = 'Moderado';
+    colorText = 'text-[#34C759]';
+    accentBorder = 'border-l-[#34C759]';
+  } else if (combined.includes('limiar') || combined.includes('tempo') || combined.includes('forte') || combined.includes('z4')) {
+    typeLabel = 'Limiar';
+    colorText = 'text-[#FF9500]';
+    accentBorder = 'border-l-[#FF9500]';
+  } else if (combined.includes('tiro') || combined.includes('interval') || combined.includes('sprint') || combined.includes('vam') || combined.includes('z5')) {
     typeLabel = 'Tiro';
-    colorText = 'text-violet-600 dark:text-violet-400';
-    accentBorder = 'border-l-violet-500';
+    colorText = 'text-[#FF3B30]';
+    accentBorder = 'border-l-[#FF3B30]';
   } else if (combined.includes('caminha') || combined.includes('walk')) {
     typeLabel = 'Caminhada';
-    colorText = 'text-emerald-600 dark:text-emerald-400';
-    accentBorder = 'border-l-emerald-500';
+    colorText = 'text-[#34C759]';
+    accentBorder = 'border-l-[#34C759]';
   } else if (rawType) {
     typeLabel = rawType.toLowerCase() === 'trabalho' ? 'Corrida' : rawType;
-    colorText = 'text-cyan-600 dark:text-cyan-400';
-    accentBorder = 'border-l-cyan-500';
+    colorText = 'text-[#007AFF]';
+    accentBorder = 'border-l-[#007AFF]';
   }
 
   let customName = rawName;
@@ -208,9 +212,9 @@ const expandWorkoutSegments = (workout) => {
           name: `Tiro ${i}/${count} (${workVal})`,
           phase: 'Tiro',
           zone: 'Z5',
-          zoneLabel: '100% VAM (Z5)',
+          zoneLabel: 'Tiros Máximos (Z5)',
           height: 95,
-          color: '#6366f1', // Indigo / Cobalt
+          color: '#FF3B30', // Z5 Vermelho
           dist: workKm,
           pace: b.pace || '3:45 min/km',
           startKm: cumDist,
@@ -225,9 +229,9 @@ const expandWorkoutSegments = (workout) => {
             name: `Recup. ${i}/${count}`,
             phase: 'Recuperação',
             zone: 'Z1',
-            zoneLabel: 'Recuperação Ativa (Z1)',
+            zoneLabel: 'Recuperação (Z1)',
             height: 26,
-            color: '#475569', // Slate
+            color: '#8E8E93', // Z1 Cinza
             dist: restKm,
             pace: '6:00 min/km',
             startKm: cumDist,
@@ -245,38 +249,38 @@ const expandWorkoutSegments = (workout) => {
       let zone = 'Z2';
       let zoneLabel = 'Base Aeróbia (Z2)';
       let height = 55;
-      let color = '#0284c7'; // Sky-600
+      let color = '#007AFF'; // Z2 Azul
       let phase = 'Corrida';
 
       if (combined.includes('aquec') || combined.includes('warm')) {
         zone = 'Z2';
         zoneLabel = 'Aquecimento (Z2)';
         height = 48;
-        color = '#38bdf8'; // Sky-400
+        color = '#007AFF'; // Z2 Azul
         phase = 'Aquecimento';
-      } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta') || combined.includes('regenerativo')) {
+      } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta') || combined.includes('regenerativo') || combined.includes('recupera')) {
         zone = 'Z1';
-        zoneLabel = 'Soltura / Desaquecimento (Z1)';
+        zoneLabel = 'Recuperação (Z1)';
         height = 36;
-        color = '#0d9488'; // Teal
+        color = '#8E8E93'; // Z1 Cinza
         phase = 'Desaquecimento';
       } else if (combined.includes('limiar') || combined.includes('tempo') || combined.includes('z4') || combined.includes('forte')) {
         zone = 'Z4';
-        zoneLabel = 'Limiar Anaeróbio (Z4)';
+        zoneLabel = 'Limiar / VAM (Z4)';
         height = 80;
-        color = '#f59e0b'; // Amber
+        color = '#FF9500'; // Z4 Laranja
         phase = 'Limiar';
-      } else if (combined.includes('tiro') || combined.includes('sprint') || combined.includes('vam')) {
+      } else if (combined.includes('tiro') || combined.includes('sprint') || combined.includes('vam') || combined.includes('z5')) {
         zone = 'Z5';
-        zoneLabel = 'Potência Máxima (Z5)';
+        zoneLabel = 'Tiros Máximos (Z5)';
         height = 95;
-        color = '#6366f1';
+        color = '#FF3B30'; // Z5 Vermelho
         phase = 'Tiro';
-      } else if (combined.includes('moderado') || combined.includes('z3')) {
+      } else if (combined.includes('moderado') || combined.includes('z3') || combined.includes('aerobico') || combined.includes('aeróbico')) {
         zone = 'Z3';
         zoneLabel = 'Ritmo Moderado (Z3)';
         height = 68;
-        color = '#10b981'; // Emerald
+        color = '#34C759'; // Z3 Verde
         phase = 'Moderado';
       }
 
@@ -422,7 +426,7 @@ const TrainingPeaksWorkoutChart = ({ workout, compact = false }) => {
             <div className="flex items-center gap-2 text-slate-300 shrink-0 font-semibold">
               <span className="text-cyan-400">{hovered.pace}</span>
               <span className="text-slate-500">•</span>
-              <span className="text-amber-400">{hovered.zoneLabel}</span>
+              <span style={{ color: hovered.color || '#007AFF' }}>{hovered.zoneLabel}</span>
               <span className="text-slate-500">•</span>
               <span>{hovered.dist.toFixed(2)} km</span>
             </div>
