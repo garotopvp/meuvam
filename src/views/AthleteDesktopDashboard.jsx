@@ -687,28 +687,47 @@ const WorkoutPrescription = ({ workout }) => {
 
       <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
         {baseBlocks.map((b, idx) => {
-          const isInterval = b.type === 'Tiro' || (b.name || '').includes('x') || (b.name || '').toLowerCase().includes('forte');
+          let title = b.name || b.type || 'Fase';
+          let subtitle = b.subtitle;
+          let pauseNote = b.pauseNote;
+
+          if (title.includes(' • ')) {
+            const parts = title.split(' • ');
+            title = parts[0].trim();
+            if (!subtitle && parts[1]) subtitle = parts[1].trim();
+          } else if (title.includes(' - ')) {
+            const parts = title.split(' - ');
+            title = parts[0].trim();
+            if (!subtitle && parts[1]) subtitle = parts[1].trim();
+          }
+
+          // Capitaliza se for tudo maiúsculo
+          if (title === title.toUpperCase() && title.length > 3) {
+            title = title.charAt(0) + title.slice(1).toLowerCase();
+          }
+
+          const isInterval = b.type === 'Tiro' || title.includes('x') || title.includes('×') || title.toLowerCase().includes('forte') || (b.zone === 'Z5');
           const paceFormatted = b.pace ? b.pace.replace(' min/km', ' /km') : '--';
 
           return (
-            <div key={idx} className="py-3 flex items-center justify-between text-sm gap-2">
+            <div key={idx} className="py-2.5 sm:py-3 flex items-center justify-between text-sm gap-2">
               <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
                 <span className="font-bold text-slate-900 dark:text-white">
-                  {b.name}
+                  {title}
                 </span>
-                {b.subtitle && (
-                  <span className="text-slate-400 font-normal">
-                    • {b.subtitle}
+                {subtitle && (
+                  <span className="text-slate-400 font-normal text-xs sm:text-sm">
+                    • {subtitle}
                   </span>
                 )}
-                {b.pauseNote && (
+                {pauseNote && (
                   <span className="text-[#FF3B30] dark:text-[#FF453A] font-normal text-xs sm:text-sm">
-                    {b.pauseNote}
+                    {pauseNote}
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-5 sm:gap-6 shrink-0 font-mono">
+              <div className="flex items-center gap-4 sm:gap-6 shrink-0 font-mono">
                 <span className={`text-xs sm:text-sm ${isInterval ? 'text-[#FF3B30] dark:text-[#FF453A] font-bold' : 'text-slate-400 dark:text-slate-500 font-medium'}`}>
                   {paceFormatted}
                 </span>
@@ -1205,154 +1224,131 @@ export default function AthleteDesktopDashboard({
           {/* ── COLUNA DA DIREITA: DETALHES DO TREINO SELECIONADO (LARGURA FIXA OTIMIZADA) ── */}
           <div className="w-full lg:w-[380px] xl:w-[420px] 2xl:w-[450px] shrink-0 space-y-6">
             {activeWorkout ? (
-              <Card className="border-slate-200 dark:border-slate-800 shadow-md">
-                <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="vam">
-                      {activeWorkout.type || 'Corrida Prescrita'}
-                    </Badge>
-                    <span className="text-xs font-semibold text-slate-400">
-                      {activeWorkout.date}
+              <div className="rounded-[28px] sm:rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-[0_10px_35px_-5px_rgba(0,0,0,0.06)] p-6 sm:p-7 space-y-5 transition-all">
+                {/* Top Bar: Data + Tipo + Status */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-800 dark:bg-slate-200 inline-block" />
+                    <span>{formatModalHeaderDate(activeWorkout.date)}</span>
+                    <span>•</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {getModalWorkoutType(activeWorkout)}
                     </span>
                   </div>
-                  <CardTitle className="text-xl font-extrabold text-slate-900 dark:text-white mt-2">
+
+                  {activeWorkout.status === 'completed' ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600">
+                      <CheckCircle2 className="h-3 w-3" /> Concluído
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-600">
+                      <Clock className="h-3 w-3" /> Agendado
+                    </span>
+                  )}
+                </div>
+
+                {/* Título & Descrição */}
+                <div className="space-y-1.5">
+                  <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-tight">
                     {activeWorkout.title || 'Treino'}
-                  </CardTitle>
+                  </h3>
                   {activeWorkout.description && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-normal">
                       {activeWorkout.description}
                     </p>
                   )}
-                </CardHeader>
+                </div>
 
-                <CardContent className="pt-4 space-y-4">
-                  {/* Métricas Rápidas do Treino Selecionado */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-800/40 text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Distância</p>
-                      <p className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
-                        {activeWorkout.metrics?.distance || '--'}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-800/40 text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Tempo</p>
-                      <p className="text-sm font-black text-slate-900 dark:text-white mt-0.5 tabular-nums">
-                        {formatEstimatedTime(activeWorkout.metrics?.duration)}
-                      </p>
-                    </div>
-                    {(() => {
-                      const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
-                      const mainBlock = blocks.find(b => {
-                        const n = (b.name || '').toLowerCase();
-                        return !n.includes('aquec') && !n.includes('desaquec');
-                      }) || blocks[0];
-                      const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
-                      const paceToShow = mainBlock?.pace || (isInterval ? '3:45 min/km' : '5:30 min/km');
-                      return (
-                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-800/40 text-center">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Ritmo Alvo</p>
-                          <p className="text-xs font-black text-cyan-600 dark:text-cyan-400 mt-1 truncate">
-                            {paceToShow}
-                          </p>
-                        </div>
-                      );
-                    })()}
-                  </div>
+                {/* Pílulas de Métricas */}
+                {(() => {
+                  const { totalKm, baseBlocks } = expandWorkoutSegments(activeWorkout);
+                  const mainBlock = baseBlocks.find(b => {
+                    const n = (b.name || '').toLowerCase();
+                    return !n.includes('aquec') && !n.includes('desaquec');
+                  }) || baseBlocks[0];
 
-                  {/* Gráfico SVG de Intensidade e Intervalos (TrainingPeaks) */}
-                  <TrainingPeaksWorkoutChart workout={activeWorkout} compact />
+                  const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
+                  const targetPace = mainBlock?.pace ? mainBlock.pace.replace(' min/km', '').replace(' /km', '') : (isInterval ? '3:30' : '5:05');
+                  const targetZone = isInterval ? 'Z5' : (activeWorkout.title?.toLowerCase().includes('limiar') ? 'Z4' : 'Z2');
 
-                  {/* Bloco de Séries de Tiros / Estrutura */}
-                  {(() => {
-                    const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
-                    return blocks.length > 0 ? (
-                      <div className="space-y-2">
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                          Estrutura do Treino
-                        </p>
-                        <div className="space-y-1.5">
-                          {blocks.map((b, i) => {
-                            const step = getStepDetails(b.name, b.type);
-                            return (
-                              <div 
-                                key={i} 
-                                className={`flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 text-xs shadow-2xs dark:border-slate-800 dark:bg-slate-900 border-l-[3px] ${step.accentBorder}`}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                                    {i + 1}
-                                  </span>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className={`text-[11px] font-bold uppercase tracking-wider ${step.colorText}`}>
-                                        {step.typeLabel}
-                                      </span>
-                                      {step.customName && (
-                                        <p className="font-semibold text-slate-800 dark:text-slate-200">
-                                          • {step.customName}
-                                        </p>
-                                      )}
-                                    </div>
-                                    {b.pace && (
-                                      <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                                        Ritmo: <span className="font-bold text-slate-700 dark:text-slate-300">{b.pace}</span>
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                <span className="font-bold text-slate-800 dark:text-slate-200 text-xs tabular-nums">
-                                  {b.distance || (b.duration ? formatEstimatedTime(b.duration) : '--')}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                  const zoneColorMap = {
+                    Z1: '#8E8E93',
+                    Z2: '#007AFF',
+                    Z3: '#34C759',
+                    Z4: '#FF9500',
+                    Z5: '#FF3B30'
+                  };
+                  const targetColor = zoneColorMap[targetZone] || '#007AFF';
+
+                  const distanceVal = activeWorkout.metrics?.distance 
+                    ? (activeWorkout.metrics.distance.includes('km') ? activeWorkout.metrics.distance : `${activeWorkout.metrics.distance} km`)
+                    : `${totalKm.toFixed(1)} km`;
+
+                  let durationVal = activeWorkout.metrics?.duration;
+                  if (!durationVal || durationVal === '--') {
+                    durationVal = `~${Math.round(totalKm * 5.5)} min`;
+                  } else {
+                    durationVal = formatEstimatedTime(durationVal);
+                  }
+
+                  return (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-3.5 py-1.5 rounded-full">
+                        Total: <span className="font-bold">{distanceVal}</span>
                       </div>
-                    ) : (
-                      <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-                        <p className="font-semibold">Treino Contínuo / Rodagem</p>
-                        <p className="text-slate-400 mt-1">Mantenha a frequência na zona alvo indicada pelo seu professor.</p>
+
+                      <div className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-3.5 py-1.5 rounded-full">
+                        Tempo: <span className="font-bold">{durationVal}</span>
                       </div>
-                    );
-                  })()}
 
-                  {/* Status do Treino */}
-                  <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-800/30">
-                    <span className="text-xs font-semibold text-slate-500">Status</span>
-                    {activeWorkout.status === 'completed' ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Concluído
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-600">
-                        <Clock className="h-3.5 w-3.5" /> Agendado
-                      </span>
-                    )}
-                  </div>
+                      <div 
+                        className="text-xs font-bold px-3.5 py-1.5 rounded-full border transition-all"
+                        style={{
+                          backgroundColor: `${targetColor}12`,
+                          color: targetColor,
+                          borderColor: `${targetColor}28`
+                        }}
+                      >
+                        Alvo: {targetPace} /km ({targetZone})
+                      </div>
+                    </div>
+                  );
+                })()}
 
-                  {/* Ações */}
-                  <div className="pt-2 space-y-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setIsDetailModalOpen(true)}
-                      className="w-full gap-2 border-slate-200 text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 font-semibold"
-                    >
-                      <Eye className="h-4 w-4 text-blue-600" />
-                      Abrir Atividade Completa
-                    </Button>
-                    <Button variant="vam" className="w-full gap-2">
-                      <Zap className="h-4 w-4" />
-                      Enviar Treino para o Garmin
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                {/* Perfil da Sessão (Visualizador de Barras Interativo) */}
+                <WorkoutSessionProfile workout={activeWorkout} />
+
+                {/* Prescrição Detalhada das Séries */}
+                <WorkoutPrescription workout={activeWorkout} />
+
+                {/* Botões de Ação do Painel */}
+                <div className="pt-2 flex flex-col gap-2.5">
+                  <button 
+                    onClick={handleSendGarmin}
+                    disabled={isGarminPushing}
+                    className="w-full h-11 sm:h-12 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isGarminPushing ? 'animate-spin' : ''}`} />
+                    <span>
+                      {garminPushSuccess ? '✓ Enviado para o Garmin' : isGarminPushing ? 'Enviando...' : 'Enviar Treino para o Garmin'}
+                    </span>
+                  </button>
+
+                  <button 
+                    onClick={() => setIsDetailModalOpen(true)}
+                    className="w-full h-11 sm:h-12 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <Eye className="h-4 w-4 text-slate-500" />
+                    <span>Abrir Atividade Completa</span>
+                  </button>
+                </div>
+              </div>
             ) : (
-              <Card className="p-8 text-center border-dashed">
+              <div className="rounded-[28px] sm:rounded-[32px] p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                 <CalendarIcon className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-700 mb-3" />
                 <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhum treino selecionado</h4>
                 <p className="text-xs text-slate-400 mt-1">Clique em qualquer dia com treino no calendário para ver os detalhes da série.</p>
-              </Card>
+              </div>
             )}
 
             {/* Card com as Zonas de Ritmo (VAM) do Aluno com as cores oficiais e dados de pace */}
