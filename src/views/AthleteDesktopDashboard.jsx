@@ -11,7 +11,8 @@ import {
   MoreVertical,
   Bike,
   Waves,
-  Activity
+  Activity,
+  Loader2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -500,6 +501,7 @@ const StructuredStepsList = ({ workout }) => {
 export default function AthleteDesktopDashboard({ 
   athlete, 
   workouts = [], 
+  isRefreshing = false,
   onLogout, 
   deferredPrompt, 
   onInstall,
@@ -752,13 +754,25 @@ export default function AthleteDesktopDashboard({
 
           {/* Cards de Métricas Resumidas do Mês */}
           <div className="flex items-center gap-3">
-            <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900 flex items-center gap-1.5">
               <span className="text-[10px] uppercase font-semibold text-slate-400">Treinos no Mês: </span>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{monthStats.completed} / {monthStats.total}</span>
+              {isRefreshing && workouts.length === 0 ? (
+                <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-600" /> Carregando...
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{monthStats.completed} / {monthStats.total}</span>
+              )}
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900 flex items-center gap-1.5">
               <span className="text-[10px] uppercase font-semibold text-slate-400">Distância Prevista: </span>
-              <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">{monthStats.distance} km</span>
+              {isRefreshing && workouts.length === 0 ? (
+                <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin text-cyan-600" /> Carregando...
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">{monthStats.distance} km</span>
+              )}
             </div>
           </div>
         </div>
@@ -782,7 +796,13 @@ export default function AthleteDesktopDashboard({
                 </div>
 
                 {/* Grid das Semanas com Resumo Semanal na 8ª Coluna */}
-                <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60 relative">
+                  {isRefreshing && workouts.length === 0 && (
+                    <div className="absolute inset-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Carregando seus treinos...</span>
+                    </div>
+                  )}
                   {calendarWeeks.map((week, wIdx) => (
                     <div key={wIdx} className="grid grid-cols-8 divide-x divide-slate-100 dark:divide-slate-800/60 h-[140px] max-h-[140px]">
                       {/* 7 Dias da Semana */}

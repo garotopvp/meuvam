@@ -201,6 +201,7 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
                 <AthleteDesktopDashboard 
                   athlete={athlete} 
                   workouts={workouts} 
+                  isRefreshing={isRefreshing}
                   onLogout={() => supabase.auth.signOut()} 
                   deferredPrompt={deferredPrompt} 
                   onInstall={handleInstallApp} 
@@ -216,6 +217,7 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
                 <AthleteDesktopDashboard 
                   athlete={athlete} 
                   workouts={workouts} 
+                  isRefreshing={isRefreshing}
                   onLogout={() => supabase.auth.signOut()} 
                   deferredPrompt={deferredPrompt} 
                   onInstall={handleInstallApp} 
@@ -230,6 +232,7 @@ const MainLayout = ({ athlete, workouts, fetchWorkouts, isRefreshing, setAthlete
                 <AthleteDesktopDashboard 
                   athlete={athlete} 
                   workouts={workouts} 
+                  isRefreshing={isRefreshing}
                   onLogout={() => supabase.auth.signOut()} 
                   deferredPrompt={deferredPrompt} 
                   onInstall={handleInstallApp} 
@@ -281,8 +284,37 @@ const AppContent = () => {
     return null;
   }
 
-  const [athlete, setAthleteRaw] = useState(null);
-  const [workouts, setWorkouts] = useState([]);
+  const [athlete, setAthleteRaw] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_athlete');
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [workouts, setWorkouts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_workouts');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('cached_workouts_')) {
+          const val = localStorage.getItem(key);
+          if (val) {
+            const p = JSON.parse(val);
+            if (Array.isArray(p) && p.length > 0) return p;
+          }
+        }
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -329,27 +361,26 @@ const AppContent = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Se a sessão for carregada e ainda não tiver treinos no estado, busca do cache específico do usuário
+  useEffect(() => {
+    if (session?.user?.id) {
+      try {
+        const userCached = localStorage.getItem(`cached_workouts_${session.user.id}`);
+        if (userCached) {
+          const parsed = JSON.parse(userCached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setWorkouts(prev => prev.length === 0 ? parsed : prev);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [session]);
+
   const fetchWorkouts = useCallback(async () => {
     if (!session?.user?.id) return;
     setIsRefreshing(true);
     try {
-      // 1. Sincronizar atividades do Strava se conectado para marcar treinos como concluídos
-      const { data: integrations } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('athlete_id', session.user.id)
-        .eq('platform', 'strava');
-
-      if (integrations && integrations.length > 0 && integrations[0].connected) {
-        console.log('[Sync] Sincronizando atividades com Strava para auto-complete...');
-        try {
-          await fetch(`/api/strava/activities?userId=${session.user.id}`);
-        } catch (syncErr) {
-          console.error('[Sync] Erro na sincronização Strava:', syncErr);
-        }
-      }
-
-      // 2. Buscar planilha de treinos atualizada
+      // 1. Buscar treinos do Supabase PRIMEIRO (rápido, sem travar a interface)
       const { data, error } = await supabase
         .from('workouts')
         .select('*')
@@ -358,7 +389,44 @@ const AppContent = () => {
 
       if (!error && data) {
         setWorkouts(data);
+        try {
+          localStorage.setItem('cached_workouts', JSON.stringify(data));
+          localStorage.setItem(`cached_workouts_${session.user.id}`, JSON.stringify(data));
+        } catch (e) {}
       }
+
+      // 2. Sincronização com Strava em SEGUNDO PLANO (não atrasa a exibição inicial dos treinos)
+      (async () => {
+        try {
+          const { data: integrations } = await supabase
+            .from('integrations')
+            .select('*')
+            .eq('athlete_id', session.user.id)
+            .eq('platform', 'strava');
+
+          if (integrations && integrations.length > 0 && integrations[0].connected) {
+            console.log('[Sync] Sincronizando com Strava em segundo plano...');
+            const syncRes = await fetch(`/api/strava/activities?userId=${session.user.id}`);
+            if (syncRes.ok) {
+              const { data: freshWorkouts } = await supabase
+                .from('workouts')
+                .select('*')
+                .eq('athlete_id', session.user.id)
+                .order('date', { ascending: false });
+
+              if (freshWorkouts) {
+                setWorkouts(freshWorkouts);
+                try {
+                  localStorage.setItem('cached_workouts', JSON.stringify(freshWorkouts));
+                  localStorage.setItem(`cached_workouts_${session.user.id}`, JSON.stringify(freshWorkouts));
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (syncErr) {
+          console.error('[Sync] Erro na sincronização Strava em segundo plano:', syncErr);
+        }
+      })();
     } catch (err) {
       console.error('Erro ao buscar treinos:', err);
     } finally {
@@ -396,6 +464,9 @@ const AppContent = () => {
           
         const athleteObj = mapSupabaseToAthlete(profileData, integrations || []);
         setAthleteRaw(athleteObj);
+        try {
+          localStorage.setItem('cached_athlete', JSON.stringify(athleteObj));
+        } catch (e) {}
 
         // Check for first login / incomplete profile (Name, Birth Date, Objective are mandatory)
         const isProfileIncomplete = !profileData.name || profileData.name === 'Atleta' || !profileData.birth_date || !profileData.objective || profileData.objective === 'Definir Objetivo';
