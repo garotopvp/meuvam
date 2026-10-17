@@ -13,7 +13,9 @@ import {
   Waves,
   Activity,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Download,
+  Watch
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -847,7 +849,30 @@ export default function AthleteDesktopDashboard({
     athlete?.integrations?.garmin?.connected ? (athlete?.integrations?.garmin?.username || 'Conectado') : null
   );
 
-  // Verifica status real da sessão Garmin no backend
+  // Estados COROS
+  const [isCorosPushing, setIsCorosPushing] = useState(false);
+  const [corosPushSuccess, setCorosPushSuccess] = useState(false);
+  const [isCorosLoginOpen, setIsCorosLoginOpen] = useState(false);
+  const [corosEmail, setCorosEmail] = useState('');
+  const [corosPassword, setCorosPassword] = useState('');
+  const [isCorosLoggingIn, setIsCorosLoggingIn] = useState(false);
+  const [corosLoginError, setCorosLoginError] = useState('');
+  const [corosConnectedUser, setCorosConnectedUser] = useState(null);
+
+  // Estados Intervals.icu (Polar / Suunto / COROS / Apple Watch)
+  const [isIntervalsPushing, setIsIntervalsPushing] = useState(false);
+  const [intervalsPushSuccess, setIntervalsPushSuccess] = useState(false);
+  const [isIntervalsLoginOpen, setIsIntervalsLoginOpen] = useState(false);
+  const [intervalsAthleteId, setIntervalsAthleteId] = useState('');
+  const [intervalsApiKey, setIntervalsApiKey] = useState('');
+  const [isIntervalsLoggingIn, setIsIntervalsLoggingIn] = useState(false);
+  const [intervalsLoginError, setIntervalsLoginError] = useState('');
+  const [intervalsConnectedUser, setIntervalsConnectedUser] = useState(null);
+
+  // Estado Download .FIT
+  const [isDownloadingFit, setIsDownloadingFit] = useState(false);
+
+  // Verifica status real das sessões (Garmin, COROS, Intervals.icu) no backend
   React.useEffect(() => {
     if (!athlete?.id) return;
     fetch(`/api/garmin/status?userId=${athlete.id}`)
@@ -858,14 +883,43 @@ export default function AthleteDesktopDashboard({
         }
       })
       .catch(() => {});
+
+    fetch(`/api/coros/status?userId=${athlete.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.connected) {
+          setCorosConnectedUser(data.user?.displayName || 'Conectado');
+        }
+      })
+      .catch(() => {});
+
+    fetch(`/api/intervals/status?userId=${athlete.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.connected) {
+          setIntervalsConnectedUser(data.user?.displayName || 'Conectado');
+        }
+      })
+      .catch(() => {});
   }, [athlete?.id]);
 
   // Limpa mensagens ao trocar de treino selecionado
   React.useEffect(() => {
     setGarminPushSuccess(false);
+    setCorosPushSuccess(false);
+    setIntervalsPushSuccess(false);
     setGarminPushMessage('');
     setGarminPushError('');
   }, [selectedWorkout]);
+
+  const buildActiveWorkoutPayload = () => {
+    if (!activeWorkout) return null;
+    const { baseBlocks } = expandWorkoutSegments(activeWorkout);
+    return {
+      ...activeWorkout,
+      structured_blocks: activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || baseBlocks
+    };
+  };
 
   const handleSendGarmin = async () => {
     if (!activeWorkout) return;
@@ -879,11 +933,7 @@ export default function AthleteDesktopDashboard({
     setGarminPushMessage('');
 
     try {
-      const { baseBlocks } = expandWorkoutSegments(activeWorkout);
-      const workoutPayload = {
-        ...activeWorkout,
-        structured_blocks: activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || baseBlocks
-      };
+      const workoutPayload = buildActiveWorkoutPayload();
 
       const res = await fetch('/api/garmin/workout/push', {
         method: 'POST',
@@ -945,12 +995,220 @@ export default function AthleteDesktopDashboard({
       setGarminConnectedUser(data.user?.displayName || garminEmail.split('@')[0]);
       setIsGarminLoginOpen(false);
       setGarminPassword('');
-      // Após conectar com sucesso, dispara o envio do treino automaticamente
       await handleSendGarmin();
     } catch (err) {
       setGarminLoginError(err.message || 'Erro ao conectar ao Garmin Connect.');
     } finally {
       setIsGarminLoggingIn(false);
+    }
+  };
+
+  // ── ENVIO DIRETO PARA COROS ──
+  const handleSendCoros = async () => {
+    if (!activeWorkout) return;
+    if (!athlete?.id) {
+      setGarminPushError('Sessão do atleta não identificada.');
+      return;
+    }
+
+    setIsCorosPushing(true);
+    setGarminPushError('');
+    setGarminPushMessage('');
+
+    try {
+      const workoutPayload = buildActiveWorkoutPayload();
+      const res = await fetch('/api/coros/workout/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: athlete.id,
+          workout: workoutPayload,
+          date: activeWorkout.date
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.status === 401 || (data?.error && data.error.toLowerCase().includes('não conectado'))) {
+        setIsCorosPushing(false);
+        setIsCorosLoginOpen(true);
+        return;
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.details || data.error || 'Falha ao enviar treino para o COROS');
+      }
+
+      setIsCorosPushing(false);
+      setCorosPushSuccess(true);
+      setGarminPushMessage(data.message || `Treino enviado para o calendário do app COROS!`);
+      setTimeout(() => {
+        setCorosPushSuccess(false);
+      }, 6000);
+    } catch (err) {
+      setIsCorosPushing(false);
+      setGarminPushError(err.message || 'Erro ao comunicar com o COROS Training Hub.');
+    }
+  };
+
+  const handleCorosLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!corosEmail || !corosPassword || !athlete?.id) return;
+
+    setIsCorosLoggingIn(true);
+    setCorosLoginError('');
+
+    try {
+      const res = await fetch('/api/coros/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: corosEmail,
+          password: corosPassword,
+          userId: athlete.id
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha no login da COROS. Verifique seu e-mail e senha.');
+      }
+
+      setCorosConnectedUser(data.user?.displayName || corosEmail.split('@')[0]);
+      setIsCorosLoginOpen(false);
+      setCorosPassword('');
+      await handleSendCoros();
+    } catch (err) {
+      setCorosLoginError(err.message || 'Erro ao conectar à conta COROS.');
+    } finally {
+      setIsCorosLoggingIn(false);
+    }
+  };
+
+  // ── ENVIO PARA INTERVALS.ICU (PONTE POLAR / SUUNTO / COROS / APPLE WATCH) ──
+  const handleSendIntervals = async () => {
+    if (!activeWorkout) return;
+    if (!athlete?.id) {
+      setGarminPushError('Sessão do atleta não identificada.');
+      return;
+    }
+
+    setIsIntervalsPushing(true);
+    setGarminPushError('');
+    setGarminPushMessage('');
+
+    try {
+      const workoutPayload = buildActiveWorkoutPayload();
+      const res = await fetch('/api/intervals/workout/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: athlete.id,
+          workout: workoutPayload,
+          date: activeWorkout.date
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.status === 401 || (data?.error && data.error.toLowerCase().includes('não conectado'))) {
+        setIsIntervalsPushing(false);
+        setIsIntervalsLoginOpen(true);
+        return;
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.details || data.error || 'Falha ao enviar treino para o Intervals.icu');
+      }
+
+      setIsIntervalsPushing(false);
+      setIntervalsPushSuccess(true);
+      setGarminPushMessage(
+        data.message || 'Treino sincronizado via Intervals.icu (Polar / Suunto / COROS / Apple Watch)!'
+      );
+      setTimeout(() => {
+        setIntervalsPushSuccess(false);
+      }, 6000);
+    } catch (err) {
+      setIsIntervalsPushing(false);
+      setGarminPushError(err.message || 'Erro ao comunicar com o Intervals.icu.');
+    }
+  };
+
+  const handleIntervalsLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!intervalsApiKey || !athlete?.id) return;
+
+    setIsIntervalsLoggingIn(true);
+    setIntervalsLoginError('');
+
+    try {
+      const res = await fetch('/api/intervals/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          athleteId: intervalsAthleteId || '0',
+          apiKey: intervalsApiKey,
+          userId: athlete.id
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Chave API inválida no Intervals.icu.');
+      }
+
+      setIntervalsConnectedUser(data.user?.displayName || data.user?.athleteId || 'Conectado');
+      setIsIntervalsLoginOpen(false);
+      setIntervalsApiKey('');
+      await handleSendIntervals();
+    } catch (err) {
+      setIntervalsLoginError(err.message || 'Erro ao validar credenciais no Intervals.icu.');
+    } finally {
+      setIsIntervalsLoggingIn(false);
+    }
+  };
+
+  // ── DOWNLOAD ARQUIVO .FIT DE TREINO ESTRUTURADO ──
+  const handleDownloadFit = async () => {
+    if (!activeWorkout) return;
+    setIsDownloadingFit(true);
+    setGarminPushError('');
+
+    try {
+      const workoutPayload = buildActiveWorkoutPayload();
+      const res = await fetch('/api/workout/fit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workout: workoutPayload })
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao gerar arquivo .FIT');
+      }
+
+      const blob = await res.blob();
+      const safeName = String(activeWorkout.title || 'treino-meuvam')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'treino-meuvam';
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeName}.fit`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      setGarminPushMessage(`Arquivo "${safeName}.fit" baixado! Importe no app COROS, WorkOutDoors (Apple Watch), Suunto ou Garmin.`);
+    } catch (err) {
+      setGarminPushError(err.message || 'Erro ao baixar arquivo .FIT.');
+    } finally {
+      setIsDownloadingFit(false);
     }
   };
 
@@ -1517,6 +1775,47 @@ export default function AthleteDesktopDashboard({
                     </span>
                   </button>
 
+                  {/* 3 Opções Extras de Sincronização: COROS, Polar/Intervals e Arquivo .FIT */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={handleSendCoros}
+                      disabled={isCorosPushing}
+                      title="Enviar treino estruturado direto para o calendário do app COROS"
+                      className={`h-10 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                        corosPushSuccess
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${corosConnectedUser ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                      <span className="truncate">{corosPushSuccess ? '✓ COROS' : isCorosPushing ? 'Enviando...' : 'COROS'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleSendIntervals}
+                      disabled={isIntervalsPushing}
+                      title="Sincronizar via Intervals.icu (Polar, Suunto, COROS e Apple Watch)"
+                      className={`h-10 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                        intervalsPushSuccess
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+                      <span className="truncate">{intervalsPushSuccess ? '✓ Enviado' : isIntervalsPushing ? 'Enviando...' : 'Polar / Outros'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleDownloadFit}
+                      disabled={isDownloadingFit}
+                      title="Baixar arquivo .FIT do treino (COROS, Apple Watch WorkOutDoors, Suunto, Garmin)"
+                      className="h-10 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70"
+                    >
+                      <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                      <span className="truncate">{isDownloadingFit ? 'Gerando...' : 'Baixar .FIT'}</span>
+                    </button>
+                  </div>
+
                   {garminPushMessage && (
                     <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 px-3.5 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 text-center">
                       {garminPushMessage}
@@ -1530,22 +1829,44 @@ export default function AthleteDesktopDashboard({
                         onClick={() => setIsGarminLoginOpen(true)}
                         className="underline font-bold shrink-0 hover:opacity-80"
                       >
-                        Reconectar
+                        Conectar
                       </button>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between px-2 text-[11px] text-slate-400">
-                    <span className="flex items-center gap-1.5">
-                      <span className={`h-2 w-2 rounded-full ${garminConnectedUser ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
-                      {garminConnectedUser ? `Garmin Connect (${garminConnectedUser})` : 'Garmin desconectado'}
-                    </span>
-                    <button
-                      onClick={() => setIsGarminLoginOpen(true)}
-                      className="font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline"
-                    >
-                      {garminConnectedUser ? 'Trocar conta' : 'Conectar conta'}
-                    </button>
+                  {/* Barra de Status das Contas Conectadas */}
+                  <div className="flex flex-wrap items-center justify-between gap-y-1 px-2 text-[11px] text-slate-400">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setIsGarminLoginOpen(true)}
+                        className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                        title="Gerenciar conta Garmin Connect"
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${garminConnectedUser ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        <span>Garmin {garminConnectedUser ? `(${garminConnectedUser})` : ''}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCorosLoginOpen(true)}
+                        className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                        title="Gerenciar conta COROS Training Hub"
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${corosConnectedUser ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        <span>COROS {corosConnectedUser ? `(${corosConnectedUser})` : ''}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsIntervalsLoginOpen(true)}
+                        className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                        title="Gerenciar ponte Intervals.icu (Polar, Suunto, Apple Watch)"
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        <span>Intervals/Polar {intervalsConnectedUser ? `(${intervalsConnectedUser})` : ''}</span>
+                      </button>
+                    </div>
                   </div>
 
                   <button 
@@ -1767,28 +2088,68 @@ export default function AthleteDesktopDashboard({
             )}
 
             {/* Botões de Ação do Rodapé */}
-            <div className="pt-2 flex items-center gap-3">
-              <button 
-                onClick={handleSendGarmin}
-                disabled={isGarminPushing}
-                className={`flex-1 h-12 rounded-full font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75 ${
-                  garminPushSuccess
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white'
-                }`}
-              >
-                <RefreshCw className={`h-4 w-4 ${isGarminPushing ? 'animate-spin' : ''}`} />
-                <span>
-                  {garminPushSuccess ? '✓ Enviado e Agendado no Garmin!' : isGarminPushing ? 'Enviando para o Garmin...' : 'Enviar Treino para o Garmin'}
-                </span>
-              </button>
+            <div className="pt-2 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={handleSendGarmin}
+                  disabled={isGarminPushing}
+                  className={`flex-1 h-12 rounded-full font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75 ${
+                    garminPushSuccess
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white'
+                  }`}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isGarminPushing ? 'animate-spin' : ''}`} />
+                  <span>
+                    {garminPushSuccess ? '✓ Enviado e Agendado no Garmin!' : isGarminPushing ? 'Enviando para o Garmin...' : 'Enviar Treino para o Garmin'}
+                  </span>
+                </button>
 
-              <button 
-                onClick={() => setIsDetailModalOpen(false)}
-                className="h-12 px-6 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm transition-all"
-              >
-                Fechar
-              </button>
+                <button 
+                  onClick={() => setIsDetailModalOpen(false)}
+                  className="h-12 px-6 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
+
+              {/* 3 Opções Extras no Modal: COROS, Polar/Intervals e Arquivo .FIT */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <button
+                  onClick={handleSendCoros}
+                  disabled={isCorosPushing}
+                  className={`h-10 rounded-full border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                    corosPushSuccess
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${corosConnectedUser ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  <span>{corosPushSuccess ? '✓ Enviado COROS' : isCorosPushing ? 'Enviando...' : 'Enviar COROS'}</span>
+                </button>
+
+                <button
+                  onClick={handleSendIntervals}
+                  disabled={isIntervalsPushing}
+                  className={`h-10 rounded-full border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70 ${
+                    intervalsPushSuccess
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${intervalsConnectedUser ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+                  <span>{intervalsPushSuccess ? '✓ Sincronizado' : isIntervalsPushing ? 'Enviando...' : 'Polar / Suunto / Apple'}</span>
+                </button>
+
+                <button
+                  onClick={handleDownloadFit}
+                  disabled={isDownloadingFit}
+                  className="h-10 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-70"
+                >
+                  <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                  <span>{isDownloadingFit ? 'Gerando .FIT...' : 'Baixar Arquivo .FIT'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1873,6 +2234,189 @@ export default function AthleteDesktopDashboard({
                 <button
                   type="button"
                   onClick={() => setIsGarminLoginOpen(false)}
+                  className="h-11 px-5 rounded-full border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE LOGIN / CONEXÃO COROS TRAINING HUB ── */}
+      {isCorosLoginOpen && (
+        <div
+          onClick={() => setIsCorosLoginOpen(false)}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-[28px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-rose-500/15 text-rose-600 flex items-center justify-center font-black text-sm">
+                  C
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Conectar COROS
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Envie o treino direto para o calendário do seu app COROS
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCorosLoginOpen(false)}
+                className="rounded-full p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCorosLoginSubmit} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  E-mail da conta COROS
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={corosEmail}
+                  onChange={(e) => setCorosEmail(e.target.value)}
+                  placeholder="seuemail@exemplo.com"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Senha da conta COROS
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={corosPassword}
+                  onChange={(e) => setCorosPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500"
+                />
+              </div>
+
+              {corosLoginError && (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {corosLoginError}
+                </div>
+              )}
+
+              <div className="pt-1 flex items-center gap-2.5">
+                <button
+                  type="submit"
+                  disabled={isCorosLoggingIn}
+                  className="flex-1 h-11 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition disabled:opacity-70"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isCorosLoggingIn ? 'animate-spin' : ''}`} />
+                  <span>{isCorosLoggingIn ? 'Conectando e enviando...' : 'Conectar COROS e Enviar'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCorosLoginOpen(false)}
+                  className="h-11 px-5 rounded-full border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE CONEXÃO INTERVALS.ICU (PONTE POLAR / SUUNTO / COROS / APPLE WATCH) ── */}
+      {isIntervalsLoginOpen && (
+        <div
+          onClick={() => setIsIntervalsLoginOpen(false)}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-[28px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-indigo-500/15 text-indigo-600 flex items-center justify-center font-black text-sm">
+                  <Watch className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Conectar Polar / Suunto / Apple Watch
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Sincronização automática via Intervals.icu
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsIntervalsLoginOpen(false)}
+                className="rounded-full p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <p className="font-bold text-slate-800 dark:text-slate-100">Como pegar sua chave (1 minuto):</p>
+              <p>1. Acesse <strong>intervals.icu</strong> (gratuito) e conecte seu Polar Flow, Suunto ou Apple Watch (Watchletic).</p>
+              <p>2. Vá em <strong>Settings (Configurações)</strong> → role até <strong>Developer Settings</strong> → clique em <strong>API Key</strong> e copie.</p>
+            </div>
+
+            <form onSubmit={handleIntervalsLoginSubmit} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  API Key do Intervals.icu
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={intervalsApiKey}
+                  onChange={(e) => setIntervalsApiKey(e.target.value)}
+                  placeholder="Cole sua API Key aqui"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  ID do Atleta <span className="font-normal text-slate-400">(opcional, ex: i123456)</span>
+                </label>
+                <input
+                  type="text"
+                  value={intervalsAthleteId}
+                  onChange={(e) => setIntervalsAthleteId(e.target.value)}
+                  placeholder="Deixe em branco para detectar automático"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {intervalsLoginError && (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {intervalsLoginError}
+                </div>
+              )}
+
+              <div className="pt-1 flex items-center gap-2.5">
+                <button
+                  type="submit"
+                  disabled={isIntervalsLoggingIn}
+                  className="flex-1 h-11 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition disabled:opacity-70"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isIntervalsLoggingIn ? 'animate-spin' : ''}`} />
+                  <span>{isIntervalsLoggingIn ? 'Validando e enviando...' : 'Conectar e Sincronizar'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsIntervalsLoginOpen(false)}
                   className="h-11 px-5 rounded-full border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
                 >
                   Cancelar
