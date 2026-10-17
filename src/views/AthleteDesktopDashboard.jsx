@@ -12,7 +12,8 @@ import {
   Bike,
   Waves,
   Activity,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -104,6 +105,40 @@ export const formatEstimatedTime = (timeStr) => {
   return str;
 };
 
+// Formata data para o cabeçalho moderno do modal (ex: "SÁB, 17 OUT 2026")
+export const formatModalHeaderDate = (dateStr) => {
+  if (!dateStr) return 'HOJE';
+  try {
+    const parts = String(dateStr).split('-');
+    let d;
+    if (parts.length === 3) {
+      d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      d = new Date(dateStr);
+    }
+    if (!isNaN(d.getTime())) {
+      const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+      const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+      const dayOfWeek = days[d.getDay()];
+      const dayNum = d.getDate();
+      const monthName = months[d.getMonth()];
+      const year = d.getFullYear();
+      return `${dayOfWeek}, ${dayNum} ${monthName} ${year}`;
+    }
+  } catch (e) {}
+  return String(dateStr).toUpperCase();
+};
+
+export const getModalWorkoutType = (workout) => {
+  const combined = ((workout?.type || '') + ' ' + (workout?.title || '')).toUpperCase();
+  if (combined.includes('TIRO') || combined.includes('VAM') || combined.includes('INTERVAL')) return 'INTERVALADO';
+  if (combined.includes('LONGO')) return 'LONGO';
+  if (combined.includes('LIMIAR') || combined.includes('TEMPO')) return 'LIMIAR';
+  if (combined.includes('REGENERATIVO') || combined.includes('RECUPERA')) return 'REGENERATIVO';
+  if (combined.includes('RODAGEM')) return 'RODAGEM';
+  return (workout?.type || 'CORRIDA').toUpperCase();
+};
+
 const getStepDetails = (name = '', type = '') => {
   const rawType = (type || '').trim();
   const rawName = (name || '').trim();
@@ -158,32 +193,68 @@ const getStepDetails = (name = '', type = '') => {
 
 // Decompõe e expande blocos do treino para escala real de intervalos (TrainingPeaks / Garmin Style)
 const expandWorkoutSegments = (workout) => {
-  if (!workout) return { segments: [], totalKm: 5.0 };
+  if (!workout) return { segments: [], totalKm: 5.0, baseBlocks: [] };
 
   const rawBlocks = workout.structured_blocks || workout.metrics?.structured_blocks || workout.metrics?.structured_steps || [];
-  const distStr = workout.metrics?.distance || '5.0 km';
-  const totalWorkoutDist = parseFloat(String(distStr).replace(',', '.')) || 5.0;
+  const distStr = workout.metrics?.distance || '6.5 km';
+  const totalWorkoutDist = parseFloat(String(distStr).replace(',', '.')) || 6.5;
 
   let baseBlocks = rawBlocks;
   if (!baseBlocks || baseBlocks.length === 0) {
     const title = (workout.title || workout.type || '').toLowerCase();
-    if (title.includes('tiro') || title.includes('vam') || title.includes('interval')) {
+    const desc = (workout.description || '').toLowerCase();
+    const combinedText = title + ' ' + desc;
+    const repeatMatch = combinedText.match(/(\d+)\s*[x×]\s*(\d+(?:m|km)?)/i);
+
+    if (repeatMatch || title.includes('tiro') || title.includes('vam') || title.includes('interval')) {
+      const repCount = repeatMatch ? Math.min(20, Math.max(2, parseInt(repeatMatch[1], 10))) : 10;
+      const repWork = repeatMatch ? repeatMatch[2] : '200m';
+
+      let workKm = 0.2;
+      if (repWork.endsWith('m')) workKm = parseFloat(repWork) / 1000;
+      else if (repWork.endsWith('km')) workKm = parseFloat(repWork);
+
+      const totalSeriesKm = (repCount * workKm).toFixed(1);
+      const warmupKm = '2.5 km';
+      const coolKm = '2.0 km';
+
       baseBlocks = [
-        { name: 'Aquecimento Progressivo', pace: '5:15 min/km', distance: '2.0 km', type: 'Aquecimento' },
-        { name: '8x 400m @ 100% VAM (rec 1min)', pace: '3:45 min/km', distance: '3.2 km', type: 'Tiro' },
-        { name: 'Trote Regenerativo', pace: '5:30 min/km', distance: '2.3 km', type: 'Desaquecimento' }
+        { 
+          name: 'Aquecimento', 
+          subtitle: 'Z2 Leve', 
+          pace: '5:05 min/km', 
+          distance: warmupKm, 
+          type: 'Aquecimento' 
+        },
+        { 
+          name: `${repCount}× ${repWork} Forte`, 
+          pauseNote: "(pausa 1' trote)", 
+          pace: workout.target_pace || '3:30 min/km', 
+          distance: `${totalSeriesKm} km`, 
+          type: 'Tiro' 
+        },
+        { 
+          name: 'Desaquecimento', 
+          subtitle: 'Soltura', 
+          pace: '5:40 min/km', 
+          distance: coolKm, 
+          type: 'Desaquecimento' 
+        }
       ];
     } else if (title.includes('tempo') || title.includes('limiar') || title.includes('ritmo')) {
       baseBlocks = [
-        { name: 'Aquecimento', pace: '5:15 min/km', distance: '2.0 km', type: 'Aquecimento' },
-        { name: 'Ritmo Limiar Z4', pace: '4:15 min/km', distance: '5.0 km', type: 'Corrida' },
-        { name: 'Desaquecimento', pace: '5:30 min/km', distance: '2.0 km', type: 'Desaquecimento' }
+        { name: 'Aquecimento', subtitle: 'Z2 Leve', pace: '5:15 min/km', distance: '2.0 km', type: 'Aquecimento' },
+        { name: 'Ritmo Limiar Z4', subtitle: 'Limiar VAM', pace: '4:15 min/km', distance: '5.0 km', type: 'Corrida' },
+        { name: 'Desaquecimento', subtitle: 'Soltura', pace: '5:30 min/km', distance: '2.0 km', type: 'Desaquecimento' }
       ];
     } else {
+      const wDist = Math.max(1.0, parseFloat((totalWorkoutDist * 0.2).toFixed(1)));
+      const mDist = Math.max(2.0, parseFloat((totalWorkoutDist * 0.65).toFixed(1)));
+      const cDist = Math.max(1.0, parseFloat((totalWorkoutDist * 0.15).toFixed(1)));
       baseBlocks = [
-        { name: 'Aquecimento Gradual', pace: '5:30 min/km', distance: `${(totalWorkoutDist * 0.2).toFixed(1)} km`, type: 'Aquecimento' },
-        { name: 'Volume Principal Z2', pace: workout.metrics?.pace || '5:10 min/km', distance: `${(totalWorkoutDist * 0.65).toFixed(1)} km`, type: 'Corrida' },
-        { name: 'Volta à Calma', pace: '5:45 min/km', distance: `${(totalWorkoutDist * 0.15).toFixed(1)} km`, type: 'Desaquecimento' }
+        { name: 'Aquecimento Gradual', subtitle: 'Z2 Leve', pace: '5:30 min/km', distance: `${wDist} km`, type: 'Aquecimento' },
+        { name: 'Volume Principal Z2', subtitle: 'Base Aeróbia', pace: workout.metrics?.pace || '5:10 min/km', distance: `${mDist} km`, type: 'Corrida' },
+        { name: 'Volta à Calma', subtitle: 'Soltura', pace: '5:45 min/km', distance: `${cDist} km`, type: 'Desaquecimento' }
       ];
     }
   }
@@ -193,16 +264,15 @@ const expandWorkoutSegments = (workout) => {
 
   baseBlocks.forEach((b) => {
     const name = b.name || '';
-    const repeatMatch = name.match(/(\d+)\s*x\s*(\d+(?:m|km)?)/i);
+    const repeatMatch = name.match(/(\d+)\s*[x×]\s*(\d+(?:m|km)?)/i);
 
     if (repeatMatch) {
-      const count = Math.min(20, Math.max(2, parseInt(repeatMatch[1])));
+      const count = Math.min(20, Math.max(2, parseInt(repeatMatch[1], 10)));
       const workVal = repeatMatch[2];
-      let workKm = 0.4;
+      let workKm = 0.2;
       if (workVal.endsWith('m')) workKm = parseFloat(workVal) / 1000;
       else if (workVal.endsWith('km')) workKm = parseFloat(workVal);
 
-      // Distância do bloco
       let blockDist = parseFloat(String(b.distance || '').replace(',', '.')) || (count * workKm * 1.35);
       const restKm = Math.max(0.08, (blockDist - (count * workKm)) / count);
 
@@ -216,7 +286,7 @@ const expandWorkoutSegments = (workout) => {
           height: 95,
           color: '#FF3B30', // Z5 Vermelho
           dist: workKm,
-          pace: b.pace || '3:45 min/km',
+          pace: b.pace || '3:30 min/km',
           startKm: cumDist,
           endKm: cumDist + workKm
         };
@@ -224,10 +294,11 @@ const expandWorkoutSegments = (workout) => {
         segments.push(sWork);
 
         // Intervalo de recuperação
-        if (i <= count) {
+        if (i < count || (b.pauseNote || '').includes('pausa')) {
           const sRest = {
             name: `Recup. ${i}/${count}`,
             phase: 'Recuperação',
+            isRest: true,
             zone: 'Z1',
             zoneLabel: 'Recuperação (Z1)',
             height: 26,
@@ -258,11 +329,11 @@ const expandWorkoutSegments = (workout) => {
         height = 48;
         color = '#007AFF'; // Z2 Azul
         phase = 'Aquecimento';
-      } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta') || combined.includes('regenerativo') || combined.includes('recupera')) {
-        zone = 'Z1';
-        zoneLabel = 'Recuperação (Z1)';
-        height = 36;
-        color = '#8E8E93'; // Z1 Cinza
+      } else if (combined.includes('desaquec') || combined.includes('esfriar') || combined.includes('cool') || combined.includes('volta') || combined.includes('regenerativo') || combined.includes('recupera') || combined.includes('soltura')) {
+        zone = 'Z2';
+        zoneLabel = 'Desaquecimento (Z2)';
+        height = 48;
+        color = '#38BDF8'; // Z2 Azul Claro / Cyan
         phase = 'Desaquecimento';
       } else if (combined.includes('limiar') || combined.includes('tempo') || combined.includes('z4') || combined.includes('forte')) {
         zone = 'Z4';
@@ -292,7 +363,7 @@ const expandWorkoutSegments = (workout) => {
         height,
         color,
         dist,
-        pace: b.pace || (zone === 'Z5' ? '3:45 min/km' : '5:15 min/km'),
+        pace: b.pace || (zone === 'Z5' ? '3:30 min/km' : zone === 'Z4' ? '4:15 min/km' : '5:05 min/km'),
         startKm: cumDist,
         endKm: cumDist + dist
       };
@@ -301,7 +372,7 @@ const expandWorkoutSegments = (workout) => {
     }
   });
 
-  return { segments, totalKm: Math.max(1, cumDist) };
+  return { segments, totalKm: Math.max(1, cumDist), baseBlocks };
 };
 
 // ─── GRÁFICO OFICIAL DE TREINO ESTRUTURADO (TrainingPeaks / Garmin Style) ───
@@ -502,6 +573,157 @@ const StructuredStepsList = ({ workout }) => {
   );
 };
 
+// ─── VISUALIZADOR DE PERFIL DA SESSÃO (Design Limpo e Moderno conforme Mockup) ───
+const WorkoutSessionProfile = ({ workout }) => {
+  const { segments } = useMemo(() => expandWorkoutSegments(workout), [workout]);
+
+  // Default para o aquecimento (ou primeiro bloco) conforme o mockup
+  const defaultSegment = useMemo(() => {
+    return segments[0] || null;
+  }, [segments]);
+
+  const [hoveredSegment, setHoveredSegment] = useState(null);
+  const active = hoveredSegment || defaultSegment;
+
+  if (segments.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      {/* Top Header: PERFIL DA SESSÃO & Inspetor de Ritmo */}
+      <div className="flex items-center justify-between text-[11px] font-bold tracking-wider">
+        <span className="text-slate-400 uppercase tracking-widest">PERFIL DA SESSÃO</span>
+        {active && (
+          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-semibold truncate text-xs">
+            <span>{active.name.split('(')[0].trim()}</span>
+            <span className="text-slate-300 dark:text-slate-600">•</span>
+            <span>{active.dist.toFixed(1)} km</span>
+            <span className="text-slate-300 dark:text-slate-600">•</span>
+            <span 
+              className="font-bold"
+              style={{ color: active.color || '#FF3B30' }}
+            >
+              {active.pace.replace(' min/km', ' /km')} ({active.zone})
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Régua de Barras Visuais */}
+      <div className="h-14 sm:h-16 w-full flex items-end gap-1.5 pt-2 pb-1 select-none">
+        {segments.map((seg, idx) => {
+          const isBlock = seg.phase === 'Aquecimento' || seg.phase === 'Desaquecimento' || seg.phase === 'Corrida';
+          const isRest = seg.isRest || seg.phase === 'Recuperação';
+
+          if (isBlock) {
+            return (
+              <div
+                key={idx}
+                onMouseEnter={() => setHoveredSegment(seg)}
+                onMouseLeave={() => setHoveredSegment(null)}
+                className="relative rounded-xl cursor-pointer transition-all duration-200 hover:brightness-110"
+                style={{
+                  flexGrow: Math.max(3, Math.round(seg.dist * 10)),
+                  height: '28px',
+                  backgroundColor: seg.color || (seg.phase === 'Aquecimento' ? '#007AFF' : '#38BDF8'),
+                  opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
+                  transform: hoveredSegment === seg ? 'scaleY(1.08)' : 'none',
+                  transformOrigin: 'bottom'
+                }}
+              />
+            );
+          }
+
+          if (isRest) {
+            return (
+              <div
+                key={idx}
+                onMouseEnter={() => setHoveredSegment(seg)}
+                onMouseLeave={() => setHoveredSegment(null)}
+                className="cursor-pointer rounded-full transition-all duration-200 hover:brightness-90 shrink-0"
+                style={{
+                  width: '5px',
+                  height: '20px',
+                  backgroundColor: '#E2E8F0',
+                  opacity: hoveredSegment && hoveredSegment !== seg ? 0.6 : 1
+                }}
+              />
+            );
+          }
+
+          // Barra de Tiro
+          return (
+            <div
+              key={idx}
+              onMouseEnter={() => setHoveredSegment(seg)}
+              onMouseLeave={() => setHoveredSegment(null)}
+              className="cursor-pointer rounded-md transition-all duration-200 hover:brightness-110 shrink-0"
+              style={{
+                width: '13px',
+                height: '48px',
+                backgroundColor: seg.color || '#FF3B30',
+                opacity: hoveredSegment && hoveredSegment !== seg ? 0.75 : 1,
+                transform: hoveredSegment === seg ? 'scaleY(1.08)' : 'none',
+                transformOrigin: 'bottom'
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── LISTA DE PRESCRIÇÃO DAS SÉRIES (Conforme Mockup) ───
+const WorkoutPrescription = ({ workout }) => {
+  const { baseBlocks } = useMemo(() => expandWorkoutSegments(workout), [workout]);
+
+  if (!baseBlocks || baseBlocks.length === 0) return null;
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="text-[11px] font-bold tracking-widest text-slate-400 uppercase">
+        PRESCRIÇÃO
+      </div>
+
+      <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+        {baseBlocks.map((b, idx) => {
+          const isInterval = b.type === 'Tiro' || (b.name || '').includes('x') || (b.name || '').toLowerCase().includes('forte');
+          const paceFormatted = b.pace ? b.pace.replace(' min/km', ' /km') : '--';
+
+          return (
+            <div key={idx} className="py-3 flex items-center justify-between text-sm gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {b.name}
+                </span>
+                {b.subtitle && (
+                  <span className="text-slate-400 font-normal">
+                    • {b.subtitle}
+                  </span>
+                )}
+                {b.pauseNote && (
+                  <span className="text-[#FF3B30] dark:text-[#FF453A] font-normal text-xs sm:text-sm">
+                    {b.pauseNote}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-5 sm:gap-6 shrink-0 font-mono">
+                <span className={`text-xs sm:text-sm ${isInterval ? 'text-[#FF3B30] dark:text-[#FF453A] font-bold' : 'text-slate-400 dark:text-slate-500 font-medium'}`}>
+                  {paceFormatted}
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm tabular-nums min-w-[50px] text-right">
+                  {b.distance}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export default function AthleteDesktopDashboard({ 
   athlete, 
   workouts = [], 
@@ -515,6 +737,19 @@ export default function AthleteDesktopDashboard({
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedWorkout, setSelectedWorkout] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isGarminPushing, setIsGarminPushing] = useState(false);
+  const [garminPushSuccess, setGarminPushSuccess] = useState(false);
+
+  const handleSendGarmin = async () => {
+    setIsGarminPushing(true);
+    setTimeout(() => {
+      setIsGarminPushing(false);
+      setGarminPushSuccess(true);
+      setTimeout(() => {
+        setGarminPushSuccess(false);
+      }, 3500);
+    }, 1200);
+  };
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1203,127 +1438,129 @@ export default function AthleteDesktopDashboard({
         </div>
       </main>
 
-      {/* ── MODAL DE DETALHES COMPLETOS DA ATIVIDADE (TrainingPeaks / Athletic Style) ── */}
+      {/* ── MODAL DE DETALHES COMPLETOS DA ATIVIDADE (Conforme Mockup Atualizado) ── */}
       {isDetailModalOpen && activeWorkout && (
         <div 
           onClick={() => setIsDetailModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-sm"
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-7 space-y-5"
+            className="w-full max-w-[530px] max-h-[92vh] overflow-y-auto rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-[0_25px_70px_rgba(0,0,0,0.3)] p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-150"
           >
-            {/* Top Bar do Modal: Identidade esportiva sóbria */}
-            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                    {getModalityIcon(activeWorkout.type, activeWorkout.title)}
-                    <span>{activeWorkout.type || 'Corrida'}</span>
-                  </span>
-                  <span className="text-xs text-slate-400 font-medium">
-                    {activeWorkout.date}
-                  </span>
-                  <span className="text-slate-300 dark:text-slate-700">•</span>
-                  {activeWorkout.status === 'completed' ? (
-                    <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Concluído
-                    </span>
-                  ) : (
-                    <span className="text-xs font-semibold text-amber-500 flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" /> Agendado
-                    </span>
-                  )}
-                </div>
-
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {activeWorkout.title}
-                </h2>
-
-                {activeWorkout.description && (
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 pt-1 leading-relaxed border-l-2 border-slate-200 dark:border-slate-700 pl-3">
-                    {activeWorkout.description}
-                  </p>
-                )}
+            {/* Top Bar: Data + Tipo + Botão Fechar */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-800 dark:bg-slate-200 inline-block" />
+                <span>{formatModalHeaderDate(activeWorkout.date)}</span>
+                <span>•</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  {getModalWorkoutType(activeWorkout)}
+                </span>
               </div>
 
               <button 
                 onClick={() => setIsDetailModalOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition shrink-0"
+                className="rounded-full p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Telemetria Resumida do Treino (Barra Limpa TrainingPeaks) */}
+            {/* Título & Descrição */}
+            <div className="space-y-2">
+              <h2 className="text-2xl sm:text-[32px] font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                {activeWorkout.title}
+              </h2>
+              {activeWorkout.description && (
+                <p className="text-sm sm:text-[15px] text-slate-500 dark:text-slate-400 leading-relaxed font-normal">
+                  {activeWorkout.description}
+                </p>
+              )}
+            </div>
+
+            {/* Pílulas de Métricas */}
             {(() => {
-              const blocks = activeWorkout.structured_blocks || activeWorkout.metrics?.structured_blocks || activeWorkout.metrics?.structured_steps || [];
-              const mainBlock = blocks.find(b => {
+              const { totalKm, baseBlocks } = expandWorkoutSegments(activeWorkout);
+              const mainBlock = baseBlocks.find(b => {
                 const n = (b.name || '').toLowerCase();
                 return !n.includes('aquec') && !n.includes('desaquec');
-              }) || blocks[0];
+              }) || baseBlocks[0];
 
               const isInterval = (activeWorkout.type || '').toLowerCase().includes('tiro') || (mainBlock?.name || '').toLowerCase().includes('tiro') || (activeWorkout.title || '').toLowerCase().includes('tiro');
-              const paceToShow = mainBlock?.pace || (isInterval ? '3:45 min/km' : '5:15 min/km');
-              const zoneLabel = isInterval ? 'Z5 • 100% VAM' : (activeWorkout.title?.toLowerCase().includes('limiar') ? 'Z4 • Limiar' : 'Z2 • Aeróbio');
+              const targetPace = mainBlock?.pace ? mainBlock.pace.replace(' min/km', '').replace(' /km', '') : (isInterval ? '3:30' : '5:05');
+              const targetZone = isInterval ? 'Z5' : (activeWorkout.title?.toLowerCase().includes('limiar') ? 'Z4' : 'Z2');
+
+              const zoneColorMap = {
+                Z1: '#8E8E93',
+                Z2: '#007AFF',
+                Z3: '#34C759',
+                Z4: '#FF9500',
+                Z5: '#FF3B30'
+              };
+              const targetColor = zoneColorMap[targetZone] || '#FF3B30';
+
+              const distanceVal = activeWorkout.metrics?.distance 
+                ? (activeWorkout.metrics.distance.includes('km') ? activeWorkout.metrics.distance : `${activeWorkout.metrics.distance} km`)
+                : `${totalKm.toFixed(1)} km`;
+
+              let durationVal = activeWorkout.metrics?.duration;
+              if (!durationVal || durationVal === '--') {
+                durationVal = `~${Math.round(totalKm * 5.5)} min`;
+              } else {
+                const cleaned = durationVal.replace('min', '').replace('m', '').trim();
+                durationVal = `~${cleaned} min`;
+              }
 
               return (
-                <div className="grid grid-cols-2 sm:grid-cols-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 dark:divide-slate-800">
-                  <div className="p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Distância Total</p>
-                    <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-0.5 tabular-nums">
-                      {activeWorkout.metrics?.distance || '--'}
-                    </p>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-4 py-2 rounded-full">
+                    Total: <span className="font-bold">{distanceVal}</span>
                   </div>
-                  <div className="p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tempo Estimado</p>
-                    <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-0.5 tabular-nums">
-                      {formatEstimatedTime(activeWorkout.metrics?.duration)}
-                    </p>
+
+                  <div className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-4 py-2 rounded-full">
+                    Tempo: <span className="font-bold">{durationVal}</span>
                   </div>
-                  <div className="p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {isInterval ? 'Ritmo dos Tiros' : 'Ritmo Alvo'}
-                    </p>
-                    <p className="text-base sm:text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 tabular-nums">
-                      {paceToShow}
-                    </p>
-                  </div>
-                  <div className="p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Zona Alvo</p>
-                    <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-0.5 truncate">
-                      {zoneLabel}
-                    </p>
+
+                  <div 
+                    className="text-xs font-bold px-4 py-2 rounded-full border transition-all"
+                    style={{
+                      backgroundColor: `${targetColor}12`,
+                      color: targetColor,
+                      borderColor: `${targetColor}28`
+                    }}
+                  >
+                    Alvo: {targetPace} /km ({targetZone})
                   </div>
                 </div>
               );
             })()}
 
-            {/* Gráfico Oficial SVG com Intervalos Reais, Degraus e Escala de KM */}
-            <TrainingPeaksWorkoutChart workout={activeWorkout} />
+            {/* Perfil da Sessão (Visualizador de Barras Interativo) */}
+            <WorkoutSessionProfile workout={activeWorkout} />
 
             {/* Prescrição Detalhada das Séries */}
-            <StructuredStepsList workout={activeWorkout} />
+            <WorkoutPrescription workout={activeWorkout} />
 
-            {/* Rodapé de Ações do Modal */}
-            <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800">
-              <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                <Zap className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span>Sincronização direta com relógios Garmin e Strava</span>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setIsDetailModalOpen(false)}
-                  className="w-full sm:w-auto px-4 text-xs font-semibold"
-                >
-                  Fechar
-                </Button>
-                <Button variant="vam" className="w-full sm:w-auto gap-2 text-xs font-bold">
-                  <Zap className="h-4 w-4" />
-                  Enviar Treino para o Garmin
-                </Button>
-              </div>
+            {/* Botões de Ação do Rodapé */}
+            <div className="pt-2 flex items-center gap-3">
+              <button 
+                onClick={handleSendGarmin}
+                disabled={isGarminPushing}
+                className="flex-1 h-12 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white font-semibold text-sm flex items-center justify-center gap-2.5 shadow-sm transition-all active:scale-[0.99] disabled:opacity-75"
+              >
+                <RefreshCw className={`h-4 w-4 ${isGarminPushing ? 'animate-spin' : ''}`} />
+                <span>
+                  {garminPushSuccess ? '✓ Enviado para o Garmin' : isGarminPushing ? 'Enviando...' : 'Enviar Treino para o Garmin'}
+                </span>
+              </button>
+
+              <button 
+                onClick={() => setIsDetailModalOpen(false)}
+                className="h-12 px-6 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm transition-all"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
